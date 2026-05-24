@@ -426,7 +426,13 @@ async function _readLoop() {
       if (value) onData(dec.decode(value, { stream: true }));
     }
   } catch (e) {
-    if (connected) { logErr('Read error: ' + e.message); _cleanup(); }
+    if (connected) logErr('Read error: ' + e.message);
+  }
+  // Port closed (device rebooted, unplugged, or stream ended)
+  if (connected) {
+    _cleanup();
+    setStatus('error', 'Port closed — device disconnected or rebooted');
+    logErr('Port closed. Use Select Port to reconnect.');
   }
 }
 
