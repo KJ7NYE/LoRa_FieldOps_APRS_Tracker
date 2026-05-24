@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoRa Tracker — Serial Config</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+
+    #app-header { flex-shrink: 0; z-index: 1030; }
+
+    #main-content {
+      display: flex;
+      flex: 1;
+      height: 0; /* flex child fills parent */
+      overflow: hidden;
+    }
+
+    #left-panel {
+      flex: 0 0 60%;
+      overflow-y: auto;
+      padding: 1rem 1.25rem;
+    }
+
+    #right-panel {
+      flex: 0 0 40%;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid #30363d;
+      background: #0d1117;
+      overflow: hidden;
+    }
+
+    #console-toolbar {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.35rem 0.75rem;
+      border-bottom: 1px solid #30363d;
+      background: #161b22;
+      font-size: 0.75rem;
+      color: #8b949e;
+    }
+
+    #console-output {
+      flex: 1;
+      overflow-y: auto;
+      font-family: 'Consolas', 'Cascadia Code', 'Monaco', monospace;
+      font-size: 0.78rem;
+      padding: 0.6rem 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #c9d1d9;
+    }
+
+    #console-output .s { color: #58a6ff; }   /* sent */
+    #console-output .e { color: #f85149; }   /* error */
+    #console-output .i { color: #3fb950; }   /* info */
+
+    #console-input-area {
+      flex-shrink: 0;
+      display: flex;
+      gap: 0.4rem;
+      padding: 0.5rem 0.6rem;
+      background: #161b22;
+      border-top: 1px solid #30363d;
+    }
+
+    .field-dirty { outline: 2px solid #e3a008 !important; }
+
+    .status-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+      background: #6c757d;
+      flex-shrink: 0;
+    }
+    .status-dot.connecting { background: #ffc107; }
+    .status-dot.connected  { background: #198754; }
+    .status-dot.error      { background: #dc3545; }
+
+    .accordion-button { font-size: 0.9rem; padding: 0.6rem 1rem; }
+    .accordion-body   { padding: 0.75rem 1rem; }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      gap: 0.5rem;
+    }
+    .field-row .field-label {
+      flex: 0 0 220px;
+      font-size: 0.8rem;
+      color: #8b949e;
+    }
+    .field-row .field-control { flex: 1; }
+    .field-row.bool-row { align-items: center; gap: 0.6rem; }
+    .field-row.bool-row .field-label { flex: unset; }
+
+    .section-group-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #58a6ff;
+      border-bottom: 1px solid #21262d;
+      padding-bottom: 4px;
+      margin: 0.75rem 0 0.5rem;
+    }
+    .section-group-title:first-child { margin-top: 0; }
+
+    #compat-warning { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; }
+
+    body { display: flex; flex-direction: column; }
+  </style>
+</head>
+<body>
+
+<!-- Browser compat warning -->
+<div id="compat-warning" class="alert alert-danger alert-dismissible m-3 d-none" role="alert">
+  <strong>Browser not supported.</strong> The Web Serial API requires <strong>Chrome or Edge 89+</strong>.
+  If you opened this file directly (<code>file://</code>), you may also need to enable
+  <code>chrome://flags/#enable-experimental-web-platform-features</code>.
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+
+<!-- ===== HEADER ===== -->
+<header id="app-header" class="bg-body-secondary border-bottom shadow-sm">
+  <div class="d-flex align-items-center gap-2 px-3 py-2 flex-wrap">
+    <span class="fw-semibold me-1" style="font-size:0.95rem">LoRa Tracker Serial Config</span>
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text" class="text-muted" style="font-size:0.8rem; min-width:160px">Disconnected</span>
+
+    <div class="vr"></div>
+
+    <button id="btn-select-port" class="btn btn-sm btn-primary">Select Port</button>
+    <button id="btn-disconnect"  class="btn btn-sm btn-outline-secondary" disabled>Disconnect</button>
+    <button id="btn-read-config" class="btn btn-sm btn-outline-info"      disabled>↺ Read Config</button>
+
+    <div class="vr"></div>
+
+    <button id="btn-save"    class="btn btn-sm btn-success"          disabled>💾 Save</button>
+    <button id="btn-exit"    class="btn btn-sm btn-outline-secondary" disabled>Exit Setup</button>
+    <button id="btn-discard" class="btn btn-sm btn-outline-warning"  disabled>Discard</button>
+    <button id="btn-reboot"  class="btn btn-sm btn-outline-danger"   disabled>Reboot</button>
+
+    <div class="vr"></div>
+
+    <label class="text-muted" style="font-size:0.78rem" for="sel-log-level">Log:</label>
+    <select id="sel-log-level" class="form-select form-select-sm" style="width:auto" disabled>
+      <option value="">— level —</option>
+      <option value="off">off</option>
+      <option value="error">error</option>
+      <option value="warn">warn</option>
+      <option value="info">info</option>
+      <option value="debug">debug</option>
+    </select>
+  </div>
+</header>
+
+<!-- ===== MAIN ===== -->
+<div id="main-content">
+
+  <!-- LEFT: config panels -->
+  <div id="left-panel">
+    <div id="config-placeholder" class="text-center text-muted pt-5">
+      <div style="font-size:2.5rem">🔌</div>
+      <p class="mt-2">Connect to a device, then click <strong>↺ Read Config</strong>.</p>
+      <p class="small">Requires Chrome or Edge with the Web Serial API.</p>
+    </div>
+    <div id="config-sections" class="accordion" style="display:none"></div>
+  </div>
+
+  <!-- RIGHT: serial console -->
+  <div id="right-panel">
+    <div id="console-toolbar">
+      <span>Serial Console</span>
+      <div class="d-flex gap-1 align-items-center flex-wrap">
+        <button id="btn-show-secrets" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.72rem" disabled>Show Secrets</button>
+        <button id="btn-export-json"  class="btn btn-sm btn-outline-info    py-0 px-2" style="font-size:0.72rem" disabled>Export JSON ↓</button>
+        <button id="btn-import-json"  class="btn btn-sm btn-outline-warning  py-0 px-2" style="font-size:0.72rem" disabled>Import JSON ↑</button>
+        <button id="btn-clear-con"    class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.72rem">Clear</button>
+      </div>
+    </div>
+    <div id="console-output"></div>
+    <div id="console-input-area">
+      <input id="console-input" type="text" class="form-control form-control-sm font-monospace"
+             placeholder="Type command and press Enter…" disabled style="font-size:0.8rem">
+      <button id="btn-send-cmd" class="btn btn-sm btn-secondary" disabled>Send</button>
+    </div>
+  </div>
+
+</div><!-- /main-content -->
+
+<!-- Hidden file input for import -->
+<input type="file" id="import-file-input" accept=".json,application/json" style="display:none">
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────
+//  0. Browser compatibility check
+// ─────────────────────────────────────────────
+if (!('serial' in navigator)) {
+  document.getElementById('compat-warning').classList.remove('d-none');
+  document.querySelectorAll('button, select, input').forEach(el => el.disabled = true);
+}
+
+// ─────────────────────────────────────────────
+//  1. Serial state
+// ─────────────────────────────────────────────
+let port       = null;
+let writer     = null;
+let reader     = null;
+let connected  = false;
+let inSetup    = false;
+
+// ─────────────────────────────────────────────
+//  2. App state
+// ─────────────────────────────────────────────
+let config         = null;   // parsed JSON from last export
+let showSecretsOn  = false;
+
+// ─────────────────────────────────────────────
+//  3. Console helpers
+// ─────────────────────────────────────────────
+const consoleEl = document.getElementById('console-output');
+let autoScroll  = true;
+
+consoleEl.addEventListener('scroll', () => {
+  autoScroll = consoleEl.scrollTop + consoleEl.clientHeight >= consoleEl.scrollHeight - 20;
+});
+
+function consoleAppend(text, cls) {
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = text;
+  consoleEl.appendChild(span);
+  if (autoScroll) consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+const logSent = cmd  => consoleAppend('> ' + cmd + '\n', 's');
+const logRecv = text => consoleAppend(text, null);
+const logErr  = msg  => consoleAppend('[!] ' + msg + '\n', 'e');
+const logInfo = msg  => consoleAppend('[i] ' + msg + '\n', 'i');
+
+// ─────────────────────────────────────────────
+//  4. Status / UI enable helpers
+// ─────────────────────────────────────────────
+function setStatus(state, text) {
+  document.getElementById('status-dot').className = 'status-dot' + (state ? ' ' + state : '');
+  document.getElementById('status-text').textContent = text;
+}
+
+function setConnectedControls(on) {
+  const ids = ['btn-disconnect','btn-read-config','btn-save','btn-exit','btn-discard',
+               'btn-reboot','sel-log-level','btn-show-secrets','btn-export-json',
+               'btn-import-json','console-input','btn-send-cmd'];
+  ids.forEach(id => { document.getElementById(id).disabled = !on; });
+  document.getElementById('btn-select-port').disabled = on;
+}
+
+// ─────────────────────────────────────────────
+//  5. Serial write
+// ─────────────────────────────────────────────
+async function serialWrite(text) {
+  if (!writer) return;
+  await writer.write(new TextEncoder().encode(text));
+}
+
+// ─────────────────────────────────────────────
+//  6. Command queue  (sequential, prompt-gated)
+//     Firmware prompt: \n>  (newline + "> " + space)
+// ─────────────────────────────────────────────
+const cmdQueue   = [];
+let cmdBusy      = false;
+let cmdResolve   = null;
+let cmdTimer     = null;
+let streamBuf    = '';       // accumulates incoming bytes for prompt detection
+
+async function sendCmd(cmd) {
+  return new Promise(resolve => {
+    cmdQueue.push({ cmd, resolve });
+    if (!cmdBusy) _drainQueue();
+  });
+}
+
+function _drainQueue() {
+  if (!cmdQueue.length) { cmdBusy = false; return; }
+  cmdBusy = true;
+  const { cmd, resolve } = cmdQueue.shift();
+  logSent(cmd);
+  streamBuf = '';
+  serialWrite(cmd + '\r\n');
+  cmdResolve = resolve;
+  cmdTimer = setTimeout(() => {
+    if (cmdResolve) {
+      logErr('Timeout waiting for prompt after: ' + cmd);
+      const r = cmdResolve; cmdResolve = null;
+      r('');
+      setTimeout(_drainQueue, 50);
+    }
+  }, 10000);
+}
+
+function _checkPrompt() {
+  // Firmware: static void prompt() { Serial.print(F("\n> ")); }
+  if (cmdResolve && streamBuf.includes('\n> ')) {
+    clearTimeout(cmdTimer);
+    const r = cmdResolve; cmdResolve = null;
+    const captured = streamBuf;
+    streamBuf = '';
+    r(captured);
+    setTimeout(_drainQueue, 10);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  7. Export JSON capture
+//     Firmware wraps with:
+//       ---- BEGIN tracker_conf.json ----
+//       <json>
+//       ---- END tracker_conf.json ----
+// ─────────────────────────────────────────────
+let exportActive  = false;
+let exportSawOpen = false;
+let exportLineBuf = '';  // partial-line buffer
+let exportLines   = [];
+let exportCb      = null;
+
+function startExportCapture(cb) {
+  exportActive  = true;
+  exportSawOpen = false;
+  exportLineBuf = '';
+  exportLines   = [];
+  exportCb      = cb;
+}
+
+function _handleExportChunk(chunk) {
+  if (!exportActive) return;
+  exportLineBuf += chunk;
+
+  // Process complete lines
+  let nl;
+  while ((nl = exportLineBuf.indexOf('\n')) !== -1) {
+    const line = exportLineBuf.slice(0, nl).replace(/\r$/, '');
+    exportLineBuf = exportLineBuf.slice(nl + 1);
+
+    if (!exportSawOpen) {
+      if (line.includes('BEGIN tracker_conf.json')) exportSawOpen = true;
+      else if (line.includes('(no saved config')) {
+        exportActive = false;
+        const cb = exportCb; exportCb = null;
+        cb(new Error('No saved config on device — use Save first'), null);
+      }
+      continue;
+    }
+
+    if (line.includes('END tracker_conf.json')) {
+      exportActive = false;
+      const raw = exportLines.join('\n');
+      const cb = exportCb; exportCb = null;
+      try { cb(null, JSON.parse(raw)); }
+      catch (e) { cb(e, null); }
+      return;
+    }
+
+    exportLines.push(line);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  8. Incoming data handler
+// ─────────────────────────────────────────────
+function onData(text) {
+  logRecv(text);
+  _handleExportChunk(text);
+
+  // Setup mode detection
+  if (!inSetup && text.includes('SETUP MODE ACTIVE')) {
+    inSetup = true;
+    setStatus('connected', 'Connected — Setup Mode');
+  }
+
+  streamBuf += text;
+  _checkPrompt();
+}
+
+// ─────────────────────────────────────────────
+//  9. Serial connect / disconnect
+// ─────────────────────────────────────────────
+async function connectSerial() {
+  try {
+    port = await navigator.serial.requestPort();
+    setStatus('connecting', 'Opening port…');
+    await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none' });
+    connected = true;
+    writer = port.writable.getWriter();
+    reader = port.readable.getReader();
+    setConnectedControls(true);
+    setStatus('connecting', 'Connected — entering setup…');
+    logInfo('Port opened at 115200. Sending "setup"…');
+    _readLoop();
+
+    // Enter setup mode, then auto-load config
+    await sendCmd('setup');
+    await _delay(300);
+    await readConfig();
+
+  } catch (e) {
+    setStatus('error', 'Error: ' + e.message);
+    logErr(e.message);
+    _cleanup();
+  }
+}
+
+async function _readLoop() {
+  const dec = new TextDecoder();
+  try {
+    while (connected) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) onData(dec.decode(value, { stream: true }));
+    }
+  } catch (e) {
+    if (connected) { logErr('Read error: ' + e.message); _cleanup(); }
+  }
+}
+
+async function disconnectSerial() {
+  _cleanup();
+  setStatus('', 'Disconnected');
+  logInfo('Disconnected.');
+}
+
+function _cleanup() {
+  connected = false; inSetup = false;
+  try { reader && reader.cancel(); }  catch {}
+  try { writer && writer.close(); }   catch {}
+  try { port   && port.close(); }     catch {}
+  port = writer = reader = null;
+  setConnectedControls(false);
+}
+
+const _delay = ms => new Promise(r => setTimeout(r, ms));
+
+// ─────────────────────────────────────────────
+//  10. Read config via export
+// ─────────────────────────────────────────────
+async function readConfig() {
+  logInfo('Reading config via export…');
+  startExportCapture((err, parsed) => {
+    if (err) { logErr('Config load failed: ' + err.message); return; }
+    config = parsed;
+    logInfo('Config loaded — ' + (parsed.beacons||[]).length + ' beacons, ' +
+            (parsed.lora||[]).length + ' LoRa regions');
+    renderConfig();
+  });
+  await sendCmd('export');
+}
+
+// ─────────────────────────────────────────────
+//  11. Dirty-field tracking
+// ─────────────────────────────────────────────
+function markDirty(el) { el.classList.add('field-dirty'); }
+function clearDirty()   { document.querySelectorAll('.field-dirty').forEach(el => el.classList.remove('field-dirty')); }
+
+// ─────────────────────────────────────────────
+//  12. Field builders
+// ─────────────────────────────────────────────
+const boolStr = v => v ? 'on' : 'off';
+
+function _fieldRow(label, control, isBool = false) {
+  const row = document.createElement('div');
+  row.className = 'field-row' + (isBool ? ' bool-row' : '');
+  if (!isBool) {
+    const lbl = document.createElement('div');
+    lbl.className = 'field-label';
+    lbl.textContent = label;
+    const ctrl = document.createElement('div');
+    ctrl.className = 'field-control';
+    ctrl.appendChild(control);
+    row.appendChild(lbl);
+    row.appendChild(ctrl);
+  } else {
+    row.appendChild(control);
+  }
+  return row;
+}
+
+function mkText(label, value, onCommit, opts = {}) {
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'form-control form-control-sm';
+  inp.value = value ?? '';
+  if (opts.maxlength) inp.maxLength = opts.maxlength;
+  if (opts.placeholder) inp.placeholder = opts.placeholder;
+  inp.addEventListener('change', () => { markDirty(inp); onCommit(inp.value); });
+  return _fieldRow(label, inp);
+}
+
+function mkNumber(label, value, onCommit, opts = {}) {
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.className = 'form-control form-control-sm';
+  inp.value = value ?? '';
+  if (opts.min !== undefined) inp.min = opts.min;
+  if (opts.max !== undefined) inp.max = opts.max;
+  if (opts.step)              inp.step = opts.step;
+  inp.addEventListener('change', () => { markDirty(inp); onCommit(inp.value); });
+  return _fieldRow(label, inp);
+}
+
+function mkBool(label, value, onCommit) {
+  const id  = 'chk-' + Math.random().toString(36).slice(2);
+  const inp = document.createElement('input');
+  inp.type = 'checkbox';
+  inp.className = 'form-check-input';
+  inp.id = id;
+  inp.checked = !!value;
+  const lbl = document.createElement('label');
+  lbl.className = 'form-check-label small';
+  lbl.htmlFor = id;
+  lbl.textContent = label;
+  inp.addEventListener('change', () => { markDirty(inp); onCommit(inp.checked); });
+  const wrap = document.createElement('div');
+  wrap.className = 'form-check form-switch mb-0';
+  wrap.appendChild(inp);
+  wrap.appendChild(lbl);
+  return _fieldRow(label, wrap, true);
+}
+
+function mkSelect(label, value, options, onCommit) {
+  const sel = document.createElement('select');
+  sel.className = 'form-select form-select-sm';
+  options.forEach(({ v, l }) => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = l;
+    if (v == value) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', () => { markDirty(sel); onCommit(sel.value); });
+  return _fieldRow(label, sel);
+}
+
+function mkPassword(label, value, onCommit) {
+  const grp = document.createElement('div');
+  grp.className = 'input-group input-group-sm';
+  const inp = document.createElement('input');
+  inp.type = 'password';
+  inp.className = 'form-control';
+  inp.value = value ?? '';
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-outline-secondary';
+  btn.type = 'button';
+  btn.title = 'Toggle visibility';
+  btn.textContent = '👁';
+  btn.addEventListener('click', () => { inp.type = inp.type === 'password' ? 'text' : 'password'; });
+  inp.addEventListener('change', () => { markDirty(inp); onCommit(inp.value); });
+  grp.appendChild(inp);
+  grp.appendChild(btn);
+  return _fieldRow(label, grp);
+}
+
+function mkGroupTitle(text) {
+  const div = document.createElement('div');
+  div.className = 'section-group-title';
+  div.textContent = text;
+  return div;
+}
+
+// ─────────────────────────────────────────────
+//  13. Accordion section builder
+// ─────────────────────────────────────────────
+let _accIdx = 0;
+
+function mkSection(container, id, title, fillFn) {
+  const i = _accIdx++;
+  const item = document.createElement('div');
+  item.className = 'accordion-item';
+  item.innerHTML = `
+    <h2 class="accordion-header">
+      <button class="accordion-button ${i ? 'collapsed' : ''}" type="button"
+              data-bs-toggle="collapse" data-bs-target="#acc-${id}" aria-expanded="${!i}">
+        ${title}
+      </button>
+    </h2>
+    <div id="acc-${id}" class="accordion-collapse collapse ${i ? '' : 'show'}">
+      <div class="accordion-body"></div>
+    </div>`;
+  container.appendChild(item);
+  fillFn(item.querySelector('.accordion-body'));
+}
+
+// ─────────────────────────────────────────────
+//  14. Tab strip builder  (for beacons / LoRa)
+// ─────────────────────────────────────────────
+function mkTabStrip(container, tabs) {
+  // tabs: [{ label, fillFn }]
+  const uid = 'ts' + Math.random().toString(36).slice(2);
+  const nav = document.createElement('ul');
+  nav.className = 'nav nav-tabs mb-3';
+  const content = document.createElement('div');
+  content.className = 'tab-content';
+
+  tabs.forEach(({ label, fillFn }, i) => {
+    const id = uid + '_' + i;
+    const li = document.createElement('li');
+    li.className = 'nav-item';
+    li.innerHTML = `<button class="nav-link ${i===0?'active':''}" data-bs-toggle="tab"
+                      data-bs-target="#${id}" type="button">${label}</button>`;
+    nav.appendChild(li);
+
+    const pane = document.createElement('div');
+    pane.id = id;
+    pane.className = 'tab-pane fade ' + (i===0 ? 'show active' : '');
+    fillFn(pane);
+    content.appendChild(pane);
+  });
+
+  container.appendChild(nav);
+  container.appendChild(content);
+}
+
+// ─────────────────────────────────────────────
+//  15. Main render
+// ─────────────────────────────────────────────
+const LORA_REGIONS    = ['EU', 'PL', 'UK', 'US'];
+const SMARTSET_LABELS = ['0 — Runner', '1 — Bike', '2 — Car', '3 — Custom'];
+
+function renderConfig() {
+  const cont = document.getElementById('config-sections');
+  document.getElementById('config-placeholder').style.display = 'none';
+  cont.style.display = '';
+  cont.innerHTML = '';
+  _accIdx = 0;
+
+  const beacons = config.beacons || [];
+  const loras   = config.lora    || [];
+  const sc      = config.customSmartBeacon || {};
+  const disp    = config.display           || {};
+  const bt      = config.bluetooth         || {};
+  const notif   = config.notification      || {};
+  const bat     = config.battery           || {};
+  const telem   = config.telemetry         || {};
+  const ptt     = config.pttTrigger        || {};
+  const wifi    = config.wifiAP            || {};
+  const wlink   = config.winlink           || {};
+  const other   = config.other             || {};
+
+  // ── Beacons ──────────────────────────────
+  mkSection(cont, 'beacons', '📡 Beacons', body => {
+    if (!beacons.length) { body.textContent = 'No beacons in config.'; return; }
+    mkTabStrip(body, beacons.map((b, i) => ({
+      label: `${i}: ${b.profileLabel || ('Bcn '+i)}`,
+      fillFn: pane => {
+        const S = cmds => sendSet(cmds);
+        const sel = () => `beacon select ${i}`;
+        pane.appendChild(mkText('Callsign',               b.callsign,        v => S([sel(), `beacon callsign ${v.toUpperCase()}`])));
+        pane.appendChild(mkText('Symbol (1 char)',         b.symbol,          v => S([sel(), `beacon symbol ${v}`]),    { maxlength: 1 }));
+        pane.appendChild(mkText('Overlay (1 char)',        b.overlay,         v => S([sel(), `beacon overlay ${v}`]),   { maxlength: 1 }));
+        pane.appendChild(mkNumber('Mic-E code (0–7)',      b.micE,            v => S([sel(), `beacon micE ${v}`]),      { min:0, max:7 }));
+        pane.appendChild(mkText('Comment',                 b.comment,         v => S([sel(), `beacon comment ${v}`])));
+        pane.appendChild(mkText('Status',                  b.status,          v => S([sel(), `beacon status ${v}`])));
+        pane.appendChild(mkText('Tactical callsign (≤9)', b.tacticalCallsign,v => S([sel(), `beacon tactical ${v}`]),  { maxlength: 9 }));
+        pane.appendChild(mkText('Profile label',           b.profileLabel,    v => S([sel(), `beacon label ${v}`])));
+        pane.appendChild(mkBool('SmartBeacon active',      b.smartBeaconActive,    v => S([sel(), `beacon smart ${boolStr(v)}`])));
+        pane.appendChild(mkSelect('SmartBeacon profile', b.smartBeaconSetting,
+          SMARTSET_LABELS.map((l,j) => ({ v: j, l })),    v => S([sel(), `beacon smartset ${v}`])));
+        pane.appendChild(mkBool('GPS eco mode',            b.gpsEcoMode,           v => S([sel(), `beacon gpseco ${boolStr(v)}`])));
+      }
+    })));
+  });
+
+  // ── LoRa ─────────────────────────────────
+  mkSection(cont, 'lora', '📻 LoRa', body => {
+    if (!loras.length) { body.textContent = 'No LoRa regions in config.'; return; }
+    mkTabStrip(body, loras.map((l, i) => ({
+      label: LORA_REGIONS[i] || String(i),
+      fillFn: pane => {
+        const sel = () => `lora select ${i}`;
+        pane.appendChild(mkNumber('Frequency (Hz)',          l.frequency,      v => sendSet([sel(), `lora freq ${v}`])));
+        pane.appendChild(mkNumber('Spreading factor (7–12)', l.spreadingFactor,v => sendSet([sel(), `lora sf ${v}`]),   { min:7, max:12 }));
+        pane.appendChild(mkNumber('Bandwidth (Hz)',          l.signalBandwidth,v => sendSet([sel(), `lora bw ${v}`])));
+        pane.appendChild(mkNumber('Coding rate denom (5–8)', l.codingRate4,   v => sendSet([sel(), `lora cr ${v}`]),   { min:5, max:8 }));
+        pane.appendChild(mkNumber('TX power (dBm)',          l.power,         v => sendSet([sel(), `lora power ${v}`]),{ min:0, max:22 }));
+      }
+    })));
+  });
+
+  // ── SmartBeacon Custom ───────────────────
+  mkSection(cont, 'smartcustom', '🏃 SmartBeacon Custom Profile', body => {
+    body.appendChild(mkNumber('Slow rate (sec)',       sc.slowRate,        v => sendCmd(`smartcustom slowrate ${v}`)));
+    body.appendChild(mkNumber('Slow speed (km/h)',     sc.slowSpeed,       v => sendCmd(`smartcustom slowspeed ${v}`)));
+    body.appendChild(mkNumber('Fast rate (sec)',        sc.fastRate,        v => sendCmd(`smartcustom fastrate ${v}`)));
+    body.appendChild(mkNumber('Fast speed (km/h)',      sc.fastSpeed,       v => sendCmd(`smartcustom fastspeed ${v}`)));
+    body.appendChild(mkNumber('Min TX distance (m)',    sc.minTxDist,       v => sendCmd(`smartcustom mintxdist ${v}`)));
+    body.appendChild(mkNumber('Min delta (sec)',        sc.minDeltaBeacon,  v => sendCmd(`smartcustom mindelta ${v}`)));
+    body.appendChild(mkNumber('Turn min deg',           sc.turnMinDeg,      v => sendCmd(`smartcustom turnmindeg ${v}`)));
+    body.appendChild(mkNumber('Turn slope',             sc.turnSlope,       v => sendCmd(`smartcustom turnslope ${v}`)));
+  });
+
+  // ── Display ──────────────────────────────
+  mkSection(cont, 'display', '🖥️ Display', body => {
+    body.appendChild(mkBool('Eco mode',      disp.ecoMode,   v => sendCmd(`display eco ${boolStr(v)}`)));
+    body.appendChild(mkBool('Rotate 180°',   disp.turn180,   v => sendCmd(`display turn180 ${boolStr(v)}`)));
+    body.appendChild(mkBool('Show symbol',   disp.showSymbol,v => sendCmd(`display symbol ${boolStr(v)}`)));
+    body.appendChild(mkNumber('Timeout (sec)', disp.timeout, v => sendCmd(`display timeout ${v}`)));
+  });
+
+  // ── Bluetooth ────────────────────────────
+  mkSection(cont, 'bluetooth', '🔵 Bluetooth', body => {
+    body.appendChild(mkBool('Bluetooth active', bt.active,    v => sendCmd(`bt ${boolStr(v)}`)));
+    body.appendChild(mkText('Device name',      bt.deviceName,v => sendCmd(`bt name ${v}`)));
+    body.appendChild(mkBool('Use BLE',          bt.useBLE,    v => sendCmd(`bt ble ${boolStr(v)}`)));
+    body.appendChild(mkBool('KISS framing',     bt.useKISS,   v => sendCmd(`bt kiss ${boolStr(v)}`)));
+  });
+
+  // ── Notifications ────────────────────────
+  mkSection(cont, 'notif', '🔔 Notifications', body => {
+    body.appendChild(mkGroupTitle('LEDs'));
+    body.appendChild(mkBool('LED on TX',          notif.ledTx,         v => sendCmd(`notif tx ${boolStr(v)}`)));
+    body.appendChild(mkBool('LED on message RX',  notif.ledMessage,    v => sendCmd(`notif msg ${boolStr(v)}`)));
+    body.appendChild(mkBool('Flashlight LED',     notif.ledFlashlight, v => sendCmd(`notif flashled ${boolStr(v)}`)));
+    body.appendChild(mkBool('Buzzer enabled',     notif.buzzerActive,  v => sendCmd(`notif buzzer ${boolStr(v)}`)));
+
+    body.appendChild(mkGroupTitle('Beeps'));
+    body.appendChild(mkBool('Beep on boot',        notif.bootUpBeep,      v => sendCmd(`notif beep boot ${boolStr(v)}`)));
+    body.appendChild(mkBool('Beep on TX',          notif.txBeep,          v => sendCmd(`notif beep tx ${boolStr(v)}`)));
+    body.appendChild(mkBool('Beep on message RX',  notif.messageRxBeep,   v => sendCmd(`notif beep rx ${boolStr(v)}`)));
+    body.appendChild(mkBool('Beep on new station', notif.stationBeep,     v => sendCmd(`notif beep station ${boolStr(v)}`)));
+    body.appendChild(mkBool('Beep on low battery', notif.lowBatteryBeep,  v => sendCmd(`notif beep low ${boolStr(v)}`)));
+    body.appendChild(mkBool('Beep on shutdown',    notif.shutDownBeep,    v => sendCmd(`notif beep shutdown ${boolStr(v)}`)));
+  });
+
+  // ── Battery ──────────────────────────────
+  mkSection(cont, 'battery', '🔋 Battery', body => {
+    body.appendChild(mkBool('Send voltage in comment', bat.sendVoltage,       v => sendCmd(`bat sendv ${boolStr(v)}`)));
+    body.appendChild(mkBool('Voltage as telemetry',    bat.voltageAsTelemetry,v => sendCmd(`bat astelem ${boolStr(v)}`)));
+    body.appendChild(mkBool('Send voltage always',     bat.sendVoltageAlways, v => sendCmd(`bat alwaysv ${boolStr(v)}`)));
+    body.appendChild(mkBool('Monitor voltage',         bat.monitorVoltage,    v => sendCmd(`bat monitor ${boolStr(v)}`)));
+    body.appendChild(mkNumber('Sleep voltage (V)',      bat.sleepVoltage,      v => sendCmd(`bat sleepv ${v}`), { step: '0.01' }));
+  });
+
+  // ── Telemetry ────────────────────────────
+  mkSection(cont, 'telemetry', '📊 Telemetry', body => {
+    body.appendChild(mkBool('Telemetry enabled',      telem.active,          v => sendCmd(`telem ${boolStr(v)}`)));
+    body.appendChild(mkBool('Send telemetry packets', telem.sendTelemetry,   v => sendCmd(`telem send ${boolStr(v)}`)));
+    body.appendChild(mkNumber('Temp correction (°C)', telem.temperatureCorrection, v => sendCmd(`telem tempcorr ${v}`), { step: '0.1' }));
+  });
+
+  // ── PTT ──────────────────────────────────
+  mkSection(cont, 'ptt', '🎙️ PTT Trigger', body => {
+    body.appendChild(mkBool('PTT active',        ptt.active,   v => sendCmd(`ptt ${boolStr(v)}`)));
+    body.appendChild(mkNumber('GPIO pin',         ptt.io_pin,   v => sendCmd(`ptt pin ${v}`)));
+    body.appendChild(mkBool('Reverse polarity',  ptt.reverse,  v => sendCmd(`ptt reverse ${boolStr(v)}`)));
+    body.appendChild(mkNumber('Pre-delay (ms)',   ptt.preDelay, v => sendCmd(`ptt predelay ${v}`)));
+    body.appendChild(mkNumber('Post-delay (ms)', ptt.postDelay,v => sendCmd(`ptt postdelay ${v}`)));
+  });
+
+  // ── WiFi & Winlink ───────────────────────
+  mkSection(cont, 'wifi', '📶 WiFi & Winlink', body => {
+    body.appendChild(mkGroupTitle('WiFi AP'));
+    body.appendChild(mkBool('AP active (persistent)',  wifi.active,     v => sendCmd(`wifi ${boolStr(v)}`)));
+    body.appendChild(mkBool('30-sec boot window',      wifi.bootWindow, v => sendCmd(`wifi window ${boolStr(v)}`)));
+    body.appendChild(mkPassword('AP password',         wifi.password,   v => sendCmd(`wifi password ${v}`)));
+
+    body.appendChild(mkGroupTitle('Winlink'));
+    body.appendChild(mkPassword('Winlink password', wlink.password, v => sendCmd(`winlink password ${v}`)));
+  });
+
+  // ── Other ────────────────────────────────
+  mkSection(cont, 'other', '⚙️ Other', body => {
+    body.appendChild(mkGroupTitle('Modes'));
+    body.appendChild(mkBool('Digipeater at boot',      other.digipeating,          v => sendCmd(`digipeater ${boolStr(v)}`)));
+    body.appendChild(mkBool('Simplified mode',         other.simplifiedTrackerMode,v => sendCmd(`simplified ${boolStr(v)}`)));
+    body.appendChild(mkBool('Disable GPS (TNC-only)',  other.disableGPS,           v => sendCmd(`disablegps ${boolStr(v)}`)));
+    body.appendChild(mkBool('Include altitude',        other.sendAltitude,         v => sendCmd(`sendalt ${boolStr(v)}`)));
+
+    body.appendChild(mkGroupTitle('Intervals & Paths'));
+    body.appendChild(mkText('APRS path',                  other.path,                  v => sendCmd(`path ${v}`)));
+    body.appendChild(mkText('Email',                      other.email,                 v => sendCmd(`email ${v}`)));
+    body.appendChild(mkNumber('Non-smart beacon rate (sec)', other.nonSmartBeaconRate, v => sendCmd(`nonsmartrate ${v}`)));
+    body.appendChild(mkNumber('Remember station (sec)',   other.rememberStationTime,   v => sendCmd(`rememberstation ${v}`)));
+    body.appendChild(mkNumber('Standing update (sec)',    other.standingUpdateTime,    v => sendCmd(`standingupdate ${v}`)));
+    body.appendChild(mkNumber('Comment every N beacons', other.sendCommentAfterXBeacons, v => sendCmd(`commentafter ${v}`)));
+  });
+}
+
+// ─────────────────────────────────────────────
+//  16. Multi-command helper
+// ─────────────────────────────────────────────
+async function sendSet(cmds) {
+  for (const c of (Array.isArray(cmds) ? cmds : [cmds])) await sendCmd(c);
+}
+
+// ─────────────────────────────────────────────
+//  17. Button wiring
+// ─────────────────────────────────────────────
+document.getElementById('btn-select-port').addEventListener('click', connectSerial);
+
+document.getElementById('btn-disconnect').addEventListener('click', disconnectSerial);
+
+document.getElementById('btn-read-config').addEventListener('click', readConfig);
+
+document.getElementById('btn-save').addEventListener('click', async () => {
+  await sendCmd('save');
+  clearDirty();
+});
+
+document.getElementById('btn-exit').addEventListener('click', () => sendCmd('exit'));
+
+document.getElementById('btn-discard').addEventListener('click', () => {
+  if (confirm('Discard all unsaved changes and reboot the device?')) sendCmd('discard');
+});
+
+document.getElementById('btn-reboot').addEventListener('click', () => {
+  if (confirm('Reboot the device now?')) sendCmd('reboot');
+});
+
+document.getElementById('sel-log-level').addEventListener('change', function () {
+  if (!this.value) return;
+  sendCmd('log ' + this.value);
+  this.value = '';
+});
+
+document.getElementById('btn-show-secrets').addEventListener('click', function () {
+  showSecretsOn = !showSecretsOn;
+  this.textContent = showSecretsOn ? 'Hide Secrets' : 'Show Secrets';
+  sendCmd('show secrets');
+});
+
+// Export JSON → download
+document.getElementById('btn-export-json').addEventListener('click', async () => {
+  startExportCapture((err, parsed) => {
+    if (err) { logErr('Export failed: ' + err.message); return; }
+    const blob = new Blob([JSON.stringify(parsed, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'tracker_conf.json'; a.click();
+    URL.revokeObjectURL(url);
+    logInfo('tracker_conf.json downloaded.');
+  });
+  await sendCmd('export');
+});
+
+// Import JSON from file
+document.getElementById('btn-import-json').addEventListener('click', () => {
+  document.getElementById('import-file-input').click();
+});
+
+document.getElementById('import-file-input').addEventListener('change', async function () {
+  const file = this.files[0];
+  this.value = '';
+  if (!file) return;
+
+  const text = await file.text();
+  try { JSON.parse(text); } catch (e) { logErr('Not valid JSON: ' + e.message); return; }
+
+  if (!confirm(`Import "${file.name}" and reboot device?\nThis overwrites the saved config.`)) return;
+
+  logInfo('Sending import command…');
+  // The import command puts the device in paste mode.
+  // We wait for the "Paste full…" prompt, then send the JSON directly.
+  // import's response ends with \n> only AFTER the paste is fully processed.
+  // To keep it simple: send the command, pause briefly, then send the JSON.
+  await sendCmd('import');
+  await _delay(300);
+  logSent('[paste: ' + file.name + ' — ' + text.length + ' bytes]');
+  await serialWrite(text);
+  logInfo('JSON sent. Device will validate and reboot on success.');
+});
+
+document.getElementById('btn-clear-con').addEventListener('click', () => { consoleEl.innerHTML = ''; });
+
+// Manual console input
+const consoleInput = document.getElementById('console-input');
+document.getElementById('btn-send-cmd').addEventListener('click', sendManualCmd);
+consoleInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendManualCmd(); });
+
+async function sendManualCmd() {
+  const cmd = consoleInput.value.trim();
+  if (!cmd) return;
+  consoleInput.value = '';
+  await sendCmd(cmd);
+}
+</script>
+</body>
+</html>
