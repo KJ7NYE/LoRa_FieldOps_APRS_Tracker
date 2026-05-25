@@ -151,6 +151,20 @@ void setup() {
     #endif
     Serial.begin(115200);
 
+    #ifdef LORANGER_V1
+        // Bring-up gate: give a freshly-attached serial monitor up to 5s to
+        // catch boot output. Exits early as soon as a byte arrives, so once
+        // the monitor is open this adds no real delay. Remove once bring-up
+        // is done.
+        {
+            uint32_t t0 = millis();
+            while (millis() - t0 < 5000 && !Serial.available()) {
+                delay(50);
+            }
+            while (Serial.available()) Serial.read();
+        }
+    #endif
+
     #ifdef ARDUINO_ARCH_NRF52
         // FreeRTOS is now running, InternalFS is safe — finish what
         // Configuration's constructor would have done on ESP32.
@@ -185,6 +199,65 @@ void setup() {
     GPS_Utils::setup();
     currentLoRaType = &Config.loraTypes[loraIndex];
     bootStatus("LoRa");
+    #ifdef LORANGER_V1
+        // Raw-SPI bring-up probe. Bypasses RadioLib so we can tell whether
+        // the SX1268 is talking at all. Sends the SX126x GetStatus opcode
+        // (0xC0, 0x00) and prints what MISO returned.
+        //   ~0x22/0x42 → chip alive, RadioLib's begin() is failing for some
+        //                other reason (TCXO config, calibration timeout)
+        //   0x00       → MISO stuck low (chip dead, MISO shorted to GND, or
+        //                chip never wakes from reset)
+        //   0xFF       → MISO floating (chip dead, or MOSI/MISO swapped at
+        //                the chip footprint)
+        // Remove once bring-up is done.
+        {
+            SPIClass probeSPI(FSPI);
+            probeSPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN, RADIO_CS_PIN);
+            pinMode(RADIO_CS_PIN, OUTPUT);
+            digitalWrite(RADIO_CS_PIN, HIGH);
+            pinMode(RADIO_RST_PIN, OUTPUT);
+            pinMode(RADIO_BUSY_PIN, INPUT);
+
+            digitalWrite(RADIO_RST_PIN, LOW);
+            delay(10);
+            digitalWrite(RADIO_RST_PIN, HIGH);
+            uint32_t t0 = millis();
+            while (digitalRead(RADIO_BUSY_PIN) == HIGH && millis() - t0 < 100) { delay(1); }
+            uint32_t busyWaitMs = millis() - t0;
+            bool busyOk = digitalRead(RADIO_BUSY_PIN) == LOW;
+
+            probeSPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));
+            digitalWrite(RADIO_CS_PIN, LOW);
+            probeSPI.transfer(0xC0);
+            uint8_t status = probeSPI.transfer(0x00);
+            digitalWrite(RADIO_CS_PIN, HIGH);
+
+            // Read 16-byte VERSION_STRING register at 0x0320 — opcode 0x1D
+            // (READ_REGISTER), 2-byte addr, 1 NOP for status, then 16 bytes
+            // of payload. RadioLib's findChip() compares the first 6 chars.
+            char ver[17] = {0};
+            digitalWrite(RADIO_CS_PIN, LOW);
+            probeSPI.transfer(0x1D);
+            probeSPI.transfer(0x03);
+            probeSPI.transfer(0x20);
+            probeSPI.transfer(0x00);
+            for (int i = 0; i < 16; i++) ver[i] = probeSPI.transfer(0x00);
+            digitalWrite(RADIO_CS_PIN, HIGH);
+            probeSPI.endTransaction();
+            probeSPI.end();
+
+            Serial.printf("[probe] BUSY-low after RST: %s (waited %lums), GetStatus=0x%02X\n",
+                          busyOk ? "yes" : "NO", (unsigned long)busyWaitMs, status);
+            Serial.print("[probe] VERSION_STRING: \"");
+            for (int i = 0; i < 16; i++) {
+                if (ver[i] >= 0x20 && ver[i] < 0x7F) Serial.print(ver[i]);
+                else Serial.print('.');
+            }
+            Serial.print("\" hex:");
+            for (int i = 0; i < 16; i++) Serial.printf(" %02X", (uint8_t)ver[i]);
+            Serial.println();
+        }
+    #endif
     LoRa_Utils::setup();
     bootStatus("I2C scan");
     Utils::i2cScannerForPeripherals();

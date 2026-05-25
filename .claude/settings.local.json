@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /c/GitHub/LoRanger_APRS_Tracker add src/smartbeacon_utils.cpp)",
+      "Bash(git -C /c/GitHub/LoRanger_APRS_Tracker commit -m \"tune Car SmartBeacon minDeltaBeacon 12s -> 10s\")",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_wireless_tracker 2>&1 | Select-Object -Last 25)",
+      "PowerShell(if \\(Test-Path \"$env:USERPROFILE\\\\.platformio\\\\packages\\\\framework-arduinoadafruitnrf52\\\\libraries\"\\) { Get-ChildItem \"$env:USERPROFILE\\\\.platformio\\\\packages\\\\framework-arduinoadafruitnrf52\\\\libraries\" -Directory | Select-Object -ExpandProperty Name | Sort-Object } else { Write-Output \"framework-arduinoadafruitnrf52 not found\" })",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-Object -Last 80)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-Object -Last 60)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-Object -Last 50)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-Object -Last 30)",
+      "PowerShell(Invoke-WebRequest -Uri \"https://raw.githubusercontent.com/microsoft/uf2/master/utils/uf2conv.py\" -OutFile \"c:\\\\GitHub\\\\LoRanger_APRS_Tracker\\\\tools\\\\uf2conv.py\" -UseBasicParsing; \\(Get-Item \"c:\\\\GitHub\\\\LoRanger_APRS_Tracker\\\\tools\\\\uf2conv.py\"\\).Length; Get-Content \"c:\\\\GitHub\\\\LoRanger_APRS_Tracker\\\\tools\\\\uf2conv.py\" -Head 5)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-String -Pattern \"uf2|RAM:|Flash:|SUCCESS|FAILED|error:\" | Select-Object -Last 6)"
+    ]
+  }
+}

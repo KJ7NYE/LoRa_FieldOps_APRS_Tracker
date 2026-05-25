@@ -1,12 +1,12 @@
 {
 	"beacons": [
 		{
-			"callsign": "NOCALL-7",
+			"callsign": "N7JBR",
 			"gpsEcoMode": false,
 			"symbol": "s",
 			"overlay": "/",
 			"micE": "",
-			"comment": "World Jetboat Races 2026 - KJ7NYE",
+			"comment": "World Jetboat Races 2026",
 			"status": "",
 			"smartBeaconActive": true,
 			"smartBeaconSetting": 2,
@@ -14,7 +14,7 @@
 			"tacticalCallsign": ""
 		},
 		{
-			"callsign": "NOCALL-7",
+			"callsign": "KJ7NYE",
 			"gpsEcoMode": false,
 			"symbol": "",
 			"overlay": "/",
@@ -62,7 +62,8 @@
 		"standingUpdateTime": 15,
 		"sendAltitude": true,
 		"disableGPS": false,
-		"email": ""
+		"email": "",
+		"digipeating": false
 	},
 	"winlink": {
 		"password": "ABCDEF"
@@ -134,7 +135,18 @@
 	},
 	"wifiAP": {
 		"active": false,
+		"bootWindow": false,
 		"password": "1234567890"
+	},
+	"customSmartBeacon": {
+		"slowRate": 120,
+		"slowSpeed": 5,
+		"fastRate": 60,
+		"fastSpeed": 40,
+		"minTxDist": 100,
+		"minDeltaBeacon": 12,
+		"turnMinDeg": 12,
+		"turnSlope": 60
 	}
 
 }

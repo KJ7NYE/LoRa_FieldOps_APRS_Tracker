@@ -30,7 +30,10 @@
 
     //  LoRa Radio (FSPI)
     //  PICO = GPIO11, POCI = GPIO13
-    #define HAS_SX1268
+    //  EBYTE E22-400M30S modules ship with SX1262 silicon despite the SX1268
+    //  module-naming convention — confirmed via VERSION_STRING readback during
+    //  bring-up ("SX1261 V2D 2D02"). Use the SX1262 RadioLib driver.
+    #define HAS_SX1262
     #define HAS_1W_LORA
     #define RADIO_SCLK_PIN      12
     #define RADIO_MISO_PIN      13      // POCI

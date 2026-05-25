@@ -39,10 +39,17 @@ bool transmitFlag    = true;
     // On HELTEC_T114, variants_bsp/heltec_t114/variant.h sets PIN_SPI_MISO/MOSI/SCK
     // to the LoRa pins (P0.23/22/19), so the BSP's default `SPI` global is already
     // the LoRa bus — no custom SPIClass needed, and SPIM2 stays free for SPI1 (TFT).
-    SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
+    // LORANGER_V1 has SX1262 silicon (E22-400M30S) on its own FSPI bus, separate
+    // from any other SPI peripheral; use a dedicated SPIClass like LightTracker does.
+    #if defined(LORANGER_V1)
+        SPIClass loraSPI(FSPI);
+        SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN, loraSPI);
+    #else
+        SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN);
+    #endif
 #endif
 #if defined(HAS_SX1268)
-    #if defined(LIGHTTRACKER_PLUS_1_0) || defined(LORANGER_V1)
+    #if defined(LIGHTTRACKER_PLUS_1_0)
         SPIClass loraSPI(FSPI);
         SX1268 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUSY_PIN, loraSPI);
     #else
@@ -76,7 +83,8 @@ namespace LoRa_Utils {
         float freq = (float)currentLoRaType->frequency/1000000;
         radio.setFrequency(freq);
         radio.setSpreadingFactor(currentLoRaType->spreadingFactor);
-        float signalBandwidth = currentLoRaType->signalBandwidth/1000;
+        // Hz → kHz as float; integer-divide would truncate 62500 to 62 and trip RADIOLIB_ERR_INVALID_BANDWIDTH (-2)
+        float signalBandwidth = currentLoRaType->signalBandwidth / 1000.0f;
         radio.setBandwidth(signalBandwidth);
         radio.setCodingRate(currentLoRaType->codingRate4);
         #if (defined(HAS_SX1268) || defined(HAS_SX1262)) && !defined(HAS_1W_LORA)
@@ -148,7 +156,7 @@ namespace LoRa_Utils {
             radio.setDio0Action(setFlag, RISING);
         #endif
         radio.setSpreadingFactor(currentLoRaType->spreadingFactor);
-        float signalBandwidth = currentLoRaType->signalBandwidth/1000;
+        float signalBandwidth = currentLoRaType->signalBandwidth / 1000.0f;
         radio.setBandwidth(signalBandwidth);
         radio.setCodingRate(currentLoRaType->codingRate4);
         radio.setCRC(true);
