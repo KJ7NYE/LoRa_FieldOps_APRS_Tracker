@@ -78,6 +78,11 @@ ____________________________________________________________________*/
 #include "serial_setup.h"
 #include "utils.h"
 #include "device_role.h"
+#include "digi_utils.h"
+#ifdef HAS_WIFI
+#include "aprs_is_utils.h"
+#include "tcp_kiss_utils.h"
+#endif
 #ifdef HAS_TOUCHSCREEN
 #include "touch_utils.h"
 #endif
@@ -267,8 +272,12 @@ void setup() {
     WX_Utils::setup();
 
     #ifdef HAS_WIFI
-        WiFi.mode(WIFI_OFF);
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Main", "WiFi controller stopped");
+        // iGate role connects its own WiFi STA during initializeRole() below;
+        // all other roles shut WiFi off to save power.
+        if (Config.deviceRole != ROLE_IGATE) {
+            WiFi.mode(WIFI_OFF);
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Main", "WiFi controller stopped");
+        }
     #endif
 
     if (bluetoothActive) {
@@ -348,6 +357,14 @@ void loop() {
 
     ReceivedLoRaPacket packet = LoRa_Utils::receivePacket();
 
+    // Strip the 3-byte RSSI/SNR prefix prepended by lora_utils to get a plain TNC2 frame.
+    String aprsFrame = (packet.text.length() > 3) ? packet.text.substring(3) : String("");
+
+    // Role-specific packet routing
+    DeviceRoleUtils::processReceivedPacket(aprsFrame);
+
+    // Tracker-mode message handling (display updates, ack, etc.) — useful in all roles
+    // so recently-heard stations are tracked regardless of mode.
     MSG_Utils::checkReceivedMessage(packet);
     MSG_Utils::processOutputBuffer();
     MSG_Utils::clean15SegBuffer();
@@ -355,20 +372,40 @@ void loop() {
     if (bluetoothActive && bluetoothConnected) {
         if (Config.bluetooth.useBLE) {
             #ifdef HAS_NIMBLE
-                BLE_Utils::sendToPhone(packet.text.substring(3));
+                BLE_Utils::sendToPhone(aprsFrame);
                 BLE_Utils::sendToLoRa();
             #endif
         } else {
             #ifdef HAS_BT_CLASSIC
-                BLUETOOTH_Utils::sendToPhone(packet.text.substring(3));
+                BLUETOOTH_Utils::sendToPhone(aprsFrame);
                 BLUETOOTH_Utils::sendToLoRa();
             #endif
         }
     }
 
+    // Role-specific background tasks (WiFi keepalive, APRS-IS I/O, TCP KISS clients)
+    DeviceRoleUtils::handleRoleSpecificTasks();
+
     MSG_Utils::ledNotification();
     Utils::checkFlashlight();
     STATION_Utils::checkListenedStationsByTimeAndDelete();
+
+    // Fixed-position mode: beacon on a timer using Config.fixedPosition, no GPS needed.
+    // The GPS hardware is not started when gpsSource == GPS_FIXED, so we handle
+    // beaconing here before the gpsIsActive branch.
+    if (Config.gpsSource == GPS_FIXED && Config.deviceRole == ROLE_TRACKER) {
+        uint32_t fixedRate = (uint32_t)Config.nonSmartBeaconRate * 60000UL;
+        if (millis() - lastTxTime >= fixedRate) {
+            STATION_Utils::sendBeacon();
+            lastTxTime = millis();
+        }
+        if (millis() - refreshDisplayTime >= 1000) {
+            MENU_Utils::showOnScreen();
+            refreshDisplayTime = millis();
+        }
+        // Skip the GPS-dependent section below
+        return;
+    }
 
     lastTx = millis() - lastTxTime;
     if (gpsIsActive) {

@@ -36,6 +36,37 @@ namespace WIFI_Utils {
         WiFi.softAP("LoRaTracker-AP", Config.wifiAP.password);
     }
 
+    // Connect to the configured WiFi STA network.
+    // Returns true if connected, false on timeout.
+    bool connectSTA() {
+        if (!Config.wifiSTA.enabled || Config.wifiSTA.ssid.length() == 0) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi", "STA not configured");
+            return false;
+        }
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(Config.wifiSTA.ssid.c_str(), Config.wifiSTA.password.c_str());
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Connecting to %s...", Config.wifiSTA.ssid.c_str());
+
+        uint32_t t0 = millis();
+        while (!WiFi.isConnected() && (millis() - t0) < 20000) {
+            delay(250);
+        }
+        if (WiFi.isConnected()) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Connected. IP: %s", WiFi.localIP().toString().c_str());
+            return true;
+        }
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi", "STA connect timeout");
+        return false;
+    }
+
+    // Reconnect STA if disconnected (call from main loop for iGate)
+    void checkWiFi() {
+        if (!WiFi.isConnected()) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi", "Lost connection, reconnecting...");
+            connectSTA();
+        }
+    }
+
     void checkIfWiFiAP() {
         const bool isNoCall      = Config.beacons[0].callsign == "NOCALL-7";
         const bool forceWebConf  = Config.wifiAP.active || isNoCall;

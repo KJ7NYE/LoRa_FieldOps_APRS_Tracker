@@ -289,6 +289,51 @@ function loadSettings(settings) {
     // WiFi AP
     document.getElementById("wifiAP.password").value                    = settings.wifiAP.password;
 
+    // Device Role & GPS Source
+    document.getElementById("deviceRole").value                         = settings.deviceRole ?? 0;
+    document.getElementById("gpsSource").value                          = settings.gpsSource ?? 0;
+
+    // Fixed Position
+    if (settings.fixedPosition) {
+        document.getElementById("fixedPosition.latitude").value         = settings.fixedPosition.latitude ?? 0;
+        document.getElementById("fixedPosition.longitude").value        = settings.fixedPosition.longitude ?? 0;
+        document.getElementById("fixedPosition.elevation").value        = settings.fixedPosition.elevation ?? 0;
+    }
+
+    // WiFi STA
+    if (settings.wifiSTA) {
+        document.getElementById("wifiSTA.enabled").checked              = settings.wifiSTA.enabled ?? false;
+        document.getElementById("wifiSTA.ssid").value                   = settings.wifiSTA.ssid ?? "";
+        document.getElementById("wifiSTA.password").value               = settings.wifiSTA.password ?? "";
+    }
+
+    // APRS-IS
+    if (settings.aprsIS) {
+        document.getElementById("aprsIS.server").value                  = settings.aprsIS.server ?? "rotate.aprs.net";
+        document.getElementById("aprsIS.port").value                    = settings.aprsIS.port ?? 14580;
+        document.getElementById("aprsIS.passcode").value                = settings.aprsIS.passcode ?? "";
+        document.getElementById("aprsIS.filter").value                  = settings.aprsIS.filter ?? "";
+    }
+
+    // TCP KISS
+    if (settings.tcpKISS) {
+        document.getElementById("tcpKISS.enabled").checked              = settings.tcpKISS.enabled ?? false;
+        document.getElementById("tcpKISS.port").value                   = settings.tcpKISS.port ?? 8001;
+    }
+
+    // SmartBeacon Custom
+    if (settings.customSmartBeacon) {
+        const sb = settings.customSmartBeacon;
+        document.getElementById("smartBeacon.slowRate").value           = sb.slowRate ?? 120;
+        document.getElementById("smartBeacon.slowSpeed").value          = sb.slowSpeed ?? 5;
+        document.getElementById("smartBeacon.fastRate").value           = sb.fastRate ?? 60;
+        document.getElementById("smartBeacon.fastSpeed").value          = sb.fastSpeed ?? 40;
+        document.getElementById("smartBeacon.minTxDist").value          = sb.minTxDist ?? 100;
+        document.getElementById("smartBeacon.minDeltaBeacon").value     = sb.minDeltaBeacon ?? 12;
+        document.getElementById("smartBeacon.turnMinDeg").value         = sb.turnMinDeg ?? 12;
+        document.getElementById("smartBeacon.turnSlope").value          = sb.turnSlope ?? 60;
+    }
+
     // NOTIFICATION
     document.getElementById("notification.ledTx").checked               = settings.notification.ledTx;
     document.getElementById("notification.ledTxPin").value              = settings.notification.ledTxPin;

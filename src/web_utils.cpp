@@ -229,6 +229,40 @@ namespace WEB_Utils {
         Config.wifiAP.password                  = getParamStringSafe("wifiAP.password", Config.wifiAP.password);
         Config.wifiAP.active                    = false; // when Configuration is finished Tracker returns to normal mode.
 
+        //  WiFi STA
+        Config.wifiSTA.enabled                  = request->hasParam("wifiSTA.enabled", true);
+        Config.wifiSTA.ssid                     = getParamStringSafe("wifiSTA.ssid", Config.wifiSTA.ssid);
+        Config.wifiSTA.password                 = getParamStringSafe("wifiSTA.password", Config.wifiSTA.password);
+
+        //  Device Role
+        Config.deviceRole                       = (DeviceRole)getParamIntSafe("deviceRole", (int)Config.deviceRole);
+        Config.gpsSource                        = (GPSSource)getParamIntSafe("gpsSource", (int)Config.gpsSource);
+
+        //  Fixed Position
+        Config.fixedPosition.latitude           = getParamFloatSafe("fixedPosition.latitude", Config.fixedPosition.latitude);
+        Config.fixedPosition.longitude          = getParamFloatSafe("fixedPosition.longitude", Config.fixedPosition.longitude);
+        Config.fixedPosition.elevation          = getParamFloatSafe("fixedPosition.elevation", Config.fixedPosition.elevation);
+
+        //  APRS-IS
+        Config.aprsIS.server                    = getParamStringSafe("aprsIS.server", Config.aprsIS.server);
+        Config.aprsIS.port                      = getParamIntSafe("aprsIS.port", Config.aprsIS.port);
+        Config.aprsIS.passcode                  = getParamStringSafe("aprsIS.passcode", Config.aprsIS.passcode);
+        Config.aprsIS.filter                    = getParamStringSafe("aprsIS.filter", Config.aprsIS.filter);
+
+        //  TCP KISS
+        Config.tcpKISS.enabled                  = request->hasParam("tcpKISS.enabled", true);
+        Config.tcpKISS.port                     = getParamIntSafe("tcpKISS.port", Config.tcpKISS.port);
+
+        //  Smart Beacon custom values
+        Config.customSmartBeacon.slowRate        = getParamIntSafe("smartBeacon.slowRate",     Config.customSmartBeacon.slowRate);
+        Config.customSmartBeacon.slowSpeed       = getParamIntSafe("smartBeacon.slowSpeed",    Config.customSmartBeacon.slowSpeed);
+        Config.customSmartBeacon.fastRate        = getParamIntSafe("smartBeacon.fastRate",     Config.customSmartBeacon.fastRate);
+        Config.customSmartBeacon.fastSpeed       = getParamIntSafe("smartBeacon.fastSpeed",    Config.customSmartBeacon.fastSpeed);
+        Config.customSmartBeacon.minTxDist       = getParamIntSafe("smartBeacon.minTxDist",    Config.customSmartBeacon.minTxDist);
+        Config.customSmartBeacon.minDeltaBeacon  = getParamIntSafe("smartBeacon.minDeltaBeacon", Config.customSmartBeacon.minDeltaBeacon);
+        Config.customSmartBeacon.turnMinDeg      = getParamIntSafe("smartBeacon.turnMinDeg",   Config.customSmartBeacon.turnMinDeg);
+        Config.customSmartBeacon.turnSlope       = getParamIntSafe("smartBeacon.turnSlope",    Config.customSmartBeacon.turnSlope);
+
         //  Notification
         Config.notification.ledTx               = request->hasParam("notification.ledTx", true);
         if (Config.notification.ledTx) Config.notification.ledTxPin = getParamIntSafe("notification.ledTxPin", Config.notification.ledTxPin);

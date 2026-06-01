@@ -805,6 +805,179 @@
                         </div>
                         <hr>
 
+                        <!-- Device Role -->
+                        <div class="row my-5 d-flex align-items-top">
+                            <div class="col-lg-3 col-sm-12">
+                                <h5>Device Role</h5>
+                                <small>Select operating mode. iGate requires WiFi STA credentials.</small>
+                            </div>
+                            <div class="col-lg-9 col-sm-12">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label for="deviceRole" class="form-label">Role</label>
+                                        <select name="deviceRole" id="deviceRole" class="form-select">
+                                            <option value="0">Tracker</option>
+                                            <option value="1">iGate</option>
+                                            <option value="2">Digipeater</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="gpsSource" class="form-label">GPS Source</label>
+                                        <select name="gpsSource" id="gpsSource" class="form-select">
+                                            <option value="0">Internal GPS</option>
+                                            <option value="1">Fixed Position</option>
+                                            <option value="2">External Serial</option>
+                                            <option value="3">External BLE</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+
+                        <!-- Fixed Position -->
+                        <div class="row my-5 d-flex align-items-top">
+                            <div class="col-lg-3 col-sm-12">
+                                <h5>Fixed Position</h5>
+                                <small>Used when GPS Source is set to Fixed Position.</small>
+                            </div>
+                            <div class="col-lg-9 col-sm-12">
+                                <div class="row g-2">
+                                    <div class="col-4">
+                                        <label for="fixedPosition.latitude" class="form-label">Latitude</label>
+                                        <input type="number" step="0.000001" name="fixedPosition.latitude" id="fixedPosition.latitude" class="form-control" value="0.000000" />
+                                    </div>
+                                    <div class="col-4">
+                                        <label for="fixedPosition.longitude" class="form-label">Longitude</label>
+                                        <input type="number" step="0.000001" name="fixedPosition.longitude" id="fixedPosition.longitude" class="form-control" value="0.000000" />
+                                    </div>
+                                    <div class="col-4">
+                                        <label for="fixedPosition.elevation" class="form-label">Elevation (m)</label>
+                                        <input type="number" step="0.1" name="fixedPosition.elevation" id="fixedPosition.elevation" class="form-control" value="0.0" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+
+                        <!-- WiFi STA -->
+                        <div class="row my-5 d-flex align-items-top">
+                            <div class="col-lg-3 col-sm-12">
+                                <h5>WiFi Station</h5>
+                                <small>Network credentials for iGate mode (APRS-IS + TCP KISS).</small>
+                            </div>
+                            <div class="col-lg-9 col-sm-12">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" name="wifiSTA.enabled" id="wifiSTA.enabled" />
+                                    <label class="form-check-label" for="wifiSTA.enabled">Enable WiFi STA</label>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label for="wifiSTA.ssid" class="form-label">SSID</label>
+                                        <input type="text" name="wifiSTA.ssid" id="wifiSTA.ssid" class="form-control" />
+                                    </div>
+                                    <div class="col-6">
+                                        <label for="wifiSTA.password" class="form-label">Password</label>
+                                        <input type="password" name="wifiSTA.password" id="wifiSTA.password" class="form-control" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+
+                        <!-- APRS-IS -->
+                        <div class="row my-5 d-flex align-items-top">
+                            <div class="col-lg-3 col-sm-12">
+                                <h5>APRS-IS</h5>
+                                <small>Internet gateway settings. Required for iGate role.</small>
+                            </div>
+                            <div class="col-lg-9 col-sm-12">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label for="aprsIS.server" class="form-label">Server</label>
+                                        <input type="text" name="aprsIS.server" id="aprsIS.server" class="form-control" value="rotate.aprs.net" />
+                                    </div>
+                                    <div class="col-2">
+                                        <label for="aprsIS.port" class="form-label">Port</label>
+                                        <input type="number" name="aprsIS.port" id="aprsIS.port" class="form-control" value="14580" />
+                                    </div>
+                                    <div class="col-4">
+                                        <label for="aprsIS.passcode" class="form-label">Passcode</label>
+                                        <input type="text" name="aprsIS.passcode" id="aprsIS.passcode" class="form-control" placeholder="-1 for RX only" />
+                                    </div>
+                                    <div class="col-12">
+                                        <label for="aprsIS.filter" class="form-label">Filter</label>
+                                        <input type="text" name="aprsIS.filter" id="aprsIS.filter" class="form-control" placeholder="e.g. r/lat/lon/200" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+
+                        <!-- TCP KISS -->
+                        <div class="row my-5 d-flex align-items-top">
+                            <div class="col-lg-3 col-sm-12">
+                                <h5>TCP KISS</h5>
+                                <small>Exposes a KISS TNC server over WiFi.</small>
+                            </div>
+                            <div class="col-lg-9 col-sm-12">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" name="tcpKISS.enabled" id="tcpKISS.enabled" />
+                                    <label class="form-check-label" for="tcpKISS.enabled">Enable TCP KISS Server</label>
+                                </div>
+                                <div class="col-3">
+                                    <label for="tcpKISS.port" class="form-label">Port</label>
+                                    <input type="number" name="tcpKISS.port" id="tcpKISS.port" class="form-control" value="8001" />
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+
+                        <!-- Smart Beacon Custom -->
+                        <div class="row my-5 d-flex align-items-top">
+                            <div class="col-lg-3 col-sm-12">
+                                <h5>SmartBeacon Custom</h5>
+                                <small>Custom SmartBeacon profile parameters (profile 4).</small>
+                            </div>
+                            <div class="col-lg-9 col-sm-12">
+                                <div class="row g-2">
+                                    <div class="col-3">
+                                        <label for="smartBeacon.slowRate" class="form-label">Slow Rate (s)</label>
+                                        <input type="number" name="smartBeacon.slowRate" id="smartBeacon.slowRate" class="form-control" value="120" />
+                                    </div>
+                                    <div class="col-3">
+                                        <label for="smartBeacon.slowSpeed" class="form-label">Slow Speed (km/h)</label>
+                                        <input type="number" name="smartBeacon.slowSpeed" id="smartBeacon.slowSpeed" class="form-control" value="5" />
+                                    </div>
+                                    <div class="col-3">
+                                        <label for="smartBeacon.fastRate" class="form-label">Fast Rate (s)</label>
+                                        <input type="number" name="smartBeacon.fastRate" id="smartBeacon.fastRate" class="form-control" value="60" />
+                                    </div>
+                                    <div class="col-3">
+                                        <label for="smartBeacon.fastSpeed" class="form-label">Fast Speed (km/h)</label>
+                                        <input type="number" name="smartBeacon.fastSpeed" id="smartBeacon.fastSpeed" class="form-control" value="40" />
+                                    </div>
+                                    <div class="col-3">
+                                        <label for="smartBeacon.minTxDist" class="form-label">Min TX Dist (m)</label>
+                                        <input type="number" name="smartBeacon.minTxDist" id="smartBeacon.minTxDist" class="form-control" value="100" />
+                                    </div>
+                                    <div class="col-3">
+                                        <label for="smartBeacon.minDeltaBeacon" class="form-label">Min Delta (s)</label>
+                                        <input type="number" name="smartBeacon.minDeltaBeacon" id="smartBeacon.minDeltaBeacon" class="form-control" value="12" />
+                                    </div>
+                                    <div class="col-3">
+                                        <label for="smartBeacon.turnMinDeg" class="form-label">Turn Min (°)</label>
+                                        <input type="number" name="smartBeacon.turnMinDeg" id="smartBeacon.turnMinDeg" class="form-control" value="12" />
+                                    </div>
+                                    <div class="col-3">
+                                        <label for="smartBeacon.turnSlope" class="form-label">Turn Slope</label>
+                                        <input type="number" name="smartBeacon.turnSlope" id="smartBeacon.turnSlope" class="form-control" value="60" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+
                         <div class="row my-5 d-flex align-items-top">
                             <div class="col-lg-3 col-sm-12">
                                 <h5>

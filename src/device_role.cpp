@@ -21,6 +21,12 @@
 #include "board_pinout.h"
 #include "logger.h"
 #include "display.h"
+#include "digi_utils.h"
+#ifdef HAS_WIFI
+#include "aprs_is_utils.h"
+#include "tcp_kiss_utils.h"
+#include "wifi_utils.h"
+#endif
 
 extern Configuration Config;
 extern logging::Logger logger;
@@ -31,14 +37,10 @@ namespace DeviceRoleUtils {
 
     const char* getRoleString(DeviceRole role) {
         switch (role) {
-            case ROLE_TRACKER:
-                return "Tracker";
-            case ROLE_IGATE:
-                return "iGate";
-            case ROLE_DIGIPEATER:
-                return "Digipeater";
-            default:
-                return "Unknown";
+            case ROLE_TRACKER:    return "Tracker";
+            case ROLE_IGATE:      return "iGate";
+            case ROLE_DIGIPEATER: return "Digipeater";
+            default:              return "Unknown";
         }
     }
 
@@ -84,58 +86,65 @@ namespace DeviceRoleUtils {
     }
 
     void initializeTracker() {
-        Serial.println("INFO: Tracker mode: GPS + smart beaconing enabled, messaging active");
-        displayShow("Mode", "TRACKER", "", 2000);
+        Serial.println("INFO: Tracker mode: GPS + smart beaconing, messaging active");
+        displayShow("Mode", "TRACKER", "", 1500);
     }
 
     void initializeDigipeater() {
-        Serial.println("INFO: Digipeater mode: RF relaying enabled, beaconing disabled");
-        displayShow("Mode", "DIGIPEATER", "", 2000);
+        Serial.println("INFO: Digipeater mode: WIDE1/WIDE2 RF relay active");
+        displayShow("Mode", "DIGIPEATER", "", 1500);
     }
 
     #ifdef HAS_WIFI
     void initializeIGate() {
-        Serial.println("INFO: iGate mode: APRS-IS relay enabled");
+        Serial.println("INFO: iGate mode: connecting WiFi + APRS-IS");
 
-        if (Config.aprsIS.server.length() == 0) {
-            Serial.println("WARN: APRS-IS server not configured");
+        if (!WIFI_Utils::connectSTA()) {
+            Serial.println("WARN: WiFi STA connect failed; iGate will retry in background");
         }
 
-        if (Config.wifiSTA.ssid.length() == 0) {
-            Serial.println("WARN: WiFi STA not configured, iGate will not connect");
+        APRS_IS_Utils::connect();
+
+        if (Config.tcpKISS.enabled) {
+            TCP_KISS_Utils::setup();
         }
 
-        displayShow("Mode", "IGATE", "", 2000);
+        displayShow("Mode", "IGATE", "", 1500);
     }
     #endif
+
+    void processReceivedPacket(const String& frame) {
+        if (frame.length() == 0) return;
+
+        switch (Config.deviceRole) {
+            case ROLE_DIGIPEATER:
+                DIGI_Utils::processLoRaPacket(frame);
+                break;
+            case ROLE_IGATE:
+                #ifdef HAS_WIFI
+                    APRS_IS_Utils::processLoRaPacket(frame);
+                    TCP_KISS_Utils::sendToClients(frame);
+                #endif
+                break;
+            case ROLE_TRACKER:
+            default:
+                // Tracker packet handling is done in the main loop (MSG_Utils etc.)
+                break;
+        }
+    }
 
     void handleRoleSpecificTasks() {
         if (!roleInitialized) return;
 
-        switch (Config.deviceRole) {
-            case ROLE_TRACKER:
-                // Tracker tasks handled in main loop
-                break;
-            case ROLE_IGATE:
-                #ifdef HAS_WIFI
-                    handleIGateTasks();
-                #endif
-                break;
-            case ROLE_DIGIPEATER:
-                // Digipeater tasks handled in main loop
-                break;
-            default:
-                break;
-        }
+        #ifdef HAS_WIFI
+            if (Config.deviceRole == ROLE_IGATE) {
+                WIFI_Utils::checkWiFi();
+                APRS_IS_Utils::checkConnection();
+                APRS_IS_Utils::listenAPRSIS();
+                TCP_KISS_Utils::loop();
+            }
+        #endif
     }
-
-    #ifdef HAS_WIFI
-    void handleIGateTasks() {
-        // Poll APRS-IS for incoming packets
-        // Handle TCP KISS clients
-        // Manage WiFi connection state
-    }
-    #endif
 
     DeviceRole getCurrentRole() {
         return Config.deviceRole;
