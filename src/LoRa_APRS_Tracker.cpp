@@ -77,6 +77,7 @@ ____________________________________________________________________*/
 #include "display.h"
 #include "serial_setup.h"
 #include "utils.h"
+#include "device_role.h"
 #ifdef HAS_TOUCHSCREEN
 #include "touch_utils.h"
 #endif
@@ -197,6 +198,7 @@ void setup() {
     MSG_Utils::loadNumMessages();
     bootStatus("GPS");
     GPS_Utils::setup();
+    DeviceRoleUtils::initializeRole(Config.deviceRole);
     currentLoRaType = &Config.loraTypes[loraIndex];
     bootStatus("LoRa");
     #ifdef LORANGER_V1

@@ -158,6 +158,25 @@ bool Configuration::writeFile() {
         data["customSmartBeacon"]["turnMinDeg"]     = customSmartBeacon.turnMinDeg;
         data["customSmartBeacon"]["turnSlope"]      = customSmartBeacon.turnSlope;
 
+        data["wifiSTA"]["enabled"]                  = wifiSTA.enabled;
+        data["wifiSTA"]["ssid"]                     = wifiSTA.ssid;
+        data["wifiSTA"]["password"]                 = wifiSTA.password;
+
+        data["deviceRole"]                          = (int)deviceRole;
+        data["gpsSource"]                           = (int)gpsSource;
+
+        data["fixedPosition"]["latitude"]            = fixedPosition.latitude;
+        data["fixedPosition"]["longitude"]           = fixedPosition.longitude;
+        data["fixedPosition"]["elevation"]           = fixedPosition.elevation;
+
+        data["aprsIS"]["server"]                    = aprsIS.server;
+        data["aprsIS"]["port"]                      = aprsIS.port;
+        data["aprsIS"]["passcode"]                  = aprsIS.passcode;
+        data["aprsIS"]["filter"]                    = aprsIS.filter;
+
+        data["tcpKISS"]["enabled"]                  = tcpKISS.enabled;
+        data["tcpKISS"]["port"]                     = tcpKISS.port;
+
         serializeJson(data, configFile);
         configFile.close();
         return true;
@@ -377,6 +396,39 @@ bool Configuration::readFile() {
         customSmartBeacon.turnSlope      = data["customSmartBeacon"]["turnSlope"]      | 60;
         SMARTBEACON_Utils::setCustomValues(customSmartBeacon);
 
+        if (data["wifiSTA"]["enabled"].isNull() ||
+            data["wifiSTA"]["ssid"].isNull() ||
+            data["wifiSTA"]["password"].isNull()) needsRewrite = true;
+        wifiSTA.enabled                 = data["wifiSTA"]["enabled"] | false;
+        wifiSTA.ssid                    = data["wifiSTA"]["ssid"] | "";
+        wifiSTA.password                = data["wifiSTA"]["password"] | "";
+
+        if (data["deviceRole"].isNull() ||
+            data["gpsSource"].isNull()) needsRewrite = true;
+        deviceRole                      = (DeviceRole)(data["deviceRole"] | (int)ROLE_TRACKER);
+        gpsSource                       = (GPSSource)(data["gpsSource"] | (int)GPS_INTERNAL);
+
+        if (data["fixedPosition"]["latitude"].isNull() ||
+            data["fixedPosition"]["longitude"].isNull() ||
+            data["fixedPosition"]["elevation"].isNull()) needsRewrite = true;
+        fixedPosition.latitude          = data["fixedPosition"]["latitude"] | 0.0;
+        fixedPosition.longitude         = data["fixedPosition"]["longitude"] | 0.0;
+        fixedPosition.elevation         = data["fixedPosition"]["elevation"] | 0.0;
+
+        if (data["aprsIS"]["server"].isNull() ||
+            data["aprsIS"]["port"].isNull() ||
+            data["aprsIS"]["passcode"].isNull() ||
+            data["aprsIS"]["filter"].isNull()) needsRewrite = true;
+        aprsIS.server                   = data["aprsIS"]["server"] | "rotate.aprs.net";
+        aprsIS.port                     = data["aprsIS"]["port"] | 14580;
+        aprsIS.passcode                 = data["aprsIS"]["passcode"] | "";
+        aprsIS.filter                   = data["aprsIS"]["filter"] | "r/0/0/0";
+
+        if (data["tcpKISS"]["enabled"].isNull() ||
+            data["tcpKISS"]["port"].isNull()) needsRewrite = true;
+        tcpKISS.enabled                 = data["tcpKISS"]["enabled"] | false;
+        tcpKISS.port                    = data["tcpKISS"]["port"] | 8001;
+
         configFile.close();
 
         if (needsRewrite) {
@@ -530,6 +582,25 @@ void Configuration::setDefaultValues() {
 
     customSmartBeacon               = { 120, 5, 60, 40, 100, 12, 12, 60 };
     SMARTBEACON_Utils::setCustomValues(customSmartBeacon);
+
+    wifiSTA.enabled                 = false;
+    wifiSTA.ssid                    = "";
+    wifiSTA.password                = "";
+
+    deviceRole                      = ROLE_TRACKER;
+    gpsSource                       = GPS_INTERNAL;
+
+    fixedPosition.latitude          = 0.0;
+    fixedPosition.longitude         = 0.0;
+    fixedPosition.elevation         = 0.0;
+
+    aprsIS.server                   = "rotate.aprs.net";
+    aprsIS.port                     = 14580;
+    aprsIS.passcode                 = "";
+    aprsIS.filter                   = "r/0/0/0";
+
+    tcpKISS.enabled                 = false;
+    tcpKISS.port                    = 8001;
 
     Serial.println("New Data Created... All is Written!");
 }

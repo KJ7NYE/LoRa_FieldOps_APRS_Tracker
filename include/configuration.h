@@ -26,6 +26,25 @@
 #endif
 #include "smartbeacon_utils.h"
 
+enum DeviceRole {
+    ROLE_TRACKER = 0,
+    ROLE_IGATE = 1,
+    ROLE_DIGIPEATER = 2
+};
+
+enum GPSSource {
+    GPS_INTERNAL = 0,
+    GPS_FIXED = 1,
+    GPS_EXTERNAL_SERIAL = 2,
+    GPS_EXTERNAL_BLE = 3
+};
+
+class WiFiSTA {
+public:
+    bool    enabled;
+    String  ssid;
+    String  password;
+};
 
 class WiFiAP {
 public:
@@ -123,11 +142,33 @@ public:
     bool    useKISS;
 };
 
+class APRSISS {
+public:
+    String  server;
+    uint16_t port;
+    String  passcode;
+    String  filter;
+};
+
+class TCPKISS {
+public:
+    bool    enabled;
+    uint16_t port;
+};
+
+class FixedPosition {
+public:
+    float   latitude;
+    float   longitude;
+    float   elevation;
+};
+
 
 class Configuration {
 public:
 
     WiFiAP                  wifiAP;
+    WiFiSTA                 wifiSTA;
     std::vector<Beacon>     beacons;
     Display                 display;
     Battery                 battery;
@@ -138,8 +179,14 @@ public:
     PTT                     ptt;
     BLUETOOTH               bluetooth;
     SmartBeaconValues       customSmartBeacon;
+    APRSISS                 aprsIS;
+    TCPKISS                 tcpKISS;
+    FixedPosition           fixedPosition;
 
+    DeviceRole              deviceRole;
+    GPSSource               gpsSource;
     bool    simplifiedTrackerMode;
+
     int     sendCommentAfterXBeacons;
     String  path;
     String  email;

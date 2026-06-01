@@ -66,8 +66,105 @@ float       bearing         = 0;
 
 bool        gpsIsActive     = true;
 
+TinyGPSPlus externalGPS;  // For external GPS sources (serial or BLE)
+uint32_t    lastExternalGPSUpdate = 0;
+
 
 namespace GPS_Utils {
+
+    struct PositionData {
+        double latitude;
+        double longitude;
+        float elevation;
+        uint8_t satelliteCount;
+        uint32_t timestamp;
+        bool isValid;
+    };
+
+    PositionData lastValidPosition = {0, 0, 0, 0, 0, false};
+
+    void feedExternalGPSData(uint8_t byte) {
+        externalGPS.encode(byte);
+        if (externalGPS.location.isUpdated()) {
+            lastExternalGPSUpdate = millis();
+        }
+    }
+
+    bool getPositionData(PositionData &posData) {
+        posData.timestamp = millis();
+        posData.isValid = false;
+
+        switch (Config.gpsSource) {
+            case GPS_INTERNAL:
+                if (disableGPS) return false;
+                if (gps.location.isValid()) {
+                    posData.latitude = gps.location.lat();
+                    posData.longitude = gps.location.lng();
+                    posData.elevation = gps.altitude.meters();
+                    posData.satelliteCount = gps.satellites.value();
+                    posData.isValid = true;
+                    lastValidPosition = posData;
+                    return true;
+                }
+                break;
+
+            case GPS_FIXED:
+                posData.latitude = Config.fixedPosition.latitude;
+                posData.longitude = Config.fixedPosition.longitude;
+                posData.elevation = Config.fixedPosition.elevation;
+                posData.satelliteCount = 0;
+                posData.isValid = (posData.latitude != 0 || posData.longitude != 0);
+                if (posData.isValid) {
+                    lastValidPosition = posData;
+                }
+                return posData.isValid;
+
+            case GPS_EXTERNAL_SERIAL:
+            case GPS_EXTERNAL_BLE:
+                if (externalGPS.location.isValid()) {
+                    posData.latitude = externalGPS.location.lat();
+                    posData.longitude = externalGPS.location.lng();
+                    posData.elevation = externalGPS.altitude.meters();
+                    posData.satelliteCount = externalGPS.satellites.value();
+                    posData.isValid = true;
+                    lastValidPosition = posData;
+                    return true;
+                }
+                // Fallback to fixed position if external GPS has no fix
+                if (Config.fixedPosition.latitude != 0 || Config.fixedPosition.longitude != 0) {
+                    posData.latitude = Config.fixedPosition.latitude;
+                    posData.longitude = Config.fixedPosition.longitude;
+                    posData.elevation = Config.fixedPosition.elevation;
+                    posData.satelliteCount = 0;
+                    posData.isValid = true;
+                    lastValidPosition = posData;
+                    return true;
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        // Fallback to last valid position if current source has no data
+        if (lastValidPosition.isValid) {
+            posData = lastValidPosition;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool getCurrentLocation(double &lat, double &lng, float &elev) {
+        PositionData posData;
+        if (getPositionData(posData)) {
+            lat = posData.latitude;
+            lng = posData.longitude;
+            elev = posData.elevation;
+            return true;
+        }
+        return false;
+    }
 
     void setup() {
         if (disableGPS) {
