@@ -175,6 +175,43 @@ function loadSettings(settings) {
         beaconContainer.appendChild(beaconElement);
     });
 
+    // DEVICE ROLE & NETWORK
+    const dr = settings.deviceRole ?? 0;
+    const gs = settings.gpsSource  ?? 0;
+    document.getElementById("deviceRole").value = dr;
+    document.getElementById("gpsSource").value  = gs;
+
+    const fp = settings.fixedPosition ?? {};
+    document.getElementById("fixedPosition.latitude").value   = fp.latitude  ?? 0;
+    document.getElementById("fixedPosition.longitude").value  = fp.longitude ?? 0;
+    document.getElementById("fixedPosition.elevation").value  = fp.elevation ?? 0;
+
+    const ws = settings.wifiSTA ?? {};
+    document.getElementById("wifiSTA.enabled").checked   = ws.enabled  ?? false;
+    document.getElementById("wifiSTA.ssid").value        = ws.ssid     ?? "";
+    document.getElementById("wifiSTA.password").value    = ws.password ?? "";
+
+    const ai = settings.aprsIS ?? {};
+    document.getElementById("aprsIS.server").value   = ai.server   ?? "rotate.aprs.net";
+    document.getElementById("aprsIS.port").value     = ai.port     ?? 14580;
+    document.getElementById("aprsIS.passcode").value = ai.passcode ?? "";
+    document.getElementById("aprsIS.filter").value   = ai.filter   ?? "r/0/0/0";
+
+    const tk = settings.tcpKISS ?? {};
+    document.getElementById("tcpKISS.enabled").checked = tk.enabled ?? false;
+    document.getElementById("tcpKISS.port").value      = tk.port    ?? 8001;
+
+    // SMARTBEACON CUSTOM
+    const sb = settings.customSmartBeacon ?? {};
+    document.getElementById("customSmartBeacon.slowRate").value       = sb.slowRate       ?? 120;
+    document.getElementById("customSmartBeacon.slowSpeed").value      = sb.slowSpeed      ?? 5;
+    document.getElementById("customSmartBeacon.fastRate").value       = sb.fastRate       ?? 60;
+    document.getElementById("customSmartBeacon.fastSpeed").value      = sb.fastSpeed      ?? 40;
+    document.getElementById("customSmartBeacon.minTxDist").value      = sb.minTxDist      ?? 100;
+    document.getElementById("customSmartBeacon.minDeltaBeacon").value = sb.minDeltaBeacon ?? 12;
+    document.getElementById("customSmartBeacon.turnMinDeg").value     = sb.turnMinDeg     ?? 12;
+    document.getElementById("customSmartBeacon.turnSlope").value      = sb.turnSlope      ?? 60;
+
     // ADITIONAL STATION CONFIG
     document.getElementById("simplifiedTrackerMode").checked            = settings.other.simplifiedTrackerMode;
     document.getElementById("sendCommentAfterXBeacons").value           = settings.other.sendCommentAfterXBeacons;

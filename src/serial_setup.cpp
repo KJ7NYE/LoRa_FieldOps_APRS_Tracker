@@ -159,6 +159,15 @@ namespace SERIAL_Setup {
         Serial.println(F("  telem on|off               send on|off          tempcorr <float>"));
         Serial.println(F("  ptt on|off                 pin <n>              reverse on|off"));
         Serial.println(F("  ptt predelay <ms>          postdelay <ms>"));
+        Serial.println(F("\n-- multi-role --"));
+        Serial.println(F("  role show                  show current role and GPS source"));
+        Serial.println(F("  role set <tracker|igate|digipeater>"));
+        Serial.println(F("  role gps <internal|fixed|externserial|externble>"));
+        Serial.println(F("  fixed latitude <dd.dddddd>  longitude <dd.dddddd>  elevation <m>"));
+        Serial.println(F("  wifista on|off              ssid <text>            password <text>"));
+        Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
+        Serial.println(F("  aprsiss filter <filter>     (e.g. r/47.6/-122.3/50)"));
+        Serial.println(F("  tcpkiss on|off              port <n>               (default 8001)"));
         Serial.println(F("\n-- other --"));
         Serial.println(F("  digipeater on|off          (boot default; menu still toggles runtime)"));
         Serial.println(F("  winlink password <text>"));
@@ -762,6 +771,108 @@ namespace SERIAL_Setup {
         return true;
     }
 
+    // ---------------- multi-role CLI commands ----------------
+
+    static void cmdRole(String* tk, int n, const String& /*line*/) {
+        if (n < 2) { err("role <show|set|gps> ..."); return; }
+        const String& sub = tk[1];
+
+        if (sub == "show") {
+            hdr("device role & gps source");
+            const char* roleStr =
+                (Config.deviceRole == ROLE_TRACKER)    ? "Tracker"    :
+                (Config.deviceRole == ROLE_IGATE)      ? "iGate"      :
+                (Config.deviceRole == ROLE_DIGIPEATER) ? "Digipeater" : "Unknown";
+            const char* gpsStr =
+                (Config.gpsSource == GPS_INTERNAL)        ? "Internal"       :
+                (Config.gpsSource == GPS_FIXED)           ? "Fixed"          :
+                (Config.gpsSource == GPS_EXTERNAL_SERIAL) ? "ExternalSerial" :
+                (Config.gpsSource == GPS_EXTERNAL_BLE)    ? "ExternalBLE"    : "Unknown";
+            kv("role", roleStr);
+            kv("gps",  gpsStr);
+        } else if (sub == "set") {
+            if (n < 3) { err("role set <tracker|igate|digipeater>"); return; }
+            String r = tk[2]; r.toLowerCase();
+            DeviceRole newRole;
+            if      (r == "tracker")     newRole = ROLE_TRACKER;
+            else if (r == "igate")       newRole = ROLE_IGATE;
+            else if (r == "digipeater")  newRole = ROLE_DIGIPEATER;
+            else { err("role must be: tracker, igate, digipeater"); return; }
+            #ifdef ARDUINO_ARCH_NRF52
+                if (newRole == ROLE_IGATE) {
+                    err("iGate not supported on nRF52 (no WiFi)");
+                    return;
+                }
+            #endif
+            Config.deviceRole = newRole;
+            ok("deviceRole = " + r + " (save + reboot to apply)");
+        } else if (sub == "gps") {
+            if (n < 3) { err("role gps <internal|fixed|externserial|externble>"); return; }
+            String g = tk[2]; g.toLowerCase();
+            GPSSource newGps;
+            if      (g == "internal")     newGps = GPS_INTERNAL;
+            else if (g == "fixed")        newGps = GPS_FIXED;
+            else if (g == "externserial") newGps = GPS_EXTERNAL_SERIAL;
+            else if (g == "externble")    newGps = GPS_EXTERNAL_BLE;
+            else { err("gps: internal, fixed, externserial, externble"); return; }
+            Config.gpsSource = newGps;
+            ok("gpsSource = " + g + " (save + reboot to apply)");
+        } else {
+            err("unknown role subcommand: " + sub);
+        }
+    }
+
+    static void cmdFixed(String* tk, int n) {
+        if (n < 3) { err("fixed <latitude|longitude|elevation> <value>"); return; }
+        const String& sub = tk[1];
+        if      (sub == "latitude")  { Config.fixedPosition.latitude  = tk[2].toFloat(); ok("fixedPosition.latitude = "  + String(Config.fixedPosition.latitude,  6)); }
+        else if (sub == "longitude") { Config.fixedPosition.longitude = tk[2].toFloat(); ok("fixedPosition.longitude = " + String(Config.fixedPosition.longitude, 6)); }
+        else if (sub == "elevation") { Config.fixedPosition.elevation = tk[2].toFloat(); ok("fixedPosition.elevation = " + String(Config.fixedPosition.elevation, 1)); }
+        else err("fixed: latitude, longitude, elevation");
+    }
+
+    static void cmdWifiSta(String* tk, int n, const String& line) {
+        if (n < 2) { err("wifista <on|off|ssid|password>"); return; }
+        const String& sub = tk[1];
+        if (sub == "on" || sub == "off" || sub == "true" || sub == "false") {
+            applyBool(tk[1], Config.wifiSTA.enabled, "wifiSTA.enabled");
+        } else if (sub == "ssid") {
+            if (n < 3) { err("wifista ssid <ssid>"); return; }
+            Config.wifiSTA.ssid = restOfLine(line, 2);
+            ok("wifiSTA.ssid = " + Config.wifiSTA.ssid);
+        } else if (sub == "password") {
+            if (n < 3) { err("wifista password <text>"); return; }
+            Config.wifiSTA.password = restOfLine(line, 2);
+            ok("wifiSTA.password updated");
+        } else {
+            err("unknown wifista subcommand: " + sub);
+        }
+    }
+
+    static void cmdAprsIS(String* tk, int n, const String& line) {
+        if (n < 2) { err("aprsiss <server|port|passcode|filter>"); return; }
+        const String& sub = tk[1];
+        if      (sub == "server")   { if (n < 3) { err("aprsiss server <hostname>"); return; } Config.aprsIS.server  = tk[2];                ok("aprsIS.server = "  + Config.aprsIS.server); }
+        else if (sub == "port")     { if (n < 3) { err("aprsiss port <port>");    return; } Config.aprsIS.port    = tk[2].toInt();          ok("aprsIS.port = "    + String(Config.aprsIS.port)); }
+        else if (sub == "passcode") { if (n < 3) { err("aprsiss passcode <code>"); return; } Config.aprsIS.passcode = tk[2];                ok("aprsIS.passcode updated"); }
+        else if (sub == "filter")   { if (n < 3) { err("aprsiss filter <filter>"); return; } Config.aprsIS.filter  = restOfLine(line, 2);   ok("aprsIS.filter = "  + Config.aprsIS.filter); }
+        else err("unknown aprsiss subcommand: " + sub);
+    }
+
+    static void cmdTcpKiss(String* tk, int n) {
+        if (n < 2) { err("tcpkiss <on|off|port>"); return; }
+        const String& sub = tk[1];
+        if (sub == "on" || sub == "off" || sub == "true" || sub == "false") {
+            applyBool(tk[1], Config.tcpKISS.enabled, "tcpKISS.enabled");
+        } else if (sub == "port") {
+            if (n < 3) { err("tcpkiss port <port>"); return; }
+            Config.tcpKISS.port = tk[2].toInt();
+            ok("tcpKISS.port = " + String(Config.tcpKISS.port));
+        } else {
+            err("unknown tcpkiss subcommand: " + sub);
+        }
+    }
+
     // ---------------- top-level dispatch ----------------
     static void handleLine(const String& line) {
         String tk[8];
@@ -860,6 +971,12 @@ namespace SERIAL_Setup {
         else if (cmd == "rememberstation")          { if (n >= 2) { Config.rememberStationTime = tk[1].toInt(); ok("rememberStationTime = " + String(Config.rememberStationTime)); } else err("rememberstation <sec>"); }
         else if (cmd == "standingupdate")           { if (n >= 2) { Config.standingUpdateTime = tk[1].toInt(); ok("standingUpdateTime = " + String(Config.standingUpdateTime)); } else err("standingupdate <sec>"); }
         else if (cmd == "commentafter")             { if (n >= 2) { Config.sendCommentAfterXBeacons = tk[1].toInt(); ok("sendCommentAfterXBeacons = " + String(Config.sendCommentAfterXBeacons)); } else err("commentafter <n>"); }
+        // multi-role commands
+        else if (cmd == "role")     cmdRole(tk, n, line);
+        else if (cmd == "fixed")    cmdFixed(tk, n);
+        else if (cmd == "wifista")  cmdWifiSta(tk, n, line);
+        else if (cmd == "aprsiss")  cmdAprsIS(tk, n, line);
+        else if (cmd == "tcpkiss")  cmdTcpKiss(tk, n);
         else err("unknown command: " + cmd + "  (try 'help')");
     }
 

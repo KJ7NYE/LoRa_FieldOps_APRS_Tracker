@@ -36,6 +36,32 @@ namespace WIFI_Utils {
         WiFi.softAP("LoRaTracker-AP", Config.wifiAP.password);
     }
 
+    bool isSTAConnected() {
+        return WiFi.status() == WL_CONNECTED;
+    }
+
+    bool connectSTA() {
+        if (Config.wifiSTA.ssid.length() == 0) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi", "STA SSID not configured");
+            return false;
+        }
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Connecting to '%s' ...", Config.wifiSTA.ssid.c_str());
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(Config.wifiSTA.ssid.c_str(), Config.wifiSTA.password.c_str());
+
+        uint32_t t0 = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000UL) {
+            delay(500);
+        }
+        if (WiFi.status() == WL_CONNECTED) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Connected, IP: %s", WiFi.localIP().toString().c_str());
+            displayShow(" WiFi STA", "Connected", WiFi.localIP().toString(), 2000);
+            return true;
+        }
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi", "STA connect failed");
+        return false;
+    }
+
     void checkIfWiFiAP() {
         const bool isNoCall      = Config.beacons[0].callsign == "NOCALL-7";
         const bool forceWebConf  = Config.wifiAP.active || isNoCall;

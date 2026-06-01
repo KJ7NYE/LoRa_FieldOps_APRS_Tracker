@@ -78,6 +78,11 @@ ____________________________________________________________________*/
 #include "serial_setup.h"
 #include "utils.h"
 #include "device_role.h"
+#include "digi_utils.h"
+#ifdef HAS_WIFI
+#include "aprs_is_utils.h"
+#include "tcp_kiss_utils.h"
+#endif
 #ifdef HAS_TOUCHSCREEN
 #include "touch_utils.h"
 #endif
@@ -266,9 +271,13 @@ void setup() {
     bootStatus("WX");
     WX_Utils::setup();
 
+    // For iGate role, WiFi stays on (STA connect happens inside initializeRole).
+    // For all other roles, power down the radio to save energy.
     #ifdef HAS_WIFI
-        WiFi.mode(WIFI_OFF);
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Main", "WiFi controller stopped");
+        if (Config.deviceRole != ROLE_IGATE) {
+            WiFi.mode(WIFI_OFF);
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Main", "WiFi controller stopped");
+        }
     #endif
 
     if (bluetoothActive) {
@@ -348,9 +357,32 @@ void loop() {
 
     ReceivedLoRaPacket packet = LoRa_Utils::receivePacket();
 
+    // Route received packet to the active role's handler
+    if (packet.text.length() > 3) {
+        String aprsPacket = packet.text.substring(3);   // strip 3-byte RSSI prefix
+
+        switch (Config.deviceRole) {
+            case ROLE_IGATE:
+                #ifdef HAS_WIFI
+                    APRS_IS_Utils::processLoRaPacket(aprsPacket);
+                    TCP_KISS_Utils::sendToClients(aprsPacket);
+                #endif
+                break;
+            case ROLE_DIGIPEATER:
+                DIGI_Utils::processLoRaPacket(aprsPacket);
+                break;
+            default:    // ROLE_TRACKER — existing message + BLE handling below
+                break;
+        }
+    }
+
+    // Message handling and display (all roles benefit from this)
     MSG_Utils::checkReceivedMessage(packet);
     MSG_Utils::processOutputBuffer();
     MSG_Utils::clean15SegBuffer();
+
+    // Call any remaining role-periodic tasks (self-beacon timer, APRS-IS loop, etc.)
+    DeviceRoleUtils::handleRoleSpecificTasks();
 
     if (bluetoothActive && bluetoothConnected) {
         if (Config.bluetooth.useBLE) {

@@ -19,8 +19,14 @@
 #include "device_role.h"
 #include "configuration.h"
 #include "board_pinout.h"
+#include "station_utils.h"
 #include "logger.h"
 #include "display.h"
+#ifdef HAS_WIFI
+#include "aprs_is_utils.h"
+#include "tcp_kiss_utils.h"
+#include "wifi_utils.h"
+#endif
 
 extern Configuration Config;
 extern logging::Logger logger;
@@ -95,17 +101,26 @@ namespace DeviceRoleUtils {
 
     #ifdef HAS_WIFI
     void initializeIGate() {
-        Serial.println("INFO: iGate mode: APRS-IS relay enabled");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Role", "iGate mode: APRS-IS relay enabled");
 
-        if (Config.aprsIS.server.length() == 0) {
-            Serial.println("WARN: APRS-IS server not configured");
+        // Connect WiFi STA
+        if (Config.wifiSTA.enabled && Config.wifiSTA.ssid.length() > 0) {
+            WIFI_Utils::connectSTA();
+        } else {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Role", "WiFi STA not configured — iGate will not reach APRS-IS");
         }
 
-        if (Config.wifiSTA.ssid.length() == 0) {
-            Serial.println("WARN: WiFi STA not configured, iGate will not connect");
+        // Connect APRS-IS
+        if (WIFI_Utils::isSTAConnected()) {
+            APRS_IS_Utils::connect();
         }
 
-        displayShow("Mode", "IGATE", "", 2000);
+        // Start TCP KISS server
+        if (Config.tcpKISS.enabled) {
+            TCP_KISS_Utils::setup();
+        }
+
+        displayShow("Mode", "IGATE", Config.beacons[0].callsign, 2000);
     }
     #endif
 
@@ -131,9 +146,17 @@ namespace DeviceRoleUtils {
 
     #ifdef HAS_WIFI
     void handleIGateTasks() {
-        // Poll APRS-IS for incoming packets
-        // Handle TCP KISS clients
-        // Manage WiFi connection state
+        // Maintain WiFi + APRS-IS connection
+        if (!WIFI_Utils::isSTAConnected() && Config.wifiSTA.enabled) {
+            WIFI_Utils::connectSTA();
+        }
+        APRS_IS_Utils::checkConnection();
+
+        // Poll inbound APRS-IS packets (bi-directional downlink)
+        APRS_IS_Utils::listenAPRSIS();
+
+        // Service TCP KISS clients
+        TCP_KISS_Utils::loop();
     }
     #endif
 

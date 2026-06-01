@@ -102,6 +102,91 @@
                         </div>
                         <hr>
 
+                        <!-- ===== Device Role & Network ===== -->
+                        <div class="row my-5 d-flex align-items-top">
+                            <div class="col-lg-3 col-sm-12">
+                                <h5>&#128225; Device Role &amp; Network</h5>
+                                <small>Operating role, GPS source, fixed position, WiFi STA, APRS-IS, and TCP KISS server.</small>
+                            </div>
+                            <div class="col-lg-9">
+                                <div class="row mb-3 g-2">
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label">Device Role</label>
+                                        <select name="deviceRole" id="deviceRole" class="form-select form-select-sm">
+                                            <option value="0">Tracker</option>
+                                            <option value="1">iGate</option>
+                                            <option value="2">Digipeater</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label">GPS Source</label>
+                                        <select name="gpsSource" id="gpsSource" class="form-select form-select-sm">
+                                            <option value="0">Internal GPS</option>
+                                            <option value="1">Fixed Position</option>
+                                            <option value="2">External (Serial)</option>
+                                            <option value="3">External (BLE)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row mb-3 border rounded p-2 g-2">
+                                    <div class="col-12 mb-1"><strong>Fixed Position</strong> <small class="text-muted">(iGate/Digi self-beacon; Tracker when GPS source = Fixed)</small></div>
+                                    <div class="col-12 col-md-4"><div class="form-floating"><input type="number" step="0.000001" class="form-control form-control-sm" name="fixedPosition.latitude"  id="fixedPosition.latitude"  placeholder="0.0"><label>Latitude (°)</label></div></div>
+                                    <div class="col-12 col-md-4"><div class="form-floating"><input type="number" step="0.000001" class="form-control form-control-sm" name="fixedPosition.longitude" id="fixedPosition.longitude" placeholder="0.0"><label>Longitude (°)</label></div></div>
+                                    <div class="col-12 col-md-4"><div class="form-floating"><input type="number" step="0.1"       class="form-control form-control-sm" name="fixedPosition.elevation" id="fixedPosition.elevation" placeholder="0"><label>Elevation (m)</label></div></div>
+                                </div>
+                                <div class="row mb-3 border rounded p-2 g-2">
+                                    <div class="col-12 mb-1 d-flex align-items-center gap-2">
+                                        <strong>WiFi STA</strong>
+                                        <div class="form-check form-switch ms-2 mb-0">
+                                            <input class="form-check-input" type="checkbox" name="wifiSTA.enabled" id="wifiSTA.enabled" value="1">
+                                            <label class="form-check-label" for="wifiSTA.enabled">Enabled</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-6"><div class="form-floating"><input type="text"     class="form-control form-control-sm" name="wifiSTA.ssid"     id="wifiSTA.ssid"     placeholder="SSID"><label>SSID</label></div></div>
+                                    <div class="col-12 col-md-6"><div class="form-floating"><input type="password" class="form-control form-control-sm" name="wifiSTA.password" id="wifiSTA.password" placeholder="Password"><label>Password</label></div></div>
+                                </div>
+                                <div class="row mb-3 border rounded p-2 g-2">
+                                    <div class="col-12 mb-1"><strong>APRS-IS</strong></div>
+                                    <div class="col-12 col-md-5"><div class="form-floating"><input type="text"   class="form-control form-control-sm" name="aprsIS.server"   id="aprsIS.server"   placeholder="rotate.aprs.net"><label>Server</label></div></div>
+                                    <div class="col-12 col-md-2"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="aprsIS.port"     id="aprsIS.port"     placeholder="14580"><label>Port</label></div></div>
+                                    <div class="col-12 col-md-2"><div class="form-floating"><input type="text"   class="form-control form-control-sm" name="aprsIS.passcode" id="aprsIS.passcode" placeholder="-1"><label>Passcode</label></div></div>
+                                    <div class="col-12 col-md-3"><div class="form-floating"><input type="text"   class="form-control form-control-sm" name="aprsIS.filter"   id="aprsIS.filter"   placeholder="r/0/0/0"><label>Filter</label></div></div>
+                                </div>
+                                <div class="row mb-1 border rounded p-2 g-2">
+                                    <div class="col-12 mb-1 d-flex align-items-center gap-2">
+                                        <strong>TCP KISS</strong>
+                                        <div class="form-check form-switch ms-2 mb-0">
+                                            <input class="form-check-input" type="checkbox" name="tcpKISS.enabled" id="tcpKISS.enabled" value="1">
+                                            <label class="form-check-label" for="tcpKISS.enabled">Enabled</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="tcpKISS.port" id="tcpKISS.port" min="1" max="65535"><label>Port</label></div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+
+                        <!-- ===== SmartBeacon Custom Profile ===== -->
+                        <div class="row my-5 d-flex align-items-top">
+                            <div class="col-lg-3 col-sm-12">
+                                <h5>&#128204; SmartBeacon Custom</h5>
+                                <small>Profile 3 (Custom). Select profile 3 in a beacon slot to use these parameters.</small>
+                            </div>
+                            <div class="col-lg-9">
+                                <div class="row g-2">
+                                    <div class="col-6 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="customSmartBeacon.slowRate"       id="customSmartBeacon.slowRate"       min="0"><label>Slow Rate (s)</label></div></div>
+                                    <div class="col-6 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="customSmartBeacon.slowSpeed"      id="customSmartBeacon.slowSpeed"      min="0"><label>Slow Speed (km/h)</label></div></div>
+                                    <div class="col-6 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="customSmartBeacon.fastRate"       id="customSmartBeacon.fastRate"       min="0"><label>Fast Rate (s)</label></div></div>
+                                    <div class="col-6 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="customSmartBeacon.fastSpeed"      id="customSmartBeacon.fastSpeed"      min="0"><label>Fast Speed (km/h)</label></div></div>
+                                    <div class="col-6 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="customSmartBeacon.minTxDist"      id="customSmartBeacon.minTxDist"      min="0"><label>Min TX Dist (m)</label></div></div>
+                                    <div class="col-6 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="customSmartBeacon.minDeltaBeacon" id="customSmartBeacon.minDeltaBeacon" min="0"><label>Min Delta (s)</label></div></div>
+                                    <div class="col-6 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="customSmartBeacon.turnMinDeg"     id="customSmartBeacon.turnMinDeg"     min="0"><label>Turn Min (°)</label></div></div>
+                                    <div class="col-6 col-md-3"><div class="form-floating"><input type="number" class="form-control form-control-sm" name="customSmartBeacon.turnSlope"      id="customSmartBeacon.turnSlope"      min="0"><label>Turn Slope</label></div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+
                         <div class="row my-5 d-flex align-items-top">
                             <div class="col-lg-3 col-sm-12">
                                 <h5>
