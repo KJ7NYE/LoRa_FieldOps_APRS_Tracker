@@ -118,7 +118,7 @@ namespace Utils {
                 uint32_t statusTx = currentTime - statusTime;
                 lastTx = currentTime - lastTxTime;
                 if (statusTx > 10 * 60 * 1000 && lastTx > 10 * 1000) {
-                    LoRa_Utils::sendNewPacket(APRSPacketLib::generateStatusPacket(currentBeacon->callsign, "APLRT1", Config.path, currentBeacon->status));
+                    LoRa_Utils::sendNewPacket(APRSPacketLib::generateStatusPacket(currentBeacon->callsign, "APLRT1", Config.beaconPath, currentBeacon->status));
                     statusUpdate = false;
                 }
             }

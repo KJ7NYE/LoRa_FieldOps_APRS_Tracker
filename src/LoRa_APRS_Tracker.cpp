@@ -132,7 +132,7 @@ double      lastTxLng               = 0.0;
 double      lastTxDistance          = 0.0;
 
 bool        flashlight              = false;
-bool        digipeaterActive        = Config.digipeating;
+bool        digipeaterActive        = (Config.digiMode != DIGI_OFF); // runtime mirror of Config.digiMode
 bool        sosActive               = false;
 
 bool        miceActive              = false;

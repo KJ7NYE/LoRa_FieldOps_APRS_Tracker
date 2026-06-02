@@ -155,9 +155,9 @@ namespace APRS_IS_Utils {
             int colonIdx = line.indexOf(":");
             if (colonIdx < 3) continue;
             String txPacket = sender + ">" + "APLRG1";
-            if (Config.path.length() > 0) {
+            if (Config.beaconPath.length() > 0) {
                 txPacket += ",";
-                txPacket += Config.path;
+                txPacket += Config.beaconPath;
             }
             txPacket += line.substring(colonIdx);
 

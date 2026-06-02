@@ -180,6 +180,7 @@ function loadSettings(settings) {
     const gs = settings.gpsSource  ?? 0;
     document.getElementById("deviceRole").value = dr;
     document.getElementById("gpsSource").value  = gs;
+    document.getElementById("digiMode").value   = settings.digiMode ?? 0;
 
     const fp = settings.fixedPosition ?? {};
     document.getElementById("fixedPosition.latitude").value   = fp.latitude  ?? 0;
@@ -215,7 +216,7 @@ function loadSettings(settings) {
     // ADITIONAL STATION CONFIG
     document.getElementById("simplifiedTrackerMode").checked            = settings.other.simplifiedTrackerMode;
     document.getElementById("sendCommentAfterXBeacons").value           = settings.other.sendCommentAfterXBeacons;
-    document.getElementById("path").value                               = settings.other.path;
+    document.getElementById("beaconPath").value = settings.other.beaconPath ?? settings.other.path ?? "WIDE1-1"; // backward compat
     document.getElementById("nonSmartBeaconRate").value                 = settings.other.nonSmartBeaconRate;
     document.getElementById("rememberStationTime").value                = settings.other.rememberStationTime;
     document.getElementById("standingUpdateTime").value                 = settings.other.standingUpdateTime;

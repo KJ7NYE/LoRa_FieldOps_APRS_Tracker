@@ -163,17 +163,24 @@ namespace SERIAL_Setup {
         Serial.println(F("  role show                  show current role and GPS source"));
         Serial.println(F("  role set <tracker|igate|digipeater>"));
         Serial.println(F("  role gps <internal|fixed|externserial|externble>"));
-        Serial.println(F("  fixed latitude <dd.dddddd>  longitude <dd.dddddd>  elevation <m>"));
-        Serial.println(F("  wifista on|off              ssid <text>            password <text>"));
-        Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
-        Serial.println(F("  aprsiss filter <filter>     (e.g. r/47.6/-122.3/50)"));
-        Serial.println(F("  tcpkiss on|off              port <n>               (default 8001)"));
+        Serial.println(F("  fixed latitude <dd.d>  longitude <dd.d>  elevation <m>"));
+        Serial.println(F("  wifista on|off         ssid <text>        password <text>"));
+        Serial.println(F("  aprsiss server <host>  port <n>           passcode <n>"));
+        Serial.println(F("  aprsiss filter <text>  (e.g. r/47.6/-122.3/50)"));
+        Serial.println(F("  tcpkiss on|off         port <n>           (default 8001)"));
+        Serial.println(F("\n-- digipeating (independent of role) --"));
+        Serial.println(F("  digi off                   disable digipeating"));
+        Serial.println(F("  digi wide1                 fill-in: relay WIDE1-1 packets only"));
+        Serial.println(F("  digi wide1+wide2           infrastructure: relay WIDE1-1 and WIDE2-n"));
+        Serial.println(F("  NOTE: digi stamps YOUR callsign in the relayed path (e.g. W1AW*)."));
+        Serial.println(F("        It does NOT use beaconPath. Any role can also digipeat."));
         Serial.println(F("\n-- other --"));
-        Serial.println(F("  digipeater on|off          (boot default; menu still toggles runtime)"));
         Serial.println(F("  winlink password <text>"));
         Serial.println(F("  wifi on|off                password <text>"));
         Serial.println(F("  wifi window on|off         (30s AP at boot; off by default)"));
-        Serial.println(F("  path <text>                email <addr>         simplified on|off"));
+        Serial.println(F("  beaconpath <text>          own TX path (e.g. WIDE1-1)"));
+        Serial.println(F("  NOTE: beaconPath is for YOUR OWN beacon packets only."));
+        Serial.println(F("        email <addr>         simplified on|off"));
         Serial.println(F("  disablegps on|off          sendalt on|off"));
         Serial.println(F("  nonsmartrate <sec>         rememberstation <sec>"));
         Serial.println(F("  standingupdate <sec>       commentafter <n>"));
@@ -341,9 +348,10 @@ namespace SERIAL_Setup {
             kv("standingUpdateTime ", Config.standingUpdateTime);
             kv("sendAltitude       ", Config.sendAltitude);
             kv("disableGPS         ", Config.disableGPS);
-            kv("digipeating(boot)  ", Config.digipeating);
-            kv("digipeaterActive   ", digipeaterActive);
-            kv("path               ", Config.path);
+            kv("digiMode           ", Config.digiMode == DIGI_OFF ? "off" :
+                                       Config.digiMode == DIGI_WIDE1 ? "wide1" : "wide1+wide2");
+            kv("digiActive(runtime)", digipeaterActive ? "yes" : "no");
+            kv("beaconPath         ", Config.beaconPath);  // own TX path only; digi relaying inserts callsign, not this path
             kv("email              ", Config.email);
         }
     }
@@ -956,13 +964,20 @@ namespace SERIAL_Setup {
         else if (cmd == "ptt")                      cmdPtt(tk, n);
         else if (cmd == "winlink")                  cmdWinlink(tk, n, line);
         else if (cmd == "wifi")                     cmdWifi(tk, n, line);
-        else if (cmd == "digipeater") {
-            if (n < 2) { err("digipeater on|off"); return; }
-            if (applyBool(tk[1], Config.digipeating, "digipeating (boot default)")) {
-                digipeaterActive = Config.digipeating;
-            }
+        else if (cmd == "digi") {
+            // digi <off|wide1|wide1+wide2>
+            // off        = no digipeating
+            // wide1      = fill-in: respond to WIDE1-1 only (inserts callsign, e.g. W1AW*)
+            // wide1+wide2 = infrastructure: respond to WIDE1-1 and WIDE2-n
+            // Works alongside any device role (tracker, iGate, or dedicated digi).
+            if (n < 2) { err("digi <off|wide1|wide1+wide2>"); return; }
+            String m = tk[1]; m.toLowerCase();
+            if      (m == "off")          { Config.digiMode = DIGI_OFF;         digipeaterActive = false; ok("digiMode = off"); }
+            else if (m == "wide1")        { Config.digiMode = DIGI_WIDE1;       digipeaterActive = true;  ok("digiMode = wide1 (WIDE1-1 fill-in)"); }
+            else if (m == "wide1+wide2")  { Config.digiMode = DIGI_WIDE1_WIDE2; digipeaterActive = true;  ok("digiMode = wide1+wide2 (infrastructure)"); }
+            else { err("digi: off, wide1, or wide1+wide2"); }
         }
-        else if (cmd == "path")                     { Config.path = restOfLine(line, 1); ok("path = " + Config.path); }
+        else if (cmd == "beaconpath")               { Config.beaconPath = restOfLine(line, 1); ok("beaconPath = " + Config.beaconPath + "  (own TX path only)"); }
         else if (cmd == "email")                    { Config.email = restOfLine(line, 1); ok("email = " + Config.email); }
         else if (cmd == "simplified")               { if (n >= 2) applyBool(tk[1], Config.simplifiedTrackerMode, "simplified"); else err("simplified on|off"); }
         else if (cmd == "disablegps")               { if (n >= 2) applyBool(tk[1], Config.disableGPS, "disableGPS"); else err("disablegps on|off"); }

@@ -56,14 +56,14 @@
 	"other": {
 		"simplifiedTrackerMode": false,
 		"sendCommentAfterXBeacons": 4,
-		"path": "WIDE2-2",
+		"beaconPath": "WIDE1-1",
 		"nonSmartBeaconRate": 15,
 		"rememberStationTime": 30,
 		"standingUpdateTime": 15,
 		"sendAltitude": true,
 		"disableGPS": false,
 		"email": "",
-		"digipeating": false
+		"digiMode": 0
 	},
 	"winlink": {
 		"password": "ABCDEF"

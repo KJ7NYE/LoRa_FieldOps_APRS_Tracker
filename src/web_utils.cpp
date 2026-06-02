@@ -172,7 +172,7 @@ namespace WEB_Utils {
         }
 
         //  Station Config
-        Config.path                             = getParamStringSafe("path", Config.path);
+        Config.beaconPath                       = getParamStringSafe("beaconPath", getParamStringSafe("path", Config.beaconPath)); // accept old "path" param too
         Config.sendCommentAfterXBeacons         = getParamIntSafe("sendCommentAfterXBeacons", Config.sendCommentAfterXBeacons);
         Config.nonSmartBeaconRate               = getParamIntSafe("nonSmartBeaconRate", Config.nonSmartBeaconRate);
         Config.standingUpdateTime               = getParamIntSafe("standingUpdateTime", Config.standingUpdateTime);
@@ -229,9 +229,10 @@ namespace WEB_Utils {
         Config.wifiAP.password                  = getParamStringSafe("wifiAP.password", Config.wifiAP.password);
         Config.wifiAP.active                    = false; // when Configuration is finished Tracker returns to normal mode.
 
-        //  Device Role & GPS Source
+        //  Device Role, Digi Mode & GPS Source
         Config.deviceRole   = (DeviceRole) getParamIntSafe("deviceRole",  (int)Config.deviceRole);
         Config.gpsSource    = (GPSSource)  getParamIntSafe("gpsSource",   (int)Config.gpsSource);
+        Config.digiMode     = (DigiMode)   getParamIntSafe("digiMode",    (int)Config.digiMode);
 
         //  Fixed Position (used when GPS source = Fixed or as iGate beacon position)
         Config.fixedPosition.latitude   = getParamDoubleSafe("fixedPosition.latitude",  Config.fixedPosition.latitude);

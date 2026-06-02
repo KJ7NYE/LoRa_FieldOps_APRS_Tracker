@@ -267,7 +267,7 @@ namespace MSG_Utils {
     }
 
     void sendMessage(const String& station, const String& textMessage) {
-        String newPacket = APRSPacketLib::generateMessagePacket(currentBeacon->callsign, "APLRT1", Config.path, station, textMessage);
+        String newPacket = APRSPacketLib::generateMessagePacket(currentBeacon->callsign, "APLRT1", Config.beaconPath, station, textMessage);
         if (textMessage.indexOf("ack") == 0 && station != "WLNK-1") {  // don't show Winlink ACK
             displayShow("<<ACK Tx>>", "", "", 500);
         } else if (station.indexOf("CA2RXU-15") == 0 && textMessage.indexOf("wrl") == 0) {
@@ -430,7 +430,7 @@ namespace MSG_Utils {
                 if (check15SegBuffer(lastReceivedPacket.sender, lastReceivedPacket.payload)) {
 
                     if (digipeaterActive && lastReceivedPacket.addressee != currentBeacon->callsign) {
-                        String digipeatedPacket = APRSPacketLib::generateDigipeatedPacket(packet.text, currentBeacon->callsign, Config.path);
+                        String digipeatedPacket = APRSPacketLib::generateDigipeatedPacket(packet.text, currentBeacon->callsign, Config.beaconPath);
                         if (digipeatedPacket == "X") {
                             logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Main", "%s", "Packet won't be Repeated (Missing WIDEn-N)");
                         } else {

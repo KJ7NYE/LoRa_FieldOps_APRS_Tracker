@@ -212,7 +212,7 @@ namespace STATION_Utils {
 
         if (sendStartTelemetry && ((Config.battery.sendVoltage && Config.battery.voltageAsTelemetry) || (Config.telemetry.sendTelemetry && wxModuleFound)) && lastTxTime > 0) TELEMETRY_Utils::sendEquationsUnitsParameters();
 
-        String path = Config.path;
+        String path = Config.beaconPath;
         // Guard against accidental plane/high-alt path suppression on non-GPS sources
         if (hasLiveGPS && (gps.speed.kmph() > 200 || gps.altitude.meters() > 9000)) path = "";
 

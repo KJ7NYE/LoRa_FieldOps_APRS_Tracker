@@ -127,6 +127,14 @@
                                             <option value="3">External (BLE)</option>
                                         </select>
                                     </div>
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label" title="Works alongside any role. Digi stamps your callsign (e.g. W1AW*) into relayed paths — it does not use Beacon TX Path.">Digipeat Mode &#9432;</label>
+                                        <select name="digiMode" id="digiMode" class="form-select form-select-sm">
+                                            <option value="0">Off</option>
+                                            <option value="1">WIDE1 only (fill-in)</option>
+                                            <option value="2">WIDE1 + WIDE2 (infrastructure)</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <div class="row mb-3 border rounded p-2 g-2">
                                     <div class="col-12 mb-1"><strong>Fixed Position</strong> <small class="text-muted">(iGate/Digi self-beacon; Tracker when GPS source = Fixed)</small></div>
@@ -210,17 +218,18 @@
                                 <div class="row">
                                     <div class="col-6">
                                         <label
-                                            for="path"
+                                            for="beaconPath"
                                             class="form-label"
-                                            >Path</label
+                                            title="APRS path for YOUR OWN beacon packets (e.g. WIDE1-1). NOT the path the digipeater uses when relaying — the digi always stamps your callsign."
+                                            >Beacon TX Path &#9432;</label
                                         >
                                         <div class="input-group">
                                             <input
                                                 type="text"
-                                                name="path"
-                                                id="path"
+                                                name="beaconPath"
+                                                id="beaconPath"
                                                 class="form-control"
-                                                value="WIDE1-1"                                                
+                                                value="WIDE1-1"
                                             />
                                         </div>
                                     </div>
