@@ -167,7 +167,7 @@ namespace SERIAL_Setup {
         Serial.println(F("  tcpkiss on|off              port <n>               (TCP server, default 8001)"));
         Serial.println(F("  tcpkiss serial on|off       (KISS on USB serial; disables CLI echo while active)"));
         Serial.println(F("\n-- other --"));
-        Serial.println(F("  digipeater on|off          (boot default; menu still toggles runtime)"));
+        Serial.println(F("  digi <off|wide1|wide1+wide2>  (works with any role)"));
         Serial.println(F("  winlink password <text>"));
         Serial.println(F("  wifi on|off                password <text>"));
         Serial.println(F("  wifi window on|off         (30s AP at boot; off by default)"));
@@ -331,9 +331,10 @@ namespace SERIAL_Setup {
             kv("standingUpdateTime ", Config.standingUpdateTime);
             kv("sendAltitude       ", Config.sendAltitude);
             kv("disableGPS         ", Config.disableGPS);
-            kv("digipeating(boot)  ", Config.digipeating);
-            kv("digipeaterActive   ", digipeaterActive);
-            kv("path               ", Config.path);
+            kv("digiMode           ", Config.digiMode == DIGI_OFF ? "off" :
+                                       Config.digiMode == DIGI_WIDE1 ? "wide1" : "wide1+wide2");
+            kv("digiActive(runtime)", digipeaterActive ? "yes" : "no");
+            kv("beaconPath         ", Config.beaconPath);
             kv("email              ", Config.email);
         }
     }
@@ -916,13 +917,15 @@ namespace SERIAL_Setup {
         else if (cmd == "ptt")                      cmdPtt(tk, n);
         else if (cmd == "winlink")                  cmdWinlink(tk, n, line);
         else if (cmd == "wifi")                     cmdWifi(tk, n, line);
-        else if (cmd == "digipeater") {
-            if (n < 2) { err("digipeater on|off"); return; }
-            if (applyBool(tk[1], Config.digipeating, "digipeating (boot default)")) {
-                digipeaterActive = Config.digipeating;
-            }
+        else if (cmd == "digi") {
+            if (n < 2) { err("digi <off|wide1|wide1+wide2>"); return; }
+            String m = tk[1]; m.toLowerCase();
+            if      (m == "off")          { Config.digiMode = DIGI_OFF;         digipeaterActive = false; ok("digiMode = off"); }
+            else if (m == "wide1")        { Config.digiMode = DIGI_WIDE1;       digipeaterActive = true;  ok("digiMode = wide1 (WIDE1-1 fill-in)"); }
+            else if (m == "wide1+wide2")  { Config.digiMode = DIGI_WIDE1_WIDE2; digipeaterActive = true;  ok("digiMode = wide1+wide2 (infrastructure)"); }
+            else { err("digi: off, wide1, or wide1+wide2"); }
         }
-        else if (cmd == "path")                     { Config.path = restOfLine(line, 1); ok("path = " + Config.path); }
+        else if (cmd == "beaconpath")               { Config.beaconPath = restOfLine(line, 1); ok("beaconPath = " + Config.beaconPath); }
         else if (cmd == "email")                    { Config.email = restOfLine(line, 1); ok("email = " + Config.email); }
         else if (cmd == "simplified")               { if (n >= 2) applyBool(tk[1], Config.simplifiedTrackerMode, "simplified"); else err("simplified on|off"); }
         else if (cmd == "disablegps")               { if (n >= 2) applyBool(tk[1], Config.disableGPS, "disableGPS"); else err("disablegps on|off"); }

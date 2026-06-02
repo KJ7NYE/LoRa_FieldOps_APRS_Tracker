@@ -169,7 +169,7 @@ namespace STATION_Utils {
         float  altMeters   = hasLiveGPS ? gps.altitude.meters(): beaconElev;
 
         Beacon& b   = Config.beacons[0];
-        String  path = Config.path;
+        String  path = Config.beaconPath;
         // No path for high-alt / high-speed sources.
         if (hasLiveGPS && (gps.speed.kmph() > 200 || gps.altitude.meters() > 9000)) path = "";
 

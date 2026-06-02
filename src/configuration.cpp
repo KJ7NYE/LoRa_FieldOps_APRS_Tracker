@@ -136,14 +136,14 @@ bool Configuration::writeFile() {
 
         data["other"]["simplifiedTrackerMode"]      = simplifiedTrackerMode;
         data["other"]["sendCommentAfterXBeacons"]   = sendCommentAfterXBeacons;
-        data["other"]["path"]                       = path;
+        data["other"]["beaconPath"]                 = beaconPath;
         data["other"]["nonSmartBeaconRate"]         = nonSmartBeaconRate;
         data["other"]["rememberStationTime"]        = rememberStationTime;
         data["other"]["standingUpdateTime"]         = standingUpdateTime;
         data["other"]["sendAltitude"]               = sendAltitude;
         data["other"]["disableGPS"]                 = disableGPS;
         data["other"]["email"]                      = email;
-        data["other"]["digipeating"]                = digipeating;
+        data["other"]["digiMode"]                   = (int)digiMode;
 
         data["customSmartBeacon"]["slowRate"]       = customSmartBeacon.slowRate;
         data["customSmartBeacon"]["slowSpeed"]      = customSmartBeacon.slowSpeed;
@@ -362,24 +362,33 @@ bool Configuration::readFile() {
 
         if (data["other"]["simplifiedTrackerMode"].isNull() ||
             data["other"]["sendCommentAfterXBeacons"].isNull() ||
-            data["other"]["path"].isNull() ||
             data["other"]["nonSmartBeaconRate"].isNull() ||
             data["other"]["rememberStationTime"].isNull() ||
             data["other"]["standingUpdateTime"].isNull() ||
             data["other"]["sendAltitude"].isNull() ||
             data["other"]["disableGPS"].isNull() ||
-            data["other"]["email"].isNull() ||
-            data["other"]["digipeating"].isNull()) needsRewrite = true;
+            data["other"]["email"].isNull()) needsRewrite = true;
         simplifiedTrackerMode           = data["other"]["simplifiedTrackerMode"] | false;
         sendCommentAfterXBeacons        = data["other"]["sendCommentAfterXBeacons"] | 10;
-        path                            = data["other"]["path"] | "WIDE1-1";
+        // Backward compat: accept old "path" key; new key is "beaconPath"
+        if      (!data["other"]["beaconPath"].isNull()) beaconPath = data["other"]["beaconPath"].as<String>();
+        else if (!data["other"]["path"].isNull())       beaconPath = data["other"]["path"].as<String>();
+        else                                          { beaconPath = "WIDE1-1"; needsRewrite = true; }
         nonSmartBeaconRate              = data["other"]["nonSmartBeaconRate"] | 15;
         rememberStationTime             = data["other"]["rememberStationTime"] | 30;
         standingUpdateTime              = data["other"]["standingUpdateTime"] | 15;
         sendAltitude                    = data["other"]["sendAltitude"] | true;
         disableGPS                      = data["other"]["disableGPS"] | false;
         email                           = data["other"]["email"] | "";
-        digipeating                     = data["other"]["digipeating"] | false;
+        // Backward compat: accept old bool "digipeating"; new field is "digiMode" (int)
+        if (!data["other"]["digiMode"].isNull()) {
+            digiMode = (DigiMode)(data["other"]["digiMode"] | 0);
+        } else if (!data["other"]["digipeating"].isNull()) {
+            digiMode = (data["other"]["digipeating"] | false) ? DIGI_WIDE1 : DIGI_OFF;
+            needsRewrite = true;
+        } else {
+            digiMode = DIGI_OFF; needsRewrite = true;
+        }
 
         if (data["customSmartBeacon"]["slowRate"].isNull() ||
             data["customSmartBeacon"]["slowSpeed"].isNull() ||
@@ -557,14 +566,14 @@ void Configuration::setDefaultValues() {
 
     simplifiedTrackerMode           = false;
     sendCommentAfterXBeacons        = 10;
-    path                            = "WIDE1-1";
+    beaconPath                      = "WIDE1-1";
     nonSmartBeaconRate              = 15;
     rememberStationTime             = 30;
     standingUpdateTime              = 15;
     sendAltitude                    = true;
     disableGPS                      = false;
     email                           = "";
-    digipeating                     = false;
+    digiMode                        = DIGI_OFF;
 
     customSmartBeacon               = { 120, 5, 60, 40, 100, 12, 12, 60 };
     SMARTBEACON_Utils::setCustomValues(customSmartBeacon);

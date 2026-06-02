@@ -826,12 +826,19 @@ function renderConfig() {
   mkSection(cont, 'role', '🌐 Device Role & Network', body => {
     body.appendChild(mkGroupTitle('Role & GPS Source'));
     body.appendChild(mkSelect('Device role', roleObj.deviceRole,
-      [{ v:0, l:'0 — Tracker' }, { v:1, l:'1 — iGate' }, { v:2, l:'2 — Digipeater' }],
+      [{ v:0, l:'0 — Tracker' }, { v:1, l:'1 — iGate' }, { v:2, l:'2 — Digipeater (dedicated)' }],
       v => sendCmd(`role set ${['tracker','igate','digipeater'][+v] || 'tracker'}`)));
     body.appendChild(mkSelect('GPS source', roleObj.gpsSource,
       [{ v:0, l:'0 — Internal GPS' }, { v:1, l:'1 — Fixed Position' },
        { v:2, l:'2 — External Serial' }, { v:3, l:'3 — External BLE' }],
       v => sendCmd(`role gps ${['internal','fixed','externserial','externble'][+v] || 'internal'}`)));
+
+    body.appendChild(mkGroupTitle('Digipeat Mode  (independent of role — any role can also digipeat)'));
+    body.appendChild(mkSelect('Digi mode', config.digiMode ?? 0,
+      [{ v:0, l:'Off — no digipeating' },
+       { v:1, l:'WIDE1 only — fill-in (responds to WIDE1-1, stamps callsign)' },
+       { v:2, l:'WIDE1+WIDE2 — infrastructure (WIDE1-1 and WIDE2-n)' }],
+      v => sendCmd(`digi ${['off','wide1','wide1+wide2'][+v] || 'off'}`)));
 
     body.appendChild(mkGroupTitle('Fixed Position'));
     body.appendChild(mkNumber('Latitude (decimal °)',  fp.latitude,   v => sendCmd(`fixed latitude ${v}`),  { step: '0.000001' }));
@@ -869,7 +876,6 @@ function renderConfig() {
   // ── Other ────────────────────────────────
   mkSection(cont, 'other', '⚙️ Other', body => {
     body.appendChild(mkGroupTitle('Modes'));
-    body.appendChild(mkBool('Digipeater at boot',      other.digipeating,          v => sendCmd(`digipeater ${boolStr(v)}`)));
     body.appendChild(mkBool('Simplified mode',         other.simplifiedTrackerMode,v => sendCmd(`simplified ${boolStr(v)}`)));
     body.appendChild(mkBool('Disable GPS (TNC-only)',  other.disableGPS,           v => sendCmd(`disablegps ${boolStr(v)}`)));
     body.appendChild(mkBool('Include altitude',        other.sendAltitude,         v => sendCmd(`sendalt ${boolStr(v)}`)));

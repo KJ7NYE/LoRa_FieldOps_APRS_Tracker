@@ -29,23 +29,20 @@ namespace DIGI_Utils {
         return path;
     }
 
-    // Return the effective digi mode: 2 = WIDE1-only, 3 = WIDE1+WIDE2
-    static int digiMode() {
-        return (Config.deviceRole == ROLE_DIGIPEATER) ? 3 : 2;
-    }
+    static DigiMode digiMode() { return Config.digiMode; }
 
     static String buildPacket(const String& path, const String& packet) {
         const String& myCall = Config.beacons[0].callsign;
         int commaIdx = packet.indexOf(",");
         int colonIdx = packet.indexOf(":");
 
-        int mode = digiMode();
+        DigiMode mode = digiMode();
         String tempPath = path;
 
-        if (tempPath.indexOf("WIDE1-1") != -1 && (mode == 2 || mode == 3)) {
+        if (tempPath.indexOf("WIDE1-1") != -1 && mode >= DIGI_WIDE1) {
             if (tempPath.indexOf("*") != -1) return "";    // already digipeated
             tempPath.replace("WIDE1-1", myCall + "*");
-        } else if (tempPath.indexOf("WIDE2-") != -1 && mode == 3) {
+        } else if (tempPath.indexOf("WIDE2-") != -1 && mode == DIGI_WIDE1_WIDE2) {
             tempPath = cleanPathAsterisks(path);
             if (tempPath.indexOf("WIDE2-1") != -1) {
                 tempPath.replace("WIDE2-1", myCall + "*");
@@ -76,18 +73,19 @@ namespace DIGI_Utils {
         if (commaIdx < 0) return "";   // no path segment
 
         String path = destAndPath.substring(commaIdx + 1);
-        int mode = digiMode();
+        DigiMode mode = digiMode();
 
         bool hasWide1 = path.indexOf("WIDE1-1") != -1;
         bool hasWide2 = path.indexOf("WIDE2-") != -1;
 
-        if (mode == 2 && !hasWide1) return "";
-        if (mode == 3 && !hasWide1 && !hasWide2) return "";
+        if (mode == DIGI_WIDE1       && !hasWide1)             return "";
+        if (mode == DIGI_WIDE1_WIDE2 && !hasWide1 && !hasWide2) return "";
 
         return buildPacket(path, packet);
     }
 
     void processLoRaPacket(const String& packet) {
+        if (Config.digiMode == DIGI_OFF) return;
         if (packet.indexOf("NOGATE") >= 0) return;
         if (packet.length() < 10) return;
 

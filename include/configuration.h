@@ -27,9 +27,17 @@
 #include "smartbeacon_utils.h"
 
 enum DeviceRole {
-    ROLE_TRACKER = 0,
-    ROLE_IGATE = 1,
+    ROLE_TRACKER    = 0,
+    ROLE_IGATE      = 1,
     ROLE_DIGIPEATER = 2
+};
+
+// Digipeat mode — independent of DeviceRole.
+// Any role (Tracker, iGate, Digipeater) can have digipeating enabled.
+enum DigiMode {
+    DIGI_OFF         = 0,  // No digipeating
+    DIGI_WIDE1       = 1,  // Fill-in: respond to WIDE1-1 only
+    DIGI_WIDE1_WIDE2 = 2   // Infrastructure: respond to WIDE1-1 and WIDE2-n
 };
 
 enum GPSSource {
@@ -186,17 +194,17 @@ public:
 
     DeviceRole              deviceRole;
     GPSSource               gpsSource;
+    DigiMode                digiMode;       // replaces bool digipeating
     bool    simplifiedTrackerMode;
 
     int     sendCommentAfterXBeacons;
-    String  path;
+    String  beaconPath;     // APRS path for OWN TX (e.g. WIDE1-1). Not used by the digi relay.
     String  email;
     int     nonSmartBeaconRate;
     int     rememberStationTime;
     int     standingUpdateTime;
     bool    sendAltitude;
     bool    disableGPS;
-    bool    digipeating;
 
     void setDefaultValues();
     bool writeFile();

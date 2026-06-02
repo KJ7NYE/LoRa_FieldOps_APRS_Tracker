@@ -105,9 +105,12 @@ void setup() {
     #endif
 
     // Set currentBeacon and currentLoRaType pointers after Config is loaded.
-    currentBeacon   = &Config.beacons[0];
-    currentLoRaType = &Config.loraTypes[0];
-    miceActive      = APRSPacketLib::validateMicE(currentBeacon->micE);
+    currentBeacon    = &Config.beacons[0];
+    currentLoRaType  = &Config.loraTypes[0];
+    miceActive       = APRSPacketLib::validateMicE(currentBeacon->micE);
+    digipeaterActive = (Config.digiMode != DIGI_OFF);
+    bluetoothActive  = Config.bluetooth.active;
+    displayEcoMode   = Config.display.ecoMode;
 
     POWER_Utils::setup();
     displaySetup();
