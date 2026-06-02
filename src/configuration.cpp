@@ -66,21 +66,19 @@ bool Configuration::writeFile() {
         data["wifiAP"]["bootWindow"]                = wifiAP.bootWindow;
         data["wifiAP"]["password"]                  = wifiAP.password;
 
-        for (int i = 0; i < beacons.size(); i++) {
-            beacons[i].callsign.trim();
-            beacons[i].callsign.toUpperCase();
-            data["beacons"][i]["callsign"]              = beacons[i].callsign;
-            data["beacons"][i]["symbol"]                = beacons[i].symbol;
-            data["beacons"][i]["overlay"]               = beacons[i].overlay;
-            data["beacons"][i]["micE"]                  = beacons[i].micE;
-            data["beacons"][i]["comment"]               = beacons[i].comment;
-            data["beacons"][i]["smartBeaconActive"]     = beacons[i].smartBeaconActive;
-            data["beacons"][i]["smartBeaconSetting"]    = beacons[i].smartBeaconSetting;
-            data["beacons"][i]["gpsEcoMode"]            = beacons[i].gpsEcoMode;
-            data["beacons"][i]["profileLabel"]          = beacons[i].profileLabel;
-            data["beacons"][i]["status"]                = beacons[i].status;
-            data["beacons"][i]["tacticalCallsign"]      = beacons[i].tacticalCallsign;
-        }
+        beacons[0].callsign.trim();
+        beacons[0].callsign.toUpperCase();
+        data["beacons"][0]["callsign"]           = beacons[0].callsign;
+        data["beacons"][0]["symbol"]             = beacons[0].symbol;
+        data["beacons"][0]["overlay"]            = beacons[0].overlay;
+        data["beacons"][0]["micE"]               = beacons[0].micE;
+        data["beacons"][0]["comment"]            = beacons[0].comment;
+        data["beacons"][0]["smartBeaconActive"]  = beacons[0].smartBeaconActive;
+        data["beacons"][0]["smartBeaconSetting"] = beacons[0].smartBeaconSetting;
+        data["beacons"][0]["gpsEcoMode"]         = beacons[0].gpsEcoMode;
+        data["beacons"][0]["profileLabel"]       = beacons[0].profileLabel;
+        data["beacons"][0]["status"]             = beacons[0].status;
+        data["beacons"][0]["tacticalCallsign"]   = beacons[0].tacticalCallsign;
 
         data["display"]["ecoMode"]                  = display.ecoMode;
         data["display"]["timeout"]                  = display.timeout;
@@ -96,13 +94,11 @@ bool Configuration::writeFile() {
         #endif
         data["bluetooth"]["useKISS"]                = bluetooth.useKISS;
 
-        for (int i = 0; i < loraTypes.size(); i++) {
-            data["lora"][i]["frequency"]                = loraTypes[i].frequency;
-            data["lora"][i]["spreadingFactor"]          = loraTypes[i].spreadingFactor;
-            data["lora"][i]["signalBandwidth"]          = loraTypes[i].signalBandwidth;
-            data["lora"][i]["codingRate4"]              = loraTypes[i].codingRate4;
-            data["lora"][i]["power"]                    = loraTypes[i].power;
-        }
+        data["lora"][0]["frequency"]       = loraTypes[0].frequency;
+        data["lora"][0]["spreadingFactor"] = loraTypes[0].spreadingFactor;
+        data["lora"][0]["signalBandwidth"] = loraTypes[0].signalBandwidth;
+        data["lora"][0]["codingRate4"]     = loraTypes[0].codingRate4;
+        data["lora"][0]["power"]           = loraTypes[0].power;
 
         data["battery"]["sendVoltage"]              = battery.sendVoltage;
         data["battery"]["voltageAsTelemetry"]       = battery.voltageAsTelemetry;
@@ -176,6 +172,7 @@ bool Configuration::writeFile() {
 
         data["tcpKISS"]["enabled"]                  = tcpKISS.enabled;
         data["tcpKISS"]["port"]                     = tcpKISS.port;
+        data["tcpKISS"]["serialEnabled"]            = tcpKISS.serialEnabled;
 
         serializeJson(data, configFile);
         configFile.close();
@@ -293,6 +290,12 @@ bool Configuration::readFile() {
             loraType.power              = LoraTypesArray[j]["power"] | 20;
             loraTypes.push_back(loraType);
         }
+
+        // Enforce single-profile: only ever use index 0
+        if (beacons.size() > 1) beacons.resize(1);
+        if (beacons.empty())    { Beacon b; b.callsign="NOCALL-7"; b.symbol=">"; b.overlay="/"; b.smartBeaconActive=true; b.smartBeaconSetting=2; beacons.push_back(b); needsRewrite=true; }
+        if (loraTypes.size() > 1) loraTypes.resize(1);
+        if (loraTypes.empty())    { LoraType l; l.frequency=433775000; l.spreadingFactor=12; l.signalBandwidth=125000; l.codingRate4=5; l.power=20; loraTypes.push_back(l); needsRewrite=true; }
 
         if (data["battery"]["sendVoltage"].isNull() ||
             data["battery"]["voltageAsTelemetry"].isNull() ||
@@ -425,9 +428,11 @@ bool Configuration::readFile() {
         aprsIS.filter                   = data["aprsIS"]["filter"] | "r/0/0/0";
 
         if (data["tcpKISS"]["enabled"].isNull() ||
-            data["tcpKISS"]["port"].isNull()) needsRewrite = true;
+            data["tcpKISS"]["port"].isNull() ||
+            data["tcpKISS"]["serialEnabled"].isNull()) needsRewrite = true;
         tcpKISS.enabled                 = data["tcpKISS"]["enabled"] | false;
         tcpKISS.port                    = data["tcpKISS"]["port"] | 8001;
+        tcpKISS.serialEnabled           = data["tcpKISS"]["serialEnabled"] | false;
 
         configFile.close();
 
@@ -454,21 +459,21 @@ void Configuration::setDefaultValues() {
     wifiAP.bootWindow               = false;
     wifiAP.password                 = "1234567890";
 
-    for (int i = 0; i < 3; i++) {
-        Beacon beacon;
-        beacon.callsign             = "NOCALL-7";
-        beacon.symbol               = "[";
-        beacon.overlay              = "/";
-        beacon.micE                 = "";
-        beacon.comment              = "";
-        beacon.smartBeaconActive    = true;
-        beacon.smartBeaconSetting   = 0;
-        beacon.gpsEcoMode           = false;
-        beacon.profileLabel         = "";
-        beacon.status               = "";
-        beacon.tacticalCallsign     = "";
-        beacons.push_back(beacon);
-    }
+    // ONE beacon
+    Beacon beacon;
+    beacon.callsign             = "NOCALL-7";
+    beacon.symbol               = ">";
+    beacon.overlay              = "/";
+    beacon.micE                 = "";
+    beacon.comment              = "";
+    beacon.smartBeaconActive    = true;
+    beacon.smartBeaconSetting   = 2;
+    beacon.gpsEcoMode           = false;
+    beacon.profileLabel         = "";
+    beacon.status               = "";
+    beacon.tacticalCallsign     = "";
+    beacons.clear();
+    beacons.push_back(beacon);
 
     display.ecoMode                 = false;
     display.timeout                 = 4;
@@ -485,34 +490,15 @@ void Configuration::setDefaultValues() {
         bluetooth.useKISS           = true;
     #endif
 
-    for (int j = 0; j < 4; j++) {
-        LoraType loraType;
-        switch (j) {
-            case 0:
-                loraType.frequency           = 433775000;
-                loraType.spreadingFactor     = 12;
-                loraType.codingRate4         = 5;
-                break;
-            case 1:
-                loraType.frequency           = 434855000;
-                loraType.spreadingFactor     = 9;
-                loraType.codingRate4         = 7;
-                break;
-            case 2:
-                loraType.frequency           = 439912500;
-                loraType.spreadingFactor     = 12;
-                loraType.codingRate4         = 5;
-                break;
-            case 3:
-                loraType.frequency           = 915000000;
-                loraType.spreadingFactor     = 12;
-                loraType.codingRate4         = 5;
-                break;
-        }
-        loraType.signalBandwidth    = 125000;
-        loraType.power              = 20;
-        loraTypes.push_back(loraType);
-    }
+    // ONE LoRa type (433 MHz APRS EU default)
+    LoraType loraType;
+    loraType.frequency          = 433775000;
+    loraType.spreadingFactor    = 12;
+    loraType.signalBandwidth    = 125000;
+    loraType.codingRate4        = 5;
+    loraType.power              = 20;
+    loraTypes.clear();
+    loraTypes.push_back(loraType);
 
     battery.sendVoltage             = false;
     battery.voltageAsTelemetry      = false;
@@ -601,6 +587,7 @@ void Configuration::setDefaultValues() {
 
     tcpKISS.enabled                 = false;
     tcpKISS.port                    = 8001;
+    tcpKISS.serialEnabled           = false;
 
     Serial.println("New Data Created... All is Written!");
 }

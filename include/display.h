@@ -1,38 +1,29 @@
-/* Copyright (C) 2025 Ricardo Guzman - CA2RXU
- *
- * This file is part of LoRa APRS Tracker.
- *
- * LoRa APRS Tracker is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * LoRa APRS Tracker is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with LoRa APRS Tracker. If not, see <https://www.gnu.org/licenses/>.
- */
-
+#pragma once
 #ifndef DISPLAY_H_
 #define DISPLAY_H_
 
 #include <Arduino.h>
 
+// Minimal status display — shows boot progress, then role/GPS/network status.
+// No menu system, no keyboard nav, no profile selection.
 
 void displaySetup();
-void displayToggle(bool toggle);
+void bootStatus(const char* msg);
+void startupScreen(const String& versionDate);
 
-void displayShow(const String& header, const String& line1, const String& line2, int wait = 0);
-void displayShow(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, const String& line5, int wait = 0);
+// Update the status lines shown during normal operation.
+// Call each second or when state changes.
+void displayStatus(
+    const String& line1,   // role + callsign, e.g. "iGate  KJ7NYE"
+    const String& line2,   // WiFi/APRS-IS state or GPS state
+    const String& line3,   // last heard callsign or "No fix"
+    const String& line4    // uptime or packet count
+);
 
-void startupScreen(uint8_t index, const String& version);
+// Flash "TX" briefly when a LoRa packet is transmitted.
+void displayTxFlash();
 
-// Replaces the "Booting..." line on the startup banner with the named step,
-// and mirrors it to Serial with a millis() timestamp. Lets the user see boot
-// progress (and exactly where it hangs, if it does) on both display and USB.
-void bootStatus(const char* step);
+// Turn display on/off (eco mode timeout).
+void displayToggle(bool on);
 
 #endif

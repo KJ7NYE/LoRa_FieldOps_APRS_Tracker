@@ -17,7 +17,7 @@
  */
 
 #include <SPI.h>
-#include "notification_utils.h"
+
 #include "configuration.h"
 #include "battery_utils.h"
 #include "board_pinout.h"
@@ -230,7 +230,7 @@ namespace POWER_Utils {
         if (Config.notification.buzzerActive && Config.notification.buzzerPinTone >= 0 && Config.notification.buzzerPinVcc >= 0) {
             pinMode(Config.notification.buzzerPinTone, OUTPUT);
             pinMode(Config.notification.buzzerPinVcc, OUTPUT);
-            if (Config.notification.bootUpBeep) NOTIFICATION_Utils::start();
+            // bootUpBeep removed (notification_utils not in this build)
         } else if (Config.notification.buzzerActive && (Config.notification.buzzerPinTone < 0 || Config.notification.buzzerPinVcc < 0)) {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "PINOUT", "Buzzer Pins not defined");
             while (1);
@@ -463,7 +463,7 @@ namespace POWER_Utils {
         delay(3000);
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Main", "SHUTDOWN !!!");
         #if defined(HAS_AXP192) || defined(HAS_AXP2101)
-            if (Config.notification.shutDownBeep) NOTIFICATION_Utils::shutDownBeep();
+            // shutDownBeep removed (notification_utils not in this build)
             displayToggle(false);
             PMU.shutdown();
         #else

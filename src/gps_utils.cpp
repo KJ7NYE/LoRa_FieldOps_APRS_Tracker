@@ -64,7 +64,7 @@ double      currentHeading  = 0;
 double      previousHeading = 0;
 float       bearing         = 0;
 
-bool        gpsIsActive     = true;
+bool        gpsIsActive     = false;  // set to true in setup() only when GPS hardware is started
 
 TinyGPSPlus externalGPS;  // For external GPS sources (serial or BLE)
 uint32_t    lastExternalGPSUpdate = 0;
@@ -167,10 +167,26 @@ namespace GPS_Utils {
     }
 
     void setup() {
-        if (disableGPS) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Main", "GPS disabled");
+        // Fixed position: no hardware to start; position comes from config.
+        if (Config.gpsSource == GPS_FIXED) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "GPS", "Fixed position mode — GPS hardware not started");
+            gpsIsActive = false;
             return;
         }
+
+        // Board has no GPS connector or pin assignment.
+        #ifdef HAS_NO_GPS
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "GPS", "No GPS hardware on this board");
+            gpsIsActive = false;
+            return;
+        #endif
+
+        if (disableGPS) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "GPS", "GPS disabled by config");
+            gpsIsActive = false;
+            return;
+        }
+
         #ifdef LIGHTTRACKER_PLUS_1_0
             pinMode(GPS_VCC, OUTPUT);
             digitalWrite(GPS_VCC, LOW);
@@ -189,13 +205,14 @@ namespace GPS_Utils {
         #else
             gpsSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_TX, GPS_RX);
         #endif
+
+        gpsIsActive = true;
     }
 
     void calculateDistanceCourse(const String& callsign, double checkpointLatitude, double checkPointLongitude) {
         double distanceKm = TinyGPSPlus::distanceBetween(gps.location.lat(), gps.location.lng(), checkpointLatitude, checkPointLongitude) / 1000.0;
         double courseTo   = TinyGPSPlus::courseTo(gps.location.lat(), gps.location.lng(), checkpointLatitude, checkPointLongitude);
-        STATION_Utils::deleteListenedStationsByTime();
-        STATION_Utils::orderListenedStationsByDistance(callsign, distanceKm, courseTo);
+        STATION_Utils::updateLastHeard(callsign);  // track heard station for display
     }
 
     void getData() {
@@ -248,7 +265,7 @@ namespace GPS_Utils {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "GPS",
                         "No GPS frames detected! Try to reset the GPS Chip with this "
                         "firmware: https://github.com/richonguzman/TTGO_T_BEAM_GPS_RESET");
-            displayShow("ERROR", "No GPS frames!", "Reset the GPS Chip", 2000);
+            bootStatus("ERROR: No GPS frames!");
         }
     }
 

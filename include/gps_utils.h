@@ -33,6 +33,11 @@ namespace GPS_Utils {
     void    checkStartUpFrames();
     String  getCardinalDirection(float course);
 
+    // Returns the current lat/lon/elev from whichever GPS source is active
+    // (internal GPS, fixed position, or external GPS). Returns false if no
+    // valid position is available yet.
+    bool    getCurrentLocation(double &lat, double &lng, float &elev);
+
 }
 
 #endif

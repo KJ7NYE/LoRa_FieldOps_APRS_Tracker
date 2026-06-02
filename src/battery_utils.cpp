@@ -168,7 +168,7 @@ namespace BATTERY_Utils {
                                 measuringState = 1;
 
                                 if (batteryVoltage.toFloat() < (Config.battery.sleepVoltage - 0.1)) {
-                                    displayShow("!BATTERY!", "", "LOW BATTERY VOLTAGE!",5000);
+                                    displayStatus("!BATTERY!", "LOW VOLTAGE!", batteryVoltage + "V", "Shutting down");
                                     POWER_Utils::shutdown();
                                 }
                             }

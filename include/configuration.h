@@ -152,8 +152,9 @@ public:
 
 class TCPKISS {
 public:
-    bool    enabled;
-    uint16_t port;
+    bool     enabled;        // TCP server
+    uint16_t port;           // TCP port
+    bool     serialEnabled;  // KISS over USB serial
 };
 
 class FixedPosition {

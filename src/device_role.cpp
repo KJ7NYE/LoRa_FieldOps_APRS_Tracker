@@ -19,8 +19,14 @@
 #include "device_role.h"
 #include "configuration.h"
 #include "board_pinout.h"
+#include "station_utils.h"
 #include "logger.h"
 #include "display.h"
+#ifdef HAS_WIFI
+#include "aprs_is_utils.h"
+#include "tcp_kiss_utils.h"
+#include "wifi_utils.h"
+#endif
 
 extern Configuration Config;
 extern logging::Logger logger;
@@ -85,32 +91,53 @@ namespace DeviceRoleUtils {
 
     void initializeTracker() {
         Serial.println("INFO: Tracker mode: GPS + smart beaconing enabled, messaging active");
-        displayShow("Mode", "TRACKER", "", 2000);
+        bootStatus("Tracker");
     }
 
     void initializeDigipeater() {
         Serial.println("INFO: Digipeater mode: RF relaying enabled, beaconing disabled");
-        displayShow("Mode", "DIGIPEATER", "", 2000);
+        bootStatus("Digipeater");
     }
 
     #ifdef HAS_WIFI
     void initializeIGate() {
-        Serial.println("INFO: iGate mode: APRS-IS relay enabled");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Role", "iGate mode: APRS-IS relay enabled");
 
-        if (Config.aprsIS.server.length() == 0) {
-            Serial.println("WARN: APRS-IS server not configured");
+        // Connect WiFi STA
+        if (Config.wifiSTA.enabled && Config.wifiSTA.ssid.length() > 0) {
+            WIFI_Utils::connectSTA();
+        } else {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Role", "WiFi STA not configured — iGate will not reach APRS-IS");
         }
 
-        if (Config.wifiSTA.ssid.length() == 0) {
-            Serial.println("WARN: WiFi STA not configured, iGate will not connect");
+        // Connect APRS-IS
+        if (WIFI_Utils::isSTAConnected()) {
+            APRS_IS_Utils::connect();
         }
 
-        displayShow("Mode", "IGATE", "", 2000);
+        // Start TCP KISS server
+        if (Config.tcpKISS.enabled) {
+            TCP_KISS_Utils::setup();
+        }
+
+        bootStatus("iGate");
     }
     #endif
 
     void handleRoleSpecificTasks() {
         if (!roleInitialized) return;
+
+        // iGate and Digipeater beacon their own position on a fixed interval
+        // so they appear on APRS maps. Tracker beaconing is driven by the main loop.
+        if (Config.deviceRole == ROLE_IGATE || Config.deviceRole == ROLE_DIGIPEATER) {
+            static uint32_t lastSelfBeacon = 0;
+            uint32_t beaconInterval = (uint32_t)Config.nonSmartBeaconRate * 60000UL;
+            if (beaconInterval < 60000UL) beaconInterval = 60000UL;  // floor at 1 min
+            if (millis() - lastSelfBeacon >= beaconInterval) {
+                STATION_Utils::sendBeacon();
+                lastSelfBeacon = millis();
+            }
+        }
 
         switch (Config.deviceRole) {
             case ROLE_TRACKER:
@@ -122,7 +149,7 @@ namespace DeviceRoleUtils {
                 #endif
                 break;
             case ROLE_DIGIPEATER:
-                // Digipeater tasks handled in main loop
+                // Digipeater packet processing handled in main loop via MSG_Utils
                 break;
             default:
                 break;
@@ -131,9 +158,17 @@ namespace DeviceRoleUtils {
 
     #ifdef HAS_WIFI
     void handleIGateTasks() {
-        // Poll APRS-IS for incoming packets
-        // Handle TCP KISS clients
-        // Manage WiFi connection state
+        // Maintain WiFi + APRS-IS connection
+        if (!WIFI_Utils::isSTAConnected() && Config.wifiSTA.enabled) {
+            WIFI_Utils::connectSTA();
+        }
+        APRS_IS_Utils::checkConnection();
+
+        // Poll inbound APRS-IS packets (bi-directional downlink)
+        APRS_IS_Utils::listenAPRSIS();
+
+        // Service TCP KISS clients
+        TCP_KISS_Utils::loop();
     }
     #endif
 

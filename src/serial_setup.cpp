@@ -15,6 +15,8 @@
 #include "serial_setup.h"
 #include "configuration.h"
 #include "smartbeacon_utils.h"
+#include "kiss_utils.h"
+#include "lora_utils.h"
 
 extern Configuration        Config;
 extern logging::Logger      logger;
@@ -30,11 +32,10 @@ namespace SERIAL_Setup {
     static bool                 exitArmed       = false;
     static String               buf;
     static bool                 dirty           = false;
-    static int                  selBeacon       = 0;
-    static int                  selLora         = 0;
     static bool                 showSecrets     = false;
     static logging::LoggerLevel savedLogLevel   = logging::LoggerLevel::LOGGER_LEVEL_INFO;
     static logging::LoggerLevel currentLogLevel = logging::LoggerLevel::LOGGER_LEVEL_INFO;
+    static String               kissSerialBuf   = "";
 
     // paste-import state
     static bool                 pasting         = false;
@@ -127,8 +128,6 @@ namespace SERIAL_Setup {
         Serial.println(F("  format YES-ERASE-ALL       wipe LittleFS/SPIFFS, reboot to defaults"));
         Serial.println(F("  log <off|error|warn|info|debug>"));
         Serial.println(F("\n-- beacons --"));
-        Serial.println(F("  beacon list"));
-        Serial.println(F("  beacon select <0..n-1>"));
         Serial.println(F("  beacon callsign <CALL-SSID>"));
         Serial.println(F("  beacon symbol <c>          overlay <c>          micE <0..7>"));
         Serial.println(F("  beacon comment <text...>   status <text...>     label <text...>"));
@@ -142,8 +141,6 @@ namespace SERIAL_Setup {
         Serial.println(F("  smartcustom mintxdist <m>      mindelta <sec>"));
         Serial.println(F("  smartcustom turnmindeg <deg>   turnslope <n>"));
         Serial.println(F("\n-- lora --"));
-        Serial.println(F("  lora list"));
-        Serial.println(F("  lora select <0..3>         (0=EU 1=PL 2=UK 3=US)"));
         Serial.println(F("  lora freq <Hz>             sf <7..12>           bw <Hz>"));
         Serial.println(F("  lora cr <5..8>             power <dBm>"));
         Serial.println(F("\n-- peripherals --"));
@@ -159,6 +156,16 @@ namespace SERIAL_Setup {
         Serial.println(F("  telem on|off               send on|off          tempcorr <float>"));
         Serial.println(F("  ptt on|off                 pin <n>              reverse on|off"));
         Serial.println(F("  ptt predelay <ms>          postdelay <ms>"));
+        Serial.println(F("\n-- multi-role --"));
+        Serial.println(F("  role show                  show current role and GPS source"));
+        Serial.println(F("  role set <tracker|igate|digipeater>"));
+        Serial.println(F("  role gps <internal|fixed|externserial|externble>"));
+        Serial.println(F("  fixed latitude <dd.dddddd>  longitude <dd.dddddd>  elevation <m>"));
+        Serial.println(F("  wifista on|off              ssid <text>            password <text>"));
+        Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
+        Serial.println(F("  aprsiss filter <filter>     (e.g. r/47.6/-122.3/50)"));
+        Serial.println(F("  tcpkiss on|off              port <n>               (TCP server, default 8001)"));
+        Serial.println(F("  tcpkiss serial on|off       (KISS on USB serial; disables CLI echo while active)"));
         Serial.println(F("\n-- other --"));
         Serial.println(F("  digipeater on|off          (boot default; menu still toggles runtime)"));
         Serial.println(F("  winlink password <text>"));
@@ -231,26 +238,18 @@ namespace SERIAL_Setup {
         kv("    minDeltaBeacon", s.minDeltaBeacon);
         kv("    turnMinDeg    ", s.turnMinDeg);
         kv("    turnSlope     ", s.turnSlope);
-        String users = "";
-        for (size_t i = 0; i < Config.beacons.size(); i++) {
-            if (Config.beacons[i].smartBeaconSetting == SMARTBEACON_CUSTOM_INDEX) {
-                if (users.length()) users += ",";
-                users += String((unsigned)i);
-            }
-        }
-        Serial.println("    used by beacon[s]: " + (users.length() ? users : String("(none)")));
+        bool usedByBeacon0 = (Config.beacons.size() > 0 && Config.beacons[0].smartBeaconSetting == SMARTBEACON_CUSTOM_INDEX);
+        Serial.println(String("    used by beacon[0]: ") + (usedByBeacon0 ? "yes" : "no"));
     }
 
     static void printSection(const String& section) {
         if (section == "" || section == "beacons") {
             hdr("beacons");
-            kv("selected", selBeacon);
-            for (size_t i = 0; i < Config.beacons.size(); i++) printBeacon(i);
+            printBeacon(0);
         }
         if (section == "" || section == "lora") {
             hdr("lora");
-            kv("selected", selLora);
-            for (size_t i = 0; i < Config.loraTypes.size(); i++) printLora(i);
+            printLora(0);
         }
         if (section == "" || section == "smartcustom") {
             hdr("smartcustom");
@@ -344,19 +343,17 @@ namespace SERIAL_Setup {
         active = true;
         exitArmed = false;
         dirty = false;
+        kissSerialBuf = "";
         savedLogLevel = currentLogLevel;
         logger.setDebugLevel(logging::LoggerLevel::LOGGER_LEVEL_ERROR);
-        selBeacon = 0;
-        selLora   = 0;
         printBanner();
         Serial.println();
         Serial.println(F(">>> SETUP MODE ACTIVE <<<"));
         if (Config.beacons.size() > 0) {
-            Serial.println("    current callsign : " + Config.beacons[selBeacon].callsign);
+            Serial.println("    callsign : " + Config.beacons[0].callsign);
         }
         if (Config.loraTypes.size() > 0) {
-            const char* region = (selLora == 0) ? "EU" : (selLora == 1) ? "PL" : (selLora == 2) ? "UK" : "US";
-            Serial.println("    current lora     : " + String(region) + " (" + String(Config.loraTypes[selLora].frequency) + " Hz)");
+            Serial.println("    lora     : " + String(Config.loraTypes[0].frequency) + " Hz");
         }
     }
 
@@ -369,6 +366,7 @@ namespace SERIAL_Setup {
         currentLogLevel = savedLogLevel;
         active = false;
         dirty = false;
+        kissSerialBuf = "";
         Serial.println(F("\nSetup mode exited.\n"));
     }
 
@@ -377,30 +375,14 @@ namespace SERIAL_Setup {
         if (n < 2) { err("beacon: missing subcommand"); return; }
         const String& sub = tk[1];
 
-        if (sub == "list") {
-            for (size_t i = 0; i < Config.beacons.size(); i++) printBeacon(i);
-            return;
-        }
-        if (sub == "select") {
-            if (n < 3) { err("beacon select <index>"); return; }
-            int i = tk[2].toInt();
-            if (i < 0 || (size_t)i >= Config.beacons.size()) { err("index out of range"); return; }
-            selBeacon = i;
-            okClean("beacon selected = " + String(i));
-            return;
-        }
-
-        if (selBeacon < 0 || (size_t)selBeacon >= Config.beacons.size()) {
-            err("no beacon selected");
-            return;
-        }
-        Beacon& b = Config.beacons[selBeacon];
+        if (Config.beacons.empty()) { err("no beacon in config"); return; }
+        Beacon& b = Config.beacons[0];
 
         if (sub == "callsign") {
             if (n < 3) { err("beacon callsign <CALL-SSID>"); return; }
             String c = tk[2]; c.toUpperCase(); c.trim();
             b.callsign = c;
-            ok("beacon[" + String(selBeacon) + "].callsign = " + c);
+            ok("beacon[0].callsign = " + c);
         } else if (sub == "symbol") {
             if (n < 3 || tk[2].length() != 1) { err("symbol must be 1 char"); return; }
             b.symbol = tk[2]; ok("symbol = " + tk[2]);
@@ -445,24 +427,8 @@ namespace SERIAL_Setup {
         if (n < 2) { err("lora: missing subcommand"); return; }
         const String& sub = tk[1];
 
-        if (sub == "list") {
-            for (size_t i = 0; i < Config.loraTypes.size(); i++) printLora(i);
-            return;
-        }
-        if (sub == "select") {
-            if (n < 3) { err("lora select <0..3>"); return; }
-            int i = tk[2].toInt();
-            if (i < 0 || (size_t)i >= Config.loraTypes.size()) { err("index out of range"); return; }
-            selLora = i;
-            okClean("lora selected = " + String(i));
-            return;
-        }
-
-        if (selLora < 0 || (size_t)selLora >= Config.loraTypes.size()) {
-            err("no lora region selected");
-            return;
-        }
-        LoraType& l = Config.loraTypes[selLora];
+        if (Config.loraTypes.empty()) { err("no lora type in config"); return; }
+        LoraType& l = Config.loraTypes[0];
 
         if (sub == "freq") {
             if (n < 3) { err("freq <Hz>"); return; }
@@ -762,6 +728,111 @@ namespace SERIAL_Setup {
         return true;
     }
 
+    // ---------------- multi-role CLI commands ----------------
+
+    static void cmdRole(String* tk, int n, const String& /*line*/) {
+        if (n < 2) { err("role <show|set|gps> ..."); return; }
+        const String& sub = tk[1];
+
+        if (sub == "show") {
+            hdr("device role & gps source");
+            const char* roleStr =
+                (Config.deviceRole == ROLE_TRACKER)    ? "Tracker"    :
+                (Config.deviceRole == ROLE_IGATE)      ? "iGate"      :
+                (Config.deviceRole == ROLE_DIGIPEATER) ? "Digipeater" : "Unknown";
+            const char* gpsStr =
+                (Config.gpsSource == GPS_INTERNAL)        ? "Internal"       :
+                (Config.gpsSource == GPS_FIXED)           ? "Fixed"          :
+                (Config.gpsSource == GPS_EXTERNAL_SERIAL) ? "ExternalSerial" :
+                (Config.gpsSource == GPS_EXTERNAL_BLE)    ? "ExternalBLE"    : "Unknown";
+            kv("role", roleStr);
+            kv("gps",  gpsStr);
+        } else if (sub == "set") {
+            if (n < 3) { err("role set <tracker|igate|digipeater>"); return; }
+            String r = tk[2]; r.toLowerCase();
+            DeviceRole newRole;
+            if      (r == "tracker")     newRole = ROLE_TRACKER;
+            else if (r == "igate")       newRole = ROLE_IGATE;
+            else if (r == "digipeater")  newRole = ROLE_DIGIPEATER;
+            else { err("role must be: tracker, igate, digipeater"); return; }
+            #ifdef ARDUINO_ARCH_NRF52
+                if (newRole == ROLE_IGATE) {
+                    err("iGate not supported on nRF52 (no WiFi)");
+                    return;
+                }
+            #endif
+            Config.deviceRole = newRole;
+            ok("deviceRole = " + r + " (save + reboot to apply)");
+        } else if (sub == "gps") {
+            if (n < 3) { err("role gps <internal|fixed|externserial|externble>"); return; }
+            String g = tk[2]; g.toLowerCase();
+            GPSSource newGps;
+            if      (g == "internal")     newGps = GPS_INTERNAL;
+            else if (g == "fixed")        newGps = GPS_FIXED;
+            else if (g == "externserial") newGps = GPS_EXTERNAL_SERIAL;
+            else if (g == "externble")    newGps = GPS_EXTERNAL_BLE;
+            else { err("gps: internal, fixed, externserial, externble"); return; }
+            Config.gpsSource = newGps;
+            ok("gpsSource = " + g + " (save + reboot to apply)");
+        } else {
+            err("unknown role subcommand: " + sub);
+        }
+    }
+
+    static void cmdFixed(String* tk, int n) {
+        if (n < 3) { err("fixed <latitude|longitude|elevation> <value>"); return; }
+        const String& sub = tk[1];
+        if      (sub == "latitude")  { Config.fixedPosition.latitude  = tk[2].toFloat(); ok("fixedPosition.latitude = "  + String(Config.fixedPosition.latitude,  6)); }
+        else if (sub == "longitude") { Config.fixedPosition.longitude = tk[2].toFloat(); ok("fixedPosition.longitude = " + String(Config.fixedPosition.longitude, 6)); }
+        else if (sub == "elevation") { Config.fixedPosition.elevation = tk[2].toFloat(); ok("fixedPosition.elevation = " + String(Config.fixedPosition.elevation, 1)); }
+        else err("fixed: latitude, longitude, elevation");
+    }
+
+    static void cmdWifiSta(String* tk, int n, const String& line) {
+        if (n < 2) { err("wifista <on|off|ssid|password>"); return; }
+        const String& sub = tk[1];
+        if (sub == "on" || sub == "off" || sub == "true" || sub == "false") {
+            applyBool(tk[1], Config.wifiSTA.enabled, "wifiSTA.enabled");
+        } else if (sub == "ssid") {
+            if (n < 3) { err("wifista ssid <ssid>"); return; }
+            Config.wifiSTA.ssid = restOfLine(line, 2);
+            ok("wifiSTA.ssid = " + Config.wifiSTA.ssid);
+        } else if (sub == "password") {
+            if (n < 3) { err("wifista password <text>"); return; }
+            Config.wifiSTA.password = restOfLine(line, 2);
+            ok("wifiSTA.password updated");
+        } else {
+            err("unknown wifista subcommand: " + sub);
+        }
+    }
+
+    static void cmdAprsIS(String* tk, int n, const String& line) {
+        if (n < 2) { err("aprsiss <server|port|passcode|filter>"); return; }
+        const String& sub = tk[1];
+        if      (sub == "server")   { if (n < 3) { err("aprsiss server <hostname>"); return; } Config.aprsIS.server  = tk[2];                ok("aprsIS.server = "  + Config.aprsIS.server); }
+        else if (sub == "port")     { if (n < 3) { err("aprsiss port <port>");    return; } Config.aprsIS.port    = tk[2].toInt();          ok("aprsIS.port = "    + String(Config.aprsIS.port)); }
+        else if (sub == "passcode") { if (n < 3) { err("aprsiss passcode <code>"); return; } Config.aprsIS.passcode = tk[2];                ok("aprsIS.passcode updated"); }
+        else if (sub == "filter")   { if (n < 3) { err("aprsiss filter <filter>"); return; } Config.aprsIS.filter  = restOfLine(line, 2);   ok("aprsIS.filter = "  + Config.aprsIS.filter); }
+        else err("unknown aprsiss subcommand: " + sub);
+    }
+
+    static void cmdTcpKiss(String* tk, int n) {
+        if (n < 2) { err("tcpkiss <on|off|port|serial>"); return; }
+        const String& sub = tk[1];
+        if (sub == "on" || sub == "off" || sub == "true" || sub == "false") {
+            applyBool(tk[1], Config.tcpKISS.enabled, "tcpKISS.enabled");
+        } else if (sub == "port") {
+            if (n < 3) { err("tcpkiss port <port>"); return; }
+            Config.tcpKISS.port = tk[2].toInt();
+            ok("tcpKISS.port = " + String(Config.tcpKISS.port));
+        } else if (sub == "serial") {
+            if (n < 3) { err("tcpkiss serial on|off"); return; }
+            applyBool(tk[2], Config.tcpKISS.serialEnabled, "tcpKISS.serialEnabled");
+        } else {
+            err("unknown tcpkiss subcommand: " + sub);
+        }
+    }
+
     // ---------------- top-level dispatch ----------------
     static void handleLine(const String& line) {
         String tk[8];
@@ -860,6 +931,12 @@ namespace SERIAL_Setup {
         else if (cmd == "rememberstation")          { if (n >= 2) { Config.rememberStationTime = tk[1].toInt(); ok("rememberStationTime = " + String(Config.rememberStationTime)); } else err("rememberstation <sec>"); }
         else if (cmd == "standingupdate")           { if (n >= 2) { Config.standingUpdateTime = tk[1].toInt(); ok("standingUpdateTime = " + String(Config.standingUpdateTime)); } else err("standingupdate <sec>"); }
         else if (cmd == "commentafter")             { if (n >= 2) { Config.sendCommentAfterXBeacons = tk[1].toInt(); ok("sendCommentAfterXBeacons = " + String(Config.sendCommentAfterXBeacons)); } else err("commentafter <n>"); }
+        // multi-role commands
+        else if (cmd == "role")     cmdRole(tk, n, line);
+        else if (cmd == "fixed")    cmdFixed(tk, n);
+        else if (cmd == "wifista")  cmdWifiSta(tk, n, line);
+        else if (cmd == "aprsiss")  cmdAprsIS(tk, n, line);
+        else if (cmd == "tcpkiss")  cmdTcpKiss(tk, n);
         else err("unknown command: " + cmd + "  (try 'help')");
     }
 
@@ -869,11 +946,30 @@ namespace SERIAL_Setup {
         Serial.println(F("\n[serial] Type 'setup' over USB serial to enter the configuration menu."));
     }
 
+    bool isActive() { return active; }
+
     void loop() {
         while (Serial.available()) {
             int ch = Serial.read();
             if (ch < 0) break;
             char c = (char)ch;
+
+            // Route KISS frames when serial KISS is enabled and CLI is not active
+            if (Config.tcpKISS.serialEnabled && !active) {
+                if ((uint8_t)c == 0xC0 || kissSerialBuf.length() > 0) {
+                    kissSerialBuf += c;
+                    if ((uint8_t)c == 0xC0 && kissSerialBuf.length() > 1) {
+                        bool isData = false;
+                        String frame = KISS_Utils::decodeKISS(kissSerialBuf, isData);
+                        if (isData && frame.length() > 0) {
+                            LoRa_Utils::sendNewPacket(frame);
+                        }
+                        kissSerialBuf = "";
+                    }
+                    if (kissSerialBuf.length() > 512) kissSerialBuf = "";
+                    continue;
+                }
+            }
 
             // paste-import mode swallows everything until balanced or aborted
             if (feedPasteByte(c)) {

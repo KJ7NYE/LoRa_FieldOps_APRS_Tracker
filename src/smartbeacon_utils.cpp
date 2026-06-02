@@ -18,7 +18,6 @@
 
 #include "smartbeacon_utils.h"
 #include "configuration.h"
-#include "winlink_utils.h"
 
 extern Configuration    Config;
 extern Beacon           *currentBeacon;
@@ -26,7 +25,8 @@ extern bool             smartBeaconActive;
 extern uint32_t         txInterval;
 extern uint32_t         lastTxTime;
 extern bool             sendUpdate;
-extern uint8_t          winlinkStatus;
+// winlinkStatus stub — Winlink removed in this build; always 0 (idle).
+static uint8_t          winlinkStatus = 0;
 
 
 SmartBeaconValues   currentSmartBeaconValues;

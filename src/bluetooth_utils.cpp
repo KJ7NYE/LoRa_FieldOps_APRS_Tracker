@@ -55,7 +55,7 @@ namespace BLUETOOTH_Utils {
 
         if (!SerialBT.begin(String(BTid))) {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Bluetooth", "Starting Bluetooth failed!");
-            displayShow("ERROR", "Starting Bluetooth failed!", "");
+            bootStatus("ERROR: BT failed!");
             while(true) {
                 delay(1000);
             }
@@ -116,7 +116,7 @@ namespace BLUETOOTH_Utils {
     void sendToLoRa() {
         if (!shouldSendToLoRa) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT TX", "%s", serialReceived.c_str());
-        displayShow("BT Tx >>", "", serialReceived, 1000);
+        displayTxFlash();
         LoRa_Utils::sendNewPacket(serialReceived);
         shouldSendToLoRa = false;
     }

@@ -27,6 +27,13 @@ namespace WIFI_Utils {
     void startAutoAP();
     void checkIfWiFiAP();
 
+    // Connect to STA (infrastructure) network using Config.wifiSTA credentials.
+    // Blocks up to 20 s; logs result. Returns true on successful association.
+    bool connectSTA();
+
+    // True when the station interface is associated and has an IP.
+    bool isSTAConnected();
+
 }
 
 #endif

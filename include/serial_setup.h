@@ -18,6 +18,7 @@ namespace SERIAL_Setup {
 
     void setup();
     void loop();
+    bool isActive();   // true while setup CLI is open
 
 }
 

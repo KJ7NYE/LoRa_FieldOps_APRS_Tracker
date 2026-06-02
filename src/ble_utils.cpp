@@ -168,7 +168,7 @@ namespace BLE_Utils {
         if (!shouldSendBLEtoLoRa) return;
 
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BLE Tx", "%s", BLEToLoRaPacket.c_str());
-        displayShow("BLE Tx >>", "", BLEToLoRaPacket, 1000);
+        displayTxFlash();
         LoRa_Utils::sendNewPacket(BLEToLoRaPacket);
         BLEToLoRaPacket = "";
         shouldSendBLEtoLoRa = false;
