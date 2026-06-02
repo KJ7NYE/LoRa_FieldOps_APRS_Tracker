@@ -767,9 +767,47 @@ function renderConfig() {
     body.appendChild(mkNumber('Post-delay (ms)', ptt.postDelay,v => sendCmd(`ptt postdelay ${v}`)));
   });
 
+  // ── Device Role & Network ────────────────
+  const roleObj  = { deviceRole: config.deviceRole ?? 0, gpsSource: config.gpsSource ?? 0 };
+  const fp       = config.fixedPosition || {};
+  const wifiSTA  = config.wifiSTA       || {};
+  const aprsIS   = config.aprsIS        || {};
+  const tcpKISS  = config.tcpKISS       || {};
+
+  mkSection(cont, 'role', '🌐 Device Role & Network', body => {
+    body.appendChild(mkGroupTitle('Role & GPS Source'));
+    body.appendChild(mkSelect('Device role', roleObj.deviceRole,
+      [{ v:0, l:'0 — Tracker' }, { v:1, l:'1 — iGate' }, { v:2, l:'2 — Digipeater' }],
+      v => sendCmd(`role set ${['tracker','igate','digipeater'][+v] || 'tracker'}`)));
+    body.appendChild(mkSelect('GPS source', roleObj.gpsSource,
+      [{ v:0, l:'0 — Internal GPS' }, { v:1, l:'1 — Fixed Position' },
+       { v:2, l:'2 — External Serial' }, { v:3, l:'3 — External BLE' }],
+      v => sendCmd(`role gps ${['internal','fixed','externserial','externble'][+v] || 'internal'}`)));
+
+    body.appendChild(mkGroupTitle('Fixed Position'));
+    body.appendChild(mkNumber('Latitude (decimal °)',  fp.latitude,   v => sendCmd(`fixed latitude ${v}`),  { step: '0.000001' }));
+    body.appendChild(mkNumber('Longitude (decimal °)', fp.longitude,  v => sendCmd(`fixed longitude ${v}`), { step: '0.000001' }));
+    body.appendChild(mkNumber('Elevation (m)',          fp.elevation,  v => sendCmd(`fixed elevation ${v}`), { step: '0.1' }));
+
+    body.appendChild(mkGroupTitle('WiFi STA (for iGate)'));
+    body.appendChild(mkBool('WiFi STA enabled', wifiSTA.enabled,  v => sendCmd(`wifista ${boolStr(v)}`)));
+    body.appendChild(mkText('SSID',             wifiSTA.ssid,     v => sendCmd(`wifista ssid ${v}`)));
+    body.appendChild(mkPassword('Password',     wifiSTA.password, v => sendCmd(`wifista password ${v}`)));
+
+    body.appendChild(mkGroupTitle('APRS-IS'));
+    body.appendChild(mkText(  'Server',   aprsIS.server,   v => sendCmd(`aprsiss server ${v}`)));
+    body.appendChild(mkNumber('Port',     aprsIS.port,     v => sendCmd(`aprsiss port ${v}`),     { min:1, max:65535 }));
+    body.appendChild(mkText(  'Passcode', aprsIS.passcode, v => sendCmd(`aprsiss passcode ${v}`)));
+    body.appendChild(mkText(  'Filter',   aprsIS.filter,   v => sendCmd(`aprsiss filter ${v}`)));
+
+    body.appendChild(mkGroupTitle('TCP KISS Server'));
+    body.appendChild(mkBool(  'TCP KISS enabled', tcpKISS.enabled, v => sendCmd(`tcpkiss ${boolStr(v)}`)));
+    body.appendChild(mkNumber('Port',             tcpKISS.port,    v => sendCmd(`tcpkiss port ${v}`), { min:1, max:65535 }));
+  });
+
   // ── WiFi & Winlink ───────────────────────
-  mkSection(cont, 'wifi', '📶 WiFi & Winlink', body => {
-    body.appendChild(mkGroupTitle('WiFi AP'));
+  mkSection(cont, 'wifi', '📶 WiFi AP & Winlink', body => {
+    body.appendChild(mkGroupTitle('WiFi AP (web config)'));
     body.appendChild(mkBool('AP active (persistent)',  wifi.active,     v => sendCmd(`wifi ${boolStr(v)}`)));
     body.appendChild(mkBool('30-sec boot window',      wifi.bootWindow, v => sendCmd(`wifi window ${boolStr(v)}`)));
     body.appendChild(mkPassword('AP password',         wifi.password,   v => sendCmd(`wifi password ${v}`)));
