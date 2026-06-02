@@ -20,6 +20,7 @@
 #include <TinyGPS++.h>
 #include <SPIFFS.h>
 #include "telemetry_utils.h"
+#include "gps_utils.h"
 #include "station_utils.h"
 #include "battery_utils.h"
 #include "configuration.h"
@@ -194,21 +195,42 @@ namespace STATION_Utils {
     }
 
     void sendBeacon() {
+        // Resolve position from the active GPS source (internal GPS, fixed, or external).
+        double beaconLat = 0, beaconLng = 0;
+        float  beaconElev = 0;
+        if (!GPS_Utils::getCurrentLocation(beaconLat, beaconLng, beaconElev)) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Beacon", "No position — skipping beacon");
+            return;
+        }
+
+        // Speed, course, and altitude are only meaningful from live GPS.
+        bool   hasLiveGPS   = (Config.gpsSource == GPS_INTERNAL) && gps.location.isValid();
+        double speed_knots  = hasLiveGPS ? gps.speed.knots()   : 0.0;
+        double course_deg   = hasLiveGPS ? gps.course.deg()    : 0.0;
+        float  alt_feet     = hasLiveGPS ? gps.altitude.feet() : (beaconElev * 3.28084f);
+        float  alt_meters   = hasLiveGPS ? gps.altitude.meters() : beaconElev;
+
         if (sendStartTelemetry && ((Config.battery.sendVoltage && Config.battery.voltageAsTelemetry) || (Config.telemetry.sendTelemetry && wxModuleFound)) && lastTxTime > 0) TELEMETRY_Utils::sendEquationsUnitsParameters();
 
         String path = Config.path;
-        if (gps.speed.kmph() > 200 || gps.altitude.meters() > 9000) path = ""; // avoid plane speed and altitude
+        // Guard against accidental plane/high-alt path suppression on non-GPS sources
+        if (hasLiveGPS && (gps.speed.kmph() > 200 || gps.altitude.meters() > 9000)) path = "";
+
         String packet;
         String tactical = currentBeacon->tacticalCallsign;
         tactical.trim();
         if (tactical.length() > 0) {
             char ts[16];
-            snprintf(ts, sizeof(ts), "%02d%02d%02dz", gps.date.day() % 100, gps.time.hour() % 100, gps.time.minute() % 100);
-            packet = APRSPacketLib::generateObjectPacket(currentBeacon->callsign, "APLRT1", path, tactical, String(ts), currentBeacon->overlay, APRSPacketLib::encodeGPSIntoBase91(gps.location.lat(), gps.location.lng(), gps.course.deg(), gps.speed.knots(), currentBeacon->symbol, Config.sendAltitude, gps.altitude.feet(), sendStandingUpdate));
+            if (hasLiveGPS) {
+                snprintf(ts, sizeof(ts), "%02d%02d%02dz", gps.date.day() % 100, gps.time.hour() % 100, gps.time.minute() % 100);
+            } else {
+                snprintf(ts, sizeof(ts), "000000z");  // no GPS time available
+            }
+            packet = APRSPacketLib::generateObjectPacket(currentBeacon->callsign, "APLRT1", path, tactical, String(ts), currentBeacon->overlay, APRSPacketLib::encodeGPSIntoBase91(beaconLat, beaconLng, course_deg, speed_knots, currentBeacon->symbol, Config.sendAltitude, alt_feet, sendStandingUpdate));
         } else if (miceActive) {
-            packet = APRSPacketLib::generateMiceGPSBeaconPacket(currentBeacon->micE, currentBeacon->callsign, currentBeacon->symbol, currentBeacon->overlay, path, gps.location.lat(), gps.location.lng(), gps.course.deg(), gps.speed.knots(), gps.altitude.meters());
+            packet = APRSPacketLib::generateMiceGPSBeaconPacket(currentBeacon->micE, currentBeacon->callsign, currentBeacon->symbol, currentBeacon->overlay, path, beaconLat, beaconLng, course_deg, speed_knots, alt_meters);
         } else {
-            packet = APRSPacketLib::generateBase91GPSBeaconPacket(currentBeacon->callsign, "APLRT1", path, currentBeacon->overlay, APRSPacketLib::encodeGPSIntoBase91(gps.location.lat(),gps.location.lng(), gps.course.deg(), gps.speed.knots(), currentBeacon->symbol, Config.sendAltitude, gps.altitude.feet(), sendStandingUpdate));
+            packet = APRSPacketLib::generateBase91GPSBeaconPacket(currentBeacon->callsign, "APLRT1", path, currentBeacon->overlay, APRSPacketLib::encodeGPSIntoBase91(beaconLat, beaconLng, course_deg, speed_knots, currentBeacon->symbol, Config.sendAltitude, alt_feet, sendStandingUpdate));
         }
 
         String batteryVoltage = BATTERY_Utils::getBatteryInfoVoltage();
@@ -268,8 +290,8 @@ namespace STATION_Utils {
         if (shouldSleepLowVoltage) POWER_Utils::shutdown();
 
         if (smartBeaconActive) {
-            lastTxLat       = gps.location.lat();
-            lastTxLng       = gps.location.lng();
+            lastTxLat       = beaconLat;
+            lastTxLng       = beaconLng;
             previousHeading = currentHeading;
             lastTxDistance  = 0.0;
         }

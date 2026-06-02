@@ -127,6 +127,18 @@ namespace DeviceRoleUtils {
     void handleRoleSpecificTasks() {
         if (!roleInitialized) return;
 
+        // iGate and Digipeater beacon their own position on a fixed interval
+        // so they appear on APRS maps. Tracker beaconing is driven by the main loop.
+        if (Config.deviceRole == ROLE_IGATE || Config.deviceRole == ROLE_DIGIPEATER) {
+            static uint32_t lastSelfBeacon = 0;
+            uint32_t beaconInterval = (uint32_t)Config.nonSmartBeaconRate * 60000UL;
+            if (beaconInterval < 60000UL) beaconInterval = 60000UL;  // floor at 1 min
+            if (millis() - lastSelfBeacon >= beaconInterval) {
+                STATION_Utils::sendBeacon();
+                lastSelfBeacon = millis();
+            }
+        }
+
         switch (Config.deviceRole) {
             case ROLE_TRACKER:
                 // Tracker tasks handled in main loop
@@ -137,7 +149,7 @@ namespace DeviceRoleUtils {
                 #endif
                 break;
             case ROLE_DIGIPEATER:
-                // Digipeater tasks handled in main loop
+                // Digipeater packet processing handled in main loop via MSG_Utils
                 break;
             default:
                 break;
