@@ -661,18 +661,82 @@ function renderConfig() {
   mkSection(cont, 'beacons', '📡 Beacons', body => {
     if (!beacons.length) { body.textContent = 'No beacons in config.'; return; }
     const b = beacons[0];
-    body.appendChild(mkText('Callsign',               b.callsign,        v => sendCmd(`beacon callsign ${v.toUpperCase()}`)));
-    body.appendChild(mkText('Symbol (1 char)',         b.symbol,          v => sendCmd(`beacon symbol ${v}`),    { maxlength: 1 }));
-    body.appendChild(mkText('Overlay (1 char)',        b.overlay,         v => sendCmd(`beacon overlay ${v}`),   { maxlength: 1 }));
-    body.appendChild(mkNumber('Mic-E code (0–7)',      b.micE,            v => sendCmd(`beacon micE ${v}`),      { min:0, max:7 }));
-    body.appendChild(mkText('Comment',                 b.comment,         v => sendCmd(`beacon comment ${v}`)));
-    body.appendChild(mkText('Status',                  b.status,          v => sendCmd(`beacon status ${v}`)));
-    body.appendChild(mkText('Tactical callsign (≤9)', b.tacticalCallsign,v => sendCmd(`beacon tactical ${v}`),  { maxlength: 9 }));
-    body.appendChild(mkText('Profile label',           b.profileLabel,    v => sendCmd(`beacon label ${v}`)));
-    body.appendChild(mkBool('SmartBeacon active',      b.smartBeaconActive,    v => sendCmd(`beacon smart ${boolStr(v)}`)));
+
+    // Callsign + Tactical Callsign — single line, both ≤9 chars
+    {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'Callsign / Tactical';
+      const ctl = document.createElement('div'); ctl.className = 'field-control'; ctl.style.cssText = 'display:flex;gap:0.4rem';
+      const csInp  = document.createElement('input');
+      csInp.type = 'text'; csInp.className = 'form-control form-control-sm'; csInp.maxLength = 9;
+      csInp.value = b.callsign || ''; csInp.placeholder = 'CALLSIGN';
+      const tacInp = document.createElement('input');
+      tacInp.type = 'text'; tacInp.className = 'form-control form-control-sm'; tacInp.maxLength = 9;
+      tacInp.value = b.tacticalCallsign || ''; tacInp.placeholder = 'Tactical (blank = off)';
+      csInp.addEventListener ('change', () => { markDirty(csInp);  sendCmd(`beacon callsign ${csInp.value.toUpperCase()}`); });
+      tacInp.addEventListener('change', () => { markDirty(tacInp); sendCmd(`beacon tactical ${tacInp.value}`); });
+      ctl.appendChild(csInp); ctl.appendChild(tacInp);
+      row.appendChild(lbl); row.appendChild(ctl);
+      body.appendChild(row);
+    }
+
+    // Symbol + Overlay — single line, each 1 char
+    {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'Symbol / Overlay';
+      const ctl = document.createElement('div'); ctl.className = 'field-control'; ctl.style.cssText = 'display:flex;gap:0.4rem';
+      const symInp = document.createElement('input');
+      symInp.type = 'text'; symInp.className = 'form-control form-control-sm'; symInp.maxLength = 1;
+      symInp.value = b.symbol || ''; symInp.placeholder = 'Sym'; symInp.style.width = '3.5rem';
+      const ovlInp = document.createElement('input');
+      ovlInp.type = 'text'; ovlInp.className = 'form-control form-control-sm'; ovlInp.maxLength = 1;
+      ovlInp.value = b.overlay || ''; ovlInp.placeholder = 'Ovl'; ovlInp.style.width = '3.5rem';
+      symInp.addEventListener('change', () => { markDirty(symInp); sendCmd(`beacon symbol ${symInp.value}`); });
+      ovlInp.addEventListener('change', () => { markDirty(ovlInp); sendCmd(`beacon overlay ${ovlInp.value}`); });
+      ctl.appendChild(symInp); ctl.appendChild(ovlInp);
+      row.appendChild(lbl); row.appendChild(ctl);
+      body.appendChild(row);
+    }
+
+    // Mic-E — dropdown (empty = disabled, '0'–'7' = standard codes)
+    body.appendChild(mkSelect('Mic-E encoding', b.micE,
+      [{ v: '',  l: '— off —' },
+       { v: '0', l: '0 · Off / Custom' },
+       { v: '1', l: '1 · En Route' },
+       { v: '2', l: '2 · In Service' },
+       { v: '3', l: '3 · Returning' },
+       { v: '4', l: '4 · Committed' },
+       { v: '5', l: '5 · Special' },
+       { v: '6', l: '6 · Priority' },
+       { v: '7', l: '7 · Emergency!' }],
+      v => sendCmd(`beacon micE ${v}`)));
+
+    body.appendChild(mkText('Comment (≤43 chars)', b.comment, v => sendCmd(`beacon comment ${v}`), { maxlength: 43 }));
+    body.appendChild(mkText('Status (≤43 chars)',  b.status,  v => sendCmd(`beacon status ${v}`),  { maxlength: 43 }));
+    body.appendChild(mkBool('SmartBeacon active',  b.smartBeaconActive, v => sendCmd(`beacon smart ${boolStr(v)}`)));
     body.appendChild(mkSelect('SmartBeacon profile', b.smartBeaconSetting,
-      SMARTSET_LABELS.map((l,j) => ({ v: j, l })),    v => sendCmd(`beacon smartset ${v}`)));
-    body.appendChild(mkBool('GPS eco mode',            b.gpsEcoMode,           v => sendCmd(`beacon gpseco ${boolStr(v)}`)));
+      SMARTSET_LABELS.map((l,j) => ({ v: j, l })), v => sendCmd(`beacon smartset ${v}`)));
+    body.appendChild(mkBool('GPS eco mode', b.gpsEcoMode, v => sendCmd(`beacon gpseco ${boolStr(v)}`)));
+
+    body.appendChild(mkGroupTitle('Beacon Timing & Path'));
+    body.appendChild(mkText(  'Beacon TX path',          other.beaconPath ?? other.path ?? 'WIDE1-1', v => sendCmd(`beaconpath ${v}`)));
+    body.appendChild(mkNumber('Non-smart rate (min)',     other.nonSmartBeaconRate,                   v => sendCmd(`nonsmartrate ${v}`)));
+    body.appendChild(mkNumber('Standing update (min)',    other.standingUpdateTime,                   v => sendCmd(`standingupdate ${v}`)));
+    body.appendChild(mkNumber('Comment every N beacons', other.sendCommentAfterXBeacons,             v => sendCmd(`commentafter ${v}`)));
+  });
+
+  // ── SmartBeacon Custom ───────────────────
+  mkSection(cont, 'smartcustom', '🏃 SmartBeacon Custom Profile', body => {
+    body.appendChild(mkNumber('Slow rate (sec)',       sc.slowRate,        v => sendCmd(`smartcustom slowrate ${v}`)));
+    body.appendChild(mkNumber('Slow speed (km/h)',     sc.slowSpeed,       v => sendCmd(`smartcustom slowspeed ${v}`)));
+    body.appendChild(mkNumber('Fast rate (sec)',        sc.fastRate,        v => sendCmd(`smartcustom fastrate ${v}`)));
+    body.appendChild(mkNumber('Fast speed (km/h)',      sc.fastSpeed,       v => sendCmd(`smartcustom fastspeed ${v}`)));
+    body.appendChild(mkNumber('Min TX distance (m)',    sc.minTxDist,       v => sendCmd(`smartcustom mintxdist ${v}`)));
+    body.appendChild(mkNumber('Min delta (sec)',        sc.minDeltaBeacon,  v => sendCmd(`smartcustom mindelta ${v}`)));
+    body.appendChild(mkNumber('Turn min deg',           sc.turnMinDeg,      v => sendCmd(`smartcustom turnmindeg ${v}`)));
+    body.appendChild(mkNumber('Turn slope',             sc.turnSlope,       v => sendCmd(`smartcustom turnslope ${v}`)));
   });
 
   // ── LoRa ─────────────────────────────────
@@ -692,18 +756,6 @@ function renderConfig() {
       [5,6,7,8].map(n => ({ v: n, l: `4/${n}` })),
       v => sendCmd(`lora cr ${v}`)));
     body.appendChild(mkNumber('TX power (dBm)', l.power, v => sendCmd(`lora power ${v}`), { min:0, max:22 }));
-  });
-
-  // ── SmartBeacon Custom ───────────────────
-  mkSection(cont, 'smartcustom', '🏃 SmartBeacon Custom Profile', body => {
-    body.appendChild(mkNumber('Slow rate (sec)',       sc.slowRate,        v => sendCmd(`smartcustom slowrate ${v}`)));
-    body.appendChild(mkNumber('Slow speed (km/h)',     sc.slowSpeed,       v => sendCmd(`smartcustom slowspeed ${v}`)));
-    body.appendChild(mkNumber('Fast rate (sec)',        sc.fastRate,        v => sendCmd(`smartcustom fastrate ${v}`)));
-    body.appendChild(mkNumber('Fast speed (km/h)',      sc.fastSpeed,       v => sendCmd(`smartcustom fastspeed ${v}`)));
-    body.appendChild(mkNumber('Min TX distance (m)',    sc.minTxDist,       v => sendCmd(`smartcustom mintxdist ${v}`)));
-    body.appendChild(mkNumber('Min delta (sec)',        sc.minDeltaBeacon,  v => sendCmd(`smartcustom mindelta ${v}`)));
-    body.appendChild(mkNumber('Turn min deg',           sc.turnMinDeg,      v => sendCmd(`smartcustom turnmindeg ${v}`)));
-    body.appendChild(mkNumber('Turn slope',             sc.turnSlope,       v => sendCmd(`smartcustom turnslope ${v}`)));
   });
 
   // ── Display ──────────────────────────────
@@ -822,13 +874,9 @@ function renderConfig() {
     body.appendChild(mkBool('Disable GPS (TNC-only)',  other.disableGPS,           v => sendCmd(`disablegps ${boolStr(v)}`)));
     body.appendChild(mkBool('Include altitude',        other.sendAltitude,         v => sendCmd(`sendalt ${boolStr(v)}`)));
 
-    body.appendChild(mkGroupTitle('Intervals & Paths'));
-    body.appendChild(mkText('APRS path',                  other.path,                  v => sendCmd(`path ${v}`)));
-    body.appendChild(mkText('Email',                      other.email,                 v => sendCmd(`email ${v}`)));
-    body.appendChild(mkNumber('Non-smart beacon rate (sec)', other.nonSmartBeaconRate, v => sendCmd(`nonsmartrate ${v}`)));
-    body.appendChild(mkNumber('Remember station (sec)',   other.rememberStationTime,   v => sendCmd(`rememberstation ${v}`)));
-    body.appendChild(mkNumber('Standing update (sec)',    other.standingUpdateTime,    v => sendCmd(`standingupdate ${v}`)));
-    body.appendChild(mkNumber('Comment every N beacons', other.sendCommentAfterXBeacons, v => sendCmd(`commentafter ${v}`)));
+    body.appendChild(mkGroupTitle('Other'));
+    body.appendChild(mkText(  'Email',                  other.email,             v => sendCmd(`email ${v}`)));
+    body.appendChild(mkNumber('Remember station (min)', other.rememberStationTime, v => sendCmd(`rememberstation ${v}`)));
   });
 }
 
