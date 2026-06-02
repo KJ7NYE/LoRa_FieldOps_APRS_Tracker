@@ -660,41 +660,38 @@ function renderConfig() {
   // ── Beacons ──────────────────────────────
   mkSection(cont, 'beacons', '📡 Beacons', body => {
     if (!beacons.length) { body.textContent = 'No beacons in config.'; return; }
-    mkTabStrip(body, beacons.map((b, i) => ({
-      label: `${i}: ${b.profileLabel || ('Bcn '+i)}`,
-      fillFn: pane => {
-        const S = cmds => sendSet(cmds);
-        const sel = () => `beacon select ${i}`;
-        pane.appendChild(mkText('Callsign',               b.callsign,        v => S([sel(), `beacon callsign ${v.toUpperCase()}`])));
-        pane.appendChild(mkText('Symbol (1 char)',         b.symbol,          v => S([sel(), `beacon symbol ${v}`]),    { maxlength: 1 }));
-        pane.appendChild(mkText('Overlay (1 char)',        b.overlay,         v => S([sel(), `beacon overlay ${v}`]),   { maxlength: 1 }));
-        pane.appendChild(mkNumber('Mic-E code (0–7)',      b.micE,            v => S([sel(), `beacon micE ${v}`]),      { min:0, max:7 }));
-        pane.appendChild(mkText('Comment',                 b.comment,         v => S([sel(), `beacon comment ${v}`])));
-        pane.appendChild(mkText('Status',                  b.status,          v => S([sel(), `beacon status ${v}`])));
-        pane.appendChild(mkText('Tactical callsign (≤9)', b.tacticalCallsign,v => S([sel(), `beacon tactical ${v}`]),  { maxlength: 9 }));
-        pane.appendChild(mkText('Profile label',           b.profileLabel,    v => S([sel(), `beacon label ${v}`])));
-        pane.appendChild(mkBool('SmartBeacon active',      b.smartBeaconActive,    v => S([sel(), `beacon smart ${boolStr(v)}`])));
-        pane.appendChild(mkSelect('SmartBeacon profile', b.smartBeaconSetting,
-          SMARTSET_LABELS.map((l,j) => ({ v: j, l })),    v => S([sel(), `beacon smartset ${v}`])));
-        pane.appendChild(mkBool('GPS eco mode',            b.gpsEcoMode,           v => S([sel(), `beacon gpseco ${boolStr(v)}`])));
-      }
-    })));
+    const b = beacons[0];
+    body.appendChild(mkText('Callsign',               b.callsign,        v => sendCmd(`beacon callsign ${v.toUpperCase()}`)));
+    body.appendChild(mkText('Symbol (1 char)',         b.symbol,          v => sendCmd(`beacon symbol ${v}`),    { maxlength: 1 }));
+    body.appendChild(mkText('Overlay (1 char)',        b.overlay,         v => sendCmd(`beacon overlay ${v}`),   { maxlength: 1 }));
+    body.appendChild(mkNumber('Mic-E code (0–7)',      b.micE,            v => sendCmd(`beacon micE ${v}`),      { min:0, max:7 }));
+    body.appendChild(mkText('Comment',                 b.comment,         v => sendCmd(`beacon comment ${v}`)));
+    body.appendChild(mkText('Status',                  b.status,          v => sendCmd(`beacon status ${v}`)));
+    body.appendChild(mkText('Tactical callsign (≤9)', b.tacticalCallsign,v => sendCmd(`beacon tactical ${v}`),  { maxlength: 9 }));
+    body.appendChild(mkText('Profile label',           b.profileLabel,    v => sendCmd(`beacon label ${v}`)));
+    body.appendChild(mkBool('SmartBeacon active',      b.smartBeaconActive,    v => sendCmd(`beacon smart ${boolStr(v)}`)));
+    body.appendChild(mkSelect('SmartBeacon profile', b.smartBeaconSetting,
+      SMARTSET_LABELS.map((l,j) => ({ v: j, l })),    v => sendCmd(`beacon smartset ${v}`)));
+    body.appendChild(mkBool('GPS eco mode',            b.gpsEcoMode,           v => sendCmd(`beacon gpseco ${boolStr(v)}`)));
   });
 
   // ── LoRa ─────────────────────────────────
   mkSection(cont, 'lora', '📻 LoRa', body => {
-    if (!loras.length) { body.textContent = 'No LoRa regions in config.'; return; }
-    mkTabStrip(body, loras.map((l, i) => ({
-      label: LORA_REGIONS[i] || String(i),
-      fillFn: pane => {
-        const sel = () => `lora select ${i}`;
-        pane.appendChild(mkNumber('Frequency (Hz)',          l.frequency,      v => sendSet([sel(), `lora freq ${v}`])));
-        pane.appendChild(mkNumber('Spreading factor (7–12)', l.spreadingFactor,v => sendSet([sel(), `lora sf ${v}`]),   { min:7, max:12 }));
-        pane.appendChild(mkNumber('Bandwidth (Hz)',          l.signalBandwidth,v => sendSet([sel(), `lora bw ${v}`])));
-        pane.appendChild(mkNumber('Coding rate denom (5–8)', l.codingRate4,   v => sendSet([sel(), `lora cr ${v}`]),   { min:5, max:8 }));
-        pane.appendChild(mkNumber('TX power (dBm)',          l.power,         v => sendSet([sel(), `lora power ${v}`]),{ min:0, max:22 }));
-      }
-    })));
+    if (!loras.length) { body.textContent = 'No LoRa config.'; return; }
+    const l = loras[0];
+    body.appendChild(mkNumber('Frequency (Hz)', l.frequency, v => sendCmd(`lora freq ${v}`)));
+    body.appendChild(mkSelect('Spreading Factor', l.spreadingFactor,
+      [7,8,9,10,11,12].map(n => ({ v: n, l: `SF${n}` })),
+      v => sendCmd(`lora sf ${v}`)));
+    body.appendChild(mkSelect('Bandwidth', l.signalBandwidth,
+      [{ v: 500000, l: '500 kHz' }, { v: 250000, l: '250 kHz' },
+       { v: 125000, l: '125 kHz' }, { v:  62500, l: '62.5 kHz' },
+       { v:  31250, l: '31.25 kHz' }],
+      v => sendCmd(`lora bw ${v}`)));
+    body.appendChild(mkSelect('Coding Rate', l.codingRate4,
+      [5,6,7,8].map(n => ({ v: n, l: `4/${n}` })),
+      v => sendCmd(`lora cr ${v}`)));
+    body.appendChild(mkNumber('TX power (dBm)', l.power, v => sendCmd(`lora power ${v}`), { min:0, max:22 }));
   });
 
   // ── SmartBeacon Custom ───────────────────
@@ -767,9 +764,48 @@ function renderConfig() {
     body.appendChild(mkNumber('Post-delay (ms)', ptt.postDelay,v => sendCmd(`ptt postdelay ${v}`)));
   });
 
+  // ── Device Role & Network ────────────────
+  const roleObj  = { deviceRole: config.deviceRole ?? 0, gpsSource: config.gpsSource ?? 0 };
+  const fp       = config.fixedPosition || {};
+  const wifiSTA  = config.wifiSTA       || {};
+  const aprsIS   = config.aprsIS        || {};
+  const tcpKISS  = config.tcpKISS       || {};
+
+  mkSection(cont, 'role', '🌐 Device Role & Network', body => {
+    body.appendChild(mkGroupTitle('Role & GPS Source'));
+    body.appendChild(mkSelect('Device role', roleObj.deviceRole,
+      [{ v:0, l:'0 — Tracker' }, { v:1, l:'1 — iGate' }, { v:2, l:'2 — Digipeater' }],
+      v => sendCmd(`role set ${['tracker','igate','digipeater'][+v] || 'tracker'}`)));
+    body.appendChild(mkSelect('GPS source', roleObj.gpsSource,
+      [{ v:0, l:'0 — Internal GPS' }, { v:1, l:'1 — Fixed Position' },
+       { v:2, l:'2 — External Serial' }, { v:3, l:'3 — External BLE' }],
+      v => sendCmd(`role gps ${['internal','fixed','externserial','externble'][+v] || 'internal'}`)));
+
+    body.appendChild(mkGroupTitle('Fixed Position'));
+    body.appendChild(mkNumber('Latitude (decimal °)',  fp.latitude,   v => sendCmd(`fixed latitude ${v}`),  { step: '0.000001' }));
+    body.appendChild(mkNumber('Longitude (decimal °)', fp.longitude,  v => sendCmd(`fixed longitude ${v}`), { step: '0.000001' }));
+    body.appendChild(mkNumber('Elevation (m)',          fp.elevation,  v => sendCmd(`fixed elevation ${v}`), { step: '0.1' }));
+
+    body.appendChild(mkGroupTitle('WiFi STA (for iGate)'));
+    body.appendChild(mkBool('WiFi STA enabled', wifiSTA.enabled,  v => sendCmd(`wifista ${boolStr(v)}`)));
+    body.appendChild(mkText('SSID',             wifiSTA.ssid,     v => sendCmd(`wifista ssid ${v}`)));
+    body.appendChild(mkPassword('Password',     wifiSTA.password, v => sendCmd(`wifista password ${v}`)));
+
+    body.appendChild(mkGroupTitle('APRS-IS'));
+    body.appendChild(mkText(  'Server',   aprsIS.server,   v => sendCmd(`aprsiss server ${v}`)));
+    body.appendChild(mkNumber('Port',     aprsIS.port,     v => sendCmd(`aprsiss port ${v}`),     { min:1, max:65535 }));
+    body.appendChild(mkText(  'Passcode', aprsIS.passcode, v => sendCmd(`aprsiss passcode ${v}`)));
+    body.appendChild(mkText(  'Filter',   aprsIS.filter,   v => sendCmd(`aprsiss filter ${v}`)));
+
+    body.appendChild(mkGroupTitle('TCP KISS Server'));
+    body.appendChild(mkBool(  'TCP KISS enabled',  tcpKISS.enabled,       v => sendCmd(`tcpkiss ${boolStr(v)}`)));
+    body.appendChild(mkNumber('Port',              tcpKISS.port,          v => sendCmd(`tcpkiss port ${v}`), { min:1, max:65535 }));
+    body.appendChild(mkBool(  'USB Serial KISS',   tcpKISS.serialEnabled, v => sendCmd(`tcpkiss serial ${boolStr(v)}`)));
+  });
+
   // ── WiFi & Winlink ───────────────────────
-  mkSection(cont, 'wifi', '📶 WiFi & Winlink', body => {
-    body.appendChild(mkGroupTitle('WiFi AP'));
+  mkSection(cont, 'wifi', '📶 WiFi AP & Winlink', body => {
+    body.appendChild(mkGroupTitle('WiFi AP (web config)'));
     body.appendChild(mkBool('AP active (persistent)',  wifi.active,     v => sendCmd(`wifi ${boolStr(v)}`)));
     body.appendChild(mkBool('30-sec boot window',      wifi.bootWindow, v => sendCmd(`wifi window ${boolStr(v)}`)));
     body.appendChild(mkPassword('AP password',         wifi.password,   v => sendCmd(`wifi password ${v}`)));

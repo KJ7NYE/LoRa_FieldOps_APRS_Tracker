@@ -28,11 +28,12 @@ extern bool             gpsIsActive;
 
 // ── Globals defined in this TU ────────────────────────────────────────────────
 // (referenced by smartbeacon_utils.cpp and gps_utils.cpp via extern)
+// currentHeading / previousHeading are defined in gps_utils.cpp.
 
 bool        sendStandingUpdate  = false;
 bool        smartBeaconActive   = false;
-double      currentHeading      = 0.0;
-double      previousHeading     = 0.0;
+extern double currentHeading;
+extern double previousHeading;
 double      lastTxLat           = 0.0;
 double      lastTxLng           = 0.0;
 double      lastTxDistance      = 0.0;

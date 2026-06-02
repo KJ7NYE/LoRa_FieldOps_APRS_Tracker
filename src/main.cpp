@@ -9,6 +9,7 @@
 #include <BluetoothSerial.h>
 #endif
 #include <Arduino.h>
+#include "logger.h"
 #include <TinyGPS++.h>
 #include <APRSPacketLib.h>
 #include "configuration.h"
@@ -41,8 +42,8 @@
 #endif
 
 
-const String versionDate   = "2026-06-02";
-const String versionNumber = "3.0.0";
+String versionDate   = "2026-06-02";
+String versionNumber = "3.0.0";
 
 Configuration Config;
 
@@ -64,14 +65,19 @@ uint32_t lastBeaconCheck    = 0;  // SmartBeacon interval ticker
 // GPS / beacon state — shared via extern across TUs.
 // gpsIsActive is defined in gps_utils.cpp (starts false, set true in GPS_Utils::setup).
 // sendStandingUpdate is defined in station_utils.cpp.
+// gpsShouldSleep is defined in sleep_utils.cpp.
+// disableGPS is defined in power_utils.cpp.
 bool     sendUpdate         = true;
-bool     gpsShouldSleep     = false;
-bool     disableGPS         = false;
+extern bool gpsShouldSleep;
+extern bool disableGPS;
 extern bool gpsIsActive;
 
 // currentBeacon pointer — always points to beacons[0] in this single-profile build.
 // Shared with smartbeacon_utils.cpp, gps_utils.cpp, station_utils.cpp.
 Beacon*      currentBeacon    = nullptr;  // initialized in setup() after Config loads
+// currentLoRaType pointer — always points to loraTypes[0].
+// Shared with lora_utils.cpp.
+LoraType*    currentLoRaType  = nullptr;  // initialized in setup() after Config loads
 uint32_t     txInterval       = 60000L;   // SmartBeacon TX interval (ms), updated by smartbeacon_utils
 bool         miceActive       = false;    // set true if beacons[0].micE is valid
 
@@ -98,9 +104,10 @@ void setup() {
         // Config constructor handles SPIFFS init on ESP32
     #endif
 
-    // Set currentBeacon pointer after Config is loaded.
-    currentBeacon = &Config.beacons[0];
-    miceActive    = APRSPacketLib::validateMicE(currentBeacon->micE);
+    // Set currentBeacon and currentLoRaType pointers after Config is loaded.
+    currentBeacon   = &Config.beacons[0];
+    currentLoRaType = &Config.loraTypes[0];
+    miceActive      = APRSPacketLib::validateMicE(currentBeacon->micE);
 
     POWER_Utils::setup();
     displaySetup();
