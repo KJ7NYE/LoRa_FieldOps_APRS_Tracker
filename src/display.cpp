@@ -464,15 +464,12 @@ void displayStatus(const String& callsign, const String& tactical,
             sprite.pushSprite(0, 0);
         #endif
     #else
-        // OLED 128×64 layout:
         // ── OLED 128×64 role-aware layout ────────────────────────────────────────
-        // text×2 (12w×16h px, 10 chars/line) for header, role, and line 4.
-        // text×1 ( 6w× 8h px, 21 chars/line) for line 3 — fits full coords and IPs.
-        //
         //   y=0  : callsign / tactical — bold header (text×2)
         //   y=16 : separator
         //   y=17 : device role (text×2)                          — always text×2
         //   y=37 : role-specific detail (text×1, centred in slot) — GPS / IP / status
+        //          iGate: drawn twice (x=0 + x=1) for bold strokes; never clips
         //   y=49 : battery or last-heard 4-s flash (text×2)
         //
         // Role → line 3 / line 4:
@@ -569,16 +566,26 @@ void displayStatus(const String& callsign, const String& tactical,
             line4disp = showCallsign ? _oledLastHeard : batt;
         }
 
-        // Line 3 at text×1 (6 w × 8 h px) — 21 chars/line handles full coords and IPs.
-        // Vertically centred in the 16-px slot (y=33..48): offset = 33+(16-8)/2 = 37.
-        display.setTextSize(1);
-        display.setCursor(0, 37);
-        display.print(line3disp);
-
-        // Line 4 at text×2.
-        display.setTextSize(2);
-        display.setCursor(0, 49);
-        display.print(line4disp);
+        // iGate: IP bold text×1 (drawn twice at x=0 and x=1 to widen strokes, same as
+        //        callsign header trick), last-heard/battery text×2 on y=49.
+        // All other roles: IP/coords text×1 centred at y=37, battery text×2 on y=49.
+        if (role.startsWith("iGate")) {
+            display.setTextSize(1);
+            display.setCursor(0, 37);  display.print(line3disp);
+            display.setCursor(1, 37);  display.print(line3disp);
+            display.setTextSize(2);
+            display.setCursor(0, 49);
+            display.print(line4disp);
+        } else {
+            // text×1 (6 w × 8 h px) — 21 chars/line handles full coords and IPs.
+            // Vertically centred in the 16-px slot (y=33..48): offset = 33+(16-8)/2 = 37.
+            display.setTextSize(1);
+            display.setCursor(0, 37);
+            display.print(line3disp);
+            display.setTextSize(2);
+            display.setCursor(0, 49);
+            display.print(line4disp);
+        }
 
         display.display();
     #endif
