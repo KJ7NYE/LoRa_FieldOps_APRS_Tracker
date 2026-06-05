@@ -322,6 +322,7 @@ let cmdBusy      = false;
 let cmdResolve   = null;
 let cmdTimer     = null;
 let streamBuf    = '';       // accumulates incoming bytes for prompt detection
+let bannerBuf    = '';       // rolling buffer for mode-banner detection (handles split chunks)
 
 async function sendCmd(cmd) {
   return new Promise(resolve => {
@@ -422,15 +423,23 @@ function onData(text) {
   _handleExportChunk(text);
 
   // ── Firmware mode-banner detection ──────────────────────────────────
-  // These strings come from serial_setup.cpp banners on mode transitions.
-  if (text.includes('SETUP MODE ACTIVE')) {
+  // Banner strings can arrive split across multiple Web Serial chunks, so we
+  // accumulate the last 256 bytes in a rolling buffer and search that instead
+  // of the raw per-chunk text.  Buffer is cleared after a match so a single
+  // mode transition doesn't fire twice.
+  bannerBuf = (bannerBuf + text).slice(-256);
+
+  if (bannerBuf.includes('SETUP MODE ACTIVE')) {
+    bannerBuf = '';
     serialMode = 'setup';
     updateModeButtons();
-  } else if (text.includes('[LOG] Serial log output active')) {
+  } else if (bannerBuf.includes('[LOG] Serial log output active')) {
+    bannerBuf = '';
     serialMode = 'log';
     updateModeButtons();
-  } else if (text.includes('Returning to KISS TNC mode') ||
-             text.includes('[KISS TNC] Type')) {
+  } else if (bannerBuf.includes('Returning to KISS TNC mode') ||
+             bannerBuf.includes('[KISS TNC] Type')) {
+    bannerBuf = '';
     serialMode = 'kiss';
     updateModeButtons();
   }
@@ -504,6 +513,7 @@ function resetLeftPanel() {
 function _cleanup() {
   connected  = false;
   serialMode = 'kiss';
+  bannerBuf  = '';
   try { reader && reader.cancel(); }  catch {}
   try { writer && writer.close(); }   catch {}
   try { port   && port.close(); }     catch {}
@@ -529,6 +539,7 @@ const _delay = ms => new Promise(r => setTimeout(r, ms));
 //    • 'setup' (KISS trigger) → firmware shows banner + \n> → sendCmd() works
 //    • 'log'   (KISS trigger) → firmware shows banner, NO \n> → serialWrite only
 //    • 'exit'  (SETUP/LOG cmd) → firmware shows message, NO \n> → serialWrite only
+//    • 'discard' (SETUP cmd)  → clears dirty flag so 'exit' succeeds; ignored in KISS/LOG
 // ─────────────────────────────────────────────
 async function switchToMode(target) {
   if (!connected) return;
@@ -541,7 +552,11 @@ async function switchToMode(target) {
   }
   cmdQueue.length = 0;
 
-  // Step 1 — always force-exit to KISS (safe from any device state)
+  // Step 1 — force-exit to KISS from any device state.
+  //   'discard' first: clears dirty flag in SETUP (so exit works); no-op in KISS/LOG.
+  //   'exit' then:     exits SETUP or LOG to KISS; silently ignored in KISS mode.
+  await serialWrite('discard\r\n');
+  await _delay(150);
   await serialWrite('exit\r\n');
   serialMode = 'kiss';
   updateModeButtons();
@@ -552,11 +567,19 @@ async function switchToMode(target) {
     return;
   }
 
-  // Step 2 — enter the requested mode from KISS
+  // Step 2 — enter the requested mode from KISS.
   if (target === 'setup') {
-    await sendCmd('setup');   // waits for \n> prompt after the setup banner
-    await _delay(200);
-    if (serialMode === 'setup') await readConfig();
+    // sendCmd waits for the \n> prompt.  That prompt is ONLY printed from setup
+    // mode, so a non-empty response is proof we are in setup mode — no banner
+    // text parsing needed (avoids split-chunk / race conditions entirely).
+    const resp = await sendCmd('setup');
+    if (resp) {
+      serialMode = 'setup';
+      updateModeButtons();
+      await readConfig();
+    } else {
+      logErr('Timeout entering setup mode — check device connection');
+    }
   } else if (target === 'log') {
     resetLeftPanel();
     logSent('log');
@@ -1202,8 +1225,9 @@ function renderConfig() {
       row.appendChild(lbl); row.appendChild(inp);
       body.appendChild(row);
     }
-    body.appendChild(mkBool('Rotate 180°',   disp.turn180,    v => sendCmd(`display turn180 ${boolStr(v)}`)));
-    body.appendChild(mkBool('LED indicator', disp.ledEnabled, v => sendCmd(`display led ${boolStr(v)}`)));
+    body.appendChild(mkBool('Rotate 180°',      disp.turn180,       v => sendCmd(`display turn180 ${boolStr(v)}`)));
+    body.appendChild(mkBool('Invert display',   disp.invertDisplay, v => sendCmd(`display invert ${boolStr(v)}`)));
+    body.appendChild(mkBool('LED indicator',    disp.ledEnabled,    v => sendCmd(`display led ${boolStr(v)}`)));
   });
 
   // ── Bluetooth ────────────────────────────

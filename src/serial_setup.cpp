@@ -14,6 +14,7 @@
 #include <logger.h>
 #include "serial_setup.h"
 #include "configuration.h"
+#include "display.h"
 #include "smartbeacon_utils.h"
 #include "kiss_utils.h"
 #include "lora_utils.h"
@@ -251,6 +252,7 @@ namespace SERIAL_Setup {
             kv("eco    ", Config.display.ecoMode);
             kv("timeout", Config.display.timeout);
             kv("turn180", Config.display.turn180);
+            kv("invert ", Config.display.invertDisplay);
             kv("led    ", Config.display.ledEnabled);
         }
         if (section == "" || section == "bt") {
@@ -452,11 +454,12 @@ namespace SERIAL_Setup {
     }
 
     static void cmdDisplay(String* tk, int n) {
-        if (n < 3) { err("display <eco|turn180|led|timeout> <value>"); return; }
+        if (n < 3) { err("display <eco|turn180|invert|led|timeout> <value>"); return; }
         const String& sub = tk[1];
-        if      (sub == "eco")     applyBool(tk[2], Config.display.ecoMode,    "display.eco");
-        else if (sub == "turn180") applyBool(tk[2], Config.display.turn180,    "display.turn180");
-        else if (sub == "led")    applyBool(tk[2], Config.display.ledEnabled, "display.led");
+        if      (sub == "eco")     applyBool(tk[2], Config.display.ecoMode,       "display.eco");
+        else if (sub == "turn180") applyBool(tk[2], Config.display.turn180,       "display.turn180");
+        else if (sub == "invert")  { bool v = (tk[2] == "on" || tk[2] == "1" || tk[2] == "true"); displaySetInvert(v); ok("display.invert = " + String(v ? "on" : "off")); }
+        else if (sub == "led")     applyBool(tk[2], Config.display.ledEnabled,    "display.led");
         else if (sub == "timeout") { Config.display.timeout = tk[2].toInt(); ok("display.timeout = " + String(Config.display.timeout)); }
         else err("unknown display subcommand: " + sub);
     }

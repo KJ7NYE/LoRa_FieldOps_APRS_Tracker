@@ -20,14 +20,14 @@
                     <div class="collapse navbar-collapse" id="navbarMain">
                         <ul class="navbar-nav me-auto">
                             <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false">Backup</a>
+                                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Backup</a>
                                 <div class="dropdown-menu">
                                     <a class="dropdown-item" href="#" id="backup">Download</a>
                                     <a class="dropdown-item" href="#" id="restore">Restore</a>
                                 </div>
                             </li>
                             <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false">Device</a>
+                                <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button">Device</a>
                                 <div class="dropdown-menu">
                                     <a class="dropdown-item" href="#" id="reboot">Reboot</a>
                                 </div>
@@ -49,7 +49,7 @@
                             <div class="accordion-item">
                                 <h2 class="accordion-header">
                                     <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#beaconSection">
-                                        Beacon
+                                        📡 Beacon
                                     </button>
                                 </h2>
                                 <div id="beaconSection" class="accordion-collapse collapse show" data-bs-parent="#configAccordion">
@@ -58,6 +58,10 @@
                                             <div class="col-md-4">
                                                 <label class="form-label" for="beacons.0.callsign">Callsign</label>
                                                 <input type="text" class="form-control" id="beacons.0.callsign" name="beacons.0.callsign" maxlength="10" />
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label" for="beacons.0.tacticalCallsign">Tactical callsign <span class="text-muted fw-normal small">(optional — sends as object)</span></label>
+                                                <input type="text" class="form-control" id="beacons.0.tacticalCallsign" name="beacons.0.tacticalCallsign" maxlength="9" />
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label" for="beacons.0.symbol">Symbol</label>
@@ -68,158 +72,100 @@
                                                 <input type="text" class="form-control" id="beacons.0.overlay" name="beacons.0.overlay" maxlength="1" />
                                             </div>
                                             <div class="col-md-4">
-                                                <label class="form-label" for="beacons.0.micE">Mic-E (leave blank for standard)</label>
+                                                <label class="form-label" for="beacons.0.micE">Mic-E <span class="text-muted fw-normal small">(leave blank for standard)</span></label>
                                                 <input type="text" class="form-control" id="beacons.0.micE" name="beacons.0.micE" maxlength="3" />
                                             </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label" for="beacons.0.comment">Comment</label>
+                                            <div class="col-md-4">
+                                                <label class="form-label" for="beacons.0.comment">Comment <span class="text-muted fw-normal small">(≤43 chars)</span></label>
                                                 <input type="text" class="form-control" id="beacons.0.comment" name="beacons.0.comment" maxlength="43" />
                                             </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label" for="beacons.0.tacticalCallsign">Tactical Callsign (optional, sends as object)</label>
-                                                <input type="text" class="form-control" id="beacons.0.tacticalCallsign" name="beacons.0.tacticalCallsign" maxlength="9" />
+                                            <div class="col-md-4">
+                                                <label class="form-label" for="beacons.0.status">Status <span class="text-muted fw-normal small">(≤43 chars, long-press button)</span></label>
+                                                <input type="text" class="form-control" id="beacons.0.status" name="beacons.0.status" maxlength="43" />
                                             </div>
-                                            <div class="col-md-6 d-flex align-items-end">
-                                                <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" id="beacons.0.smartBeaconActive" name="beacons.0.smartBeaconActive" />
-                                                    <label class="form-check-label" for="beacons.0.smartBeaconActive">SmartBeacon active</label>
+                                            <div class="col-md-6">
+                                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                                    <div class="form-check form-switch mb-0">
+                                                        <input class="form-check-input" type="checkbox" id="beacons.0.smartBeaconActive" name="beacons.0.smartBeaconActive" />
+                                                        <label class="form-check-label" for="beacons.0.smartBeaconActive">SmartBeacon active</label>
+                                                    </div>
+                                                    <select class="form-select form-select-sm" style="width:auto" id="beacons.0.smartBeaconSetting" name="beacons.0.smartBeaconSetting">
+                                                        <option value="0">Runner</option>
+                                                        <option value="1">Bike</option>
+                                                        <option value="2">Car</option>
+                                                        <option value="3">Custom</option>
+                                                    </select>
                                                 </div>
                                             </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label" for="beacons.0.smartBeaconSetting">SmartBeacon Preset</label>
-                                                <select class="form-select" id="beacons.0.smartBeaconSetting" name="beacons.0.smartBeaconSetting">
-                                                    <option value="0">Runner</option>
-                                                    <option value="1">Bike</option>
-                                                    <option value="2">Car</option>
-                                                    <option value="3">Custom</option>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="beaconPath">Beacon TX path</label>
+                                                <select class="form-select" id="beaconPath" name="beaconPath">
+                                                    <option value="WIDE1-1">WIDE1-1  (1 hop)</option>
+                                                    <option value="WIDE1-1,WIDE2-1">WIDE1-1,WIDE2-1  (2 hops)</option>
+                                                    <option value="WIDE1-1,WIDE2-2">WIDE1-1,WIDE2-2  (3 hops)</option>
                                                 </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="nonSmartBeaconRate">Non-smart rate (min)</label>
+                                                <input type="number" class="form-control" id="nonSmartBeaconRate" name="nonSmartBeaconRate" min="1" />
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="sendCommentAfterXBeacons">Comment every N beacons</label>
+                                                <input type="number" class="form-control" id="sendCommentAfterXBeacons" name="sendCommentAfterXBeacons" min="1" />
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- 2. Device Role & Network -->
+                            <!-- 2. SmartBeacon Custom -->
                             <div class="accordion-item">
                                 <h2 class="accordion-header">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#roleSection">
-                                        Device Role &amp; Network
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sbCustomSection">
+                                        SmartBeacon Custom
                                     </button>
                                 </h2>
-                                <div id="roleSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
+                                <div id="sbCustomSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
                                     <div class="accordion-body">
                                         <div class="row g-3">
-                                            <div class="col-md-4">
-                                                <label class="form-label" for="deviceRole">Device Role</label>
-                                                <select class="form-select" id="deviceRole" name="deviceRole">
-                                                    <option value="0">Tracker</option>
-                                                    <option value="1">iGate</option>
-                                                    <option value="2">Digipeater</option>
-                                                </select>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.slowRate">Slow rate (s)</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.slowRate" name="customSmartBeacon.slowRate" />
                                             </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label" for="gpsSource">GPS Source</label>
-                                                <select class="form-select" id="gpsSource" name="gpsSource">
-                                                    <option value="0">0 — Internal GPS</option>
-                                                    <option value="1">1 — Fixed Position</option>
-                                                    <option value="2">2 — None (TNC/relay only)</option>
-                                                </select>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.slowSpeed">Slow speed (km/h)</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.slowSpeed" name="customSmartBeacon.slowSpeed" />
                                             </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label" for="digiMode">Digipeat Mode</label>
-                                                <select class="form-select" id="digiMode" name="digiMode">
-                                                    <option value="0">Off</option>
-                                                    <option value="2">WIDE1 only</option>
-                                                    <option value="3">WIDE1 + WIDE2</option>
-                                                </select>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.fastRate">Fast rate (s)</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.fastRate" name="customSmartBeacon.fastRate" />
                                             </div>
-
-                                            <!-- Fixed position (shown when gpsSource = Fixed) -->
-                                            <div id="fixedPosFields" class="col-12" style="display:none">
-                                                <div class="row g-3">
-                                                    <div class="col-md-4">
-                                                        <label class="form-label" for="fixedPosition.latitude">Latitude</label>
-                                                        <input type="number" step="0.000001" class="form-control" id="fixedPosition.latitude" name="fixedPosition.latitude" />
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label" for="fixedPosition.longitude">Longitude</label>
-                                                        <input type="number" step="0.000001" class="form-control" id="fixedPosition.longitude" name="fixedPosition.longitude" />
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label" for="fixedPosition.elevation">Elevation (m)</label>
-                                                        <input type="number" step="0.1" class="form-control" id="fixedPosition.elevation" name="fixedPosition.elevation" />
-                                                    </div>
-                                                </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.fastSpeed">Fast speed (km/h)</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.fastSpeed" name="customSmartBeacon.fastSpeed" />
                                             </div>
-
-                                            <!-- WiFi AP -->
-                                            <div class="col-12"><h6>WiFi AP (config mode)</h6>
-                                                <small class="text-muted">AP starts when callsign is NOCALL-7 or the USR button is held at boot.</small>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.minTxDist">Min TX distance (m)</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.minTxDist" name="customSmartBeacon.minTxDist" />
                                             </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label" for="wifiAP.password">AP Password</label>
-                                                <input type="text" class="form-control" id="wifiAP.password" name="wifiAP.password" />
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.minDeltaBeacon">Min delta beacon (s)</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.minDeltaBeacon" name="customSmartBeacon.minDeltaBeacon" />
                                             </div>
-
-                                            <!-- WiFi STA -->
-                                            <div class="col-12"><h6>WiFi STA</h6></div>
-                                            <div class="col-12">
-                                                <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" id="wifiSTA.enabled" name="wifiSTA.enabled" />
-                                                    <label class="form-check-label" for="wifiSTA.enabled">Connect to existing network</label>
-                                                </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.turnMinDeg">Turn min deg</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.turnMinDeg" name="customSmartBeacon.turnMinDeg" />
                                             </div>
-                                            <div class="col-md-5">
-                                                <label class="form-label" for="wifiSTA.ssid">WiFi SSID</label>
-                                                <input type="text" class="form-control" id="wifiSTA.ssid" name="wifiSTA.ssid" />
-                                            </div>
-                                            <div class="col-md-5">
-                                                <label class="form-label" for="wifiSTA.password">WiFi Password</label>
-                                                <input type="password" class="form-control" id="wifiSTA.password" name="wifiSTA.password" />
-                                            </div>
-
-                                            <!-- APRS-IS (shown when role = iGate) -->
-                                            <div id="aprsIsFields" class="col-12" style="display:none">
-                                                <hr /><h6>APRS-IS</h6>
-                                                <div class="row g-3">
-                                                    <div class="col-md-5">
-                                                        <label class="form-label" for="aprsIS.server">Server</label>
-                                                        <input type="text" class="form-control" id="aprsIS.server" name="aprsIS.server" />
-                                                    </div>
-                                                    <div class="col-md-2">
-                                                        <label class="form-label" for="aprsIS.port">Port</label>
-                                                        <input type="number" class="form-control" id="aprsIS.port" name="aprsIS.port" />
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <label class="form-label" for="aprsIS.passcode">Passcode <span class="text-muted fw-normal small">(override)</span></label>
-                                                        <input type="text" class="form-control" id="aprsIS.passcode" name="aprsIS.passcode" placeholder="auto (derived from callsign)" />
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label" for="aprsIS.filter">Filter</label>
-                                                        <input type="text" class="form-control" id="aprsIS.filter" name="aprsIS.filter" />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- TCP KISS -->
-                                            <div id="tcpKissFields" class="col-12" style="display:none">
-                                                <hr /><h6>TCP KISS Server</h6>
-                                                <div class="row g-3">
-                                                    <div class="col-md-3">
-                                                        <label class="form-label" for="tcpKISS.port">TCP Port</label>
-                                                        <input type="number" class="form-control" id="tcpKISS.port" name="tcpKISS.port" />
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <p class="form-text mt-4 mb-0">TCP KISS server starts automatically when WiFi STA is connected.<br>USB serial is always KISS TNC. Type <code>setup</code> or <code>log</code> to switch modes.</p>
-                                                    </div>
-                                                </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.turnSlope">Turn slope</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.turnSlope" name="customSmartBeacon.turnSlope" />
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- 3. LoRa -->
+                            <!-- 3. LoRa Radio -->
                             <div class="accordion-item">
                                 <h2 class="accordion-header">
                                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#loraSection">
@@ -234,7 +180,7 @@
                                                 <input type="number" class="form-control" id="lora.0.frequency" name="lora.0.frequency" />
                                             </div>
                                             <div class="col-md-2">
-                                                <label class="form-label" for="lora.0.spreadingFactor">Spreading Factor</label>
+                                                <label class="form-label" for="lora.0.spreadingFactor">Spreading factor</label>
                                                 <select class="form-select" id="lora.0.spreadingFactor" name="lora.0.spreadingFactor">
                                                     <option value="7">SF7</option>
                                                     <option value="8">SF8</option>
@@ -255,7 +201,7 @@
                                                 </select>
                                             </div>
                                             <div class="col-md-2">
-                                                <label class="form-label" for="lora.0.codingRate4">Coding Rate</label>
+                                                <label class="form-label" for="lora.0.codingRate4">Coding rate</label>
                                                 <select class="form-select" id="lora.0.codingRate4" name="lora.0.codingRate4">
                                                     <option value="5">4/5</option>
                                                     <option value="6">4/6</option>
@@ -264,7 +210,7 @@
                                                 </select>
                                             </div>
                                             <div class="col-md-2">
-                                                <label class="form-label" for="lora.0.power">TX Power (dBm)</label>
+                                                <label class="form-label" for="lora.0.power">TX power (dBm)</label>
                                                 <input type="number" class="form-control" id="lora.0.power" name="lora.0.power" min="2" max="22" />
                                             </div>
                                         </div>
@@ -272,80 +218,39 @@
                                 </div>
                             </div>
 
-                            <!-- 4. SmartBeacon Custom -->
-                            <div class="accordion-item">
-                                <h2 class="accordion-header">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sbCustomSection">
-                                        SmartBeacon Custom
-                                    </button>
-                                </h2>
-                                <div id="sbCustomSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
-                                    <div class="accordion-body">
-                                        <div class="row g-3">
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="customSmartBeacon.slowRate">Slow Rate (s)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.slowRate" name="customSmartBeacon.slowRate" />
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="customSmartBeacon.slowSpeed">Slow Speed (km/h)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.slowSpeed" name="customSmartBeacon.slowSpeed" />
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="customSmartBeacon.fastRate">Fast Rate (s)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.fastRate" name="customSmartBeacon.fastRate" />
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="customSmartBeacon.fastSpeed">Fast Speed (km/h)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.fastSpeed" name="customSmartBeacon.fastSpeed" />
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="customSmartBeacon.minTxDist">Min TX Distance (m)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.minTxDist" name="customSmartBeacon.minTxDist" />
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="customSmartBeacon.minDeltaBeacon">Min Delta Beacon (s)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.minDeltaBeacon" name="customSmartBeacon.minDeltaBeacon" />
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="customSmartBeacon.turnMinDeg">Turn Min Deg</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.turnMinDeg" name="customSmartBeacon.turnMinDeg" />
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="customSmartBeacon.turnSlope">Turn Slope</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.turnSlope" name="customSmartBeacon.turnSlope" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 5. Display -->
+                            <!-- 4. Display -->
                             <div class="accordion-item">
                                 <h2 class="accordion-header">
                                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#displaySection">
-                                        Display
+                                        🖥️ Display
                                     </button>
                                 </h2>
                                 <div id="displaySection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
                                     <div class="accordion-body">
                                         <div class="row g-3">
-                                            <div class="col-md-4">
-                                                <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" id="display.ecoMode" name="display.ecoMode" />
-                                                    <label class="form-check-label" for="display.ecoMode">Eco Mode (auto-off)</label>
+                                            <div class="col-12">
+                                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                                    <div class="form-check form-switch mb-0">
+                                                        <input class="form-check-input" type="checkbox" id="display.ecoMode" name="display.ecoMode" />
+                                                        <label class="form-check-label" for="display.ecoMode">Eco mode</label>
+                                                    </div>
+                                                    <label class="text-muted small mb-0">Timeout (s)</label>
+                                                    <input type="number" class="form-control form-control-sm" style="width:5rem" id="display.timeout" name="display.timeout" min="1" max="3600" />
                                                 </div>
                                             </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label" for="display.timeout">Timeout (min)</label>
-                                                <input type="number" class="form-control" id="display.timeout" name="display.timeout" min="1" max="60" />
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="form-check form-switch mt-4">
+                                            <div class="col-md-3">
+                                                <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="display.turn180" name="display.turn180" />
                                                     <label class="form-check-label" for="display.turn180">Rotate 180°</label>
                                                 </div>
                                             </div>
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="display.invertDisplay" name="display.invertDisplay" />
+                                                    <label class="form-check-label" for="display.invertDisplay">Invert display</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
                                                 <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="display.ledEnabled" name="display.ledEnabled" />
                                                     <label class="form-check-label" for="display.ledEnabled">LED indicator</label>
@@ -356,35 +261,28 @@
                                 </div>
                             </div>
 
-                            <!-- 6. Bluetooth -->
+                            <!-- 5. Bluetooth -->
                             <div class="accordion-item">
                                 <h2 class="accordion-header">
                                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#btSection">
-                                        Bluetooth
+                                        🔵 Bluetooth
                                     </button>
                                 </h2>
                                 <div id="btSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
                                     <div class="accordion-body">
-                                        <div class="row g-3">
-                                            <div class="col-md-4">
-                                                <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" id="bluetooth.active" name="bluetooth.active" />
-                                                    <label class="form-check-label" for="bluetooth.active">Bluetooth active</label>
-                                                </div>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input" type="checkbox" id="bluetooth.active" name="bluetooth.active" />
+                                                <label class="form-check-label" for="bluetooth.active">Bluetooth active</label>
                                             </div>
-                                            <div class="col-md-4">
-                                                <label class="form-label" for="bluetooth.deviceName">Device Name</label>
-                                                <input type="text" class="form-control" id="bluetooth.deviceName" name="bluetooth.deviceName" maxlength="20" />
-                                            </div>
-                                            <div class="col-md-4">
-                                                <p class="form-text mt-4 mb-0">KISS TNC — connects to APRS.fi, APRSDroid, Pinpoint.</p>
-                                            </div>
+                                            <input type="text" class="form-control" style="max-width:16rem" id="bluetooth.deviceName" name="bluetooth.deviceName" maxlength="20" placeholder="Device name" />
                                         </div>
+                                        <p class="form-text mt-2 mb-0">KISS TNC — connects to APRS.fi, APRSDroid, Pinpoint.</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- 7. Battery & Altitude -->
+                            <!-- 6. Battery & Altitude -->
                             <div class="accordion-item">
                                 <h2 class="accordion-header">
                                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#batterySection">
@@ -395,54 +293,196 @@
                                     <div class="accordion-body">
                                         <div class="row g-3">
                                             <div class="col-md-4">
-                                                <div class="form-check form-switch mt-4">
+                                                <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="sendAltitude" name="sendAltitude" />
-                                                    <label class="form-check-label" for="sendAltitude">Include Altitude in Beacons</label>
+                                                    <label class="form-check-label" for="sendAltitude">Include altitude in beacons</label>
                                                 </div>
                                             </div>
                                             <div class="col-12"><hr class="my-1" /></div>
                                             <div class="col-md-4">
                                                 <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="battery.sendVoltage" name="battery.sendVoltage" />
-                                                    <label class="form-check-label" for="battery.sendVoltage">Send Voltage in Comment</label>
+                                                    <label class="form-check-label" for="battery.sendVoltage">Send voltage in comment</label>
                                                 </div>
                                             </div>
                                             <div class="col-md-4">
                                                 <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="battery.sendVoltageAlways" name="battery.sendVoltageAlways" />
-                                                    <label class="form-check-label" for="battery.sendVoltageAlways">Send Voltage on Every Beacon</label>
+                                                    <label class="form-check-label" for="battery.sendVoltageAlways">Send voltage on every beacon</label>
                                                 </div>
                                             </div>
                                             <div class="col-md-4">
-                                                <label class="form-label" for="battery.sleepVoltage">Low-Voltage Shutdown (V)</label>
-                                                <input type="number" step="0.1" min="2.5" max="4.0" class="form-control" id="battery.sleepVoltage" name="battery.sleepVoltage" />
+                                                <label class="form-label" for="battery.sleepVoltage">Low-voltage shutdown (V)</label>
+                                                <input type="number" step="0.01" min="2.5" max="4.0" class="form-control" id="battery.sleepVoltage" name="battery.sleepVoltage" />
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- 8. Other -->
+                            <!-- 7. PTT Trigger -->
                             <div class="accordion-item">
                                 <h2 class="accordion-header">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#otherSection">
-                                        Other
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#pttSection">
+                                        PTT Trigger
                                     </button>
                                 </h2>
-                                <div id="otherSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
+                                <div id="pttSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
+                                    <div class="accordion-body">
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                                    <div class="form-check form-switch mb-0">
+                                                        <input class="form-check-input" type="checkbox" id="ptt.active" name="ptt.active" />
+                                                        <label class="form-check-label" for="ptt.active">PTT Enable</label>
+                                                    </div>
+                                                    <label class="text-muted small mb-0">GPIO pin</label>
+                                                    <input type="number" class="form-control form-control-sm" style="width:5rem" id="ptt.io_pin" name="ptt.io_pin" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="ptt.reverse" name="ptt.reverse" />
+                                                    <label class="form-check-label" for="ptt.reverse">Active High</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="ptt.preDelay">Pre-delay (ms)</label>
+                                                <input type="number" class="form-control" id="ptt.preDelay" name="ptt.preDelay" min="0" />
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="ptt.postDelay">Post-delay (ms)</label>
+                                                <input type="number" class="form-control" id="ptt.postDelay" name="ptt.postDelay" min="0" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 8. Device Role -->
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#roleSection">
+                                        Device Role
+                                    </button>
+                                </h2>
+                                <div id="roleSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
                                     <div class="accordion-body">
                                         <div class="row g-3">
                                             <div class="col-md-4">
-                                                <label class="form-label" for="path">Beacon TX Path</label>
-                                                <input type="text" class="form-control" id="path" name="path" maxlength="20" />
+                                                <label class="form-label" for="deviceRole">Device role</label>
+                                                <select class="form-select" id="deviceRole" name="deviceRole">
+                                                    <option value="0">0 — Tracker</option>
+                                                    <option value="1">1 — iGate</option>
+                                                    <option value="2">2 — Digipeater (dedicated)</option>
+                                                </select>
                                             </div>
                                             <div class="col-md-4">
-                                                <label class="form-label" for="nonSmartBeaconRate">Non-Smart Beacon Rate (min)</label>
-                                                <input type="number" class="form-control" id="nonSmartBeaconRate" name="nonSmartBeaconRate" min="1" />
+                                                <label class="form-label" for="gpsSource">GPS source</label>
+                                                <select class="form-select" id="gpsSource" name="gpsSource">
+                                                    <option value="0">0 — Internal GPS (SmartBeacon)</option>
+                                                    <option value="1">1 — Fixed position (lat/lon/elev from config)</option>
+                                                    <option value="2">2 — None (TNC / relay only, no beaconing)</option>
+                                                </select>
                                             </div>
                                             <div class="col-md-4">
-                                                <label class="form-label" for="sendCommentAfterXBeacons">Comment Every N Beacons</label>
-                                                <input type="number" class="form-control" id="sendCommentAfterXBeacons" name="sendCommentAfterXBeacons" min="1" />
+                                                <label class="form-label" for="digiMode">Digipeat mode <span class="text-muted fw-normal small">(independent of role)</span></label>
+                                                <select class="form-select" id="digiMode" name="digiMode">
+                                                    <option value="0">Off</option>
+                                                    <option value="1">WIDE1 only — fill-in</option>
+                                                    <option value="2">WIDE1 + WIDE2 — infrastructure</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Fixed position (shown when gpsSource = Fixed) -->
+                                            <div id="fixedPosFields" class="col-12" style="display:none">
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label" for="fixedPosition.latitude">Latitude (°)</label>
+                                                        <input type="number" step="0.000001" class="form-control" id="fixedPosition.latitude" name="fixedPosition.latitude" />
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label" for="fixedPosition.longitude">Longitude (°)</label>
+                                                        <input type="number" step="0.000001" class="form-control" id="fixedPosition.longitude" name="fixedPosition.longitude" />
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label" for="fixedPosition.elevation">Elevation (m)</label>
+                                                        <input type="number" step="0.1" class="form-control" id="fixedPosition.elevation" name="fixedPosition.elevation" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 9. WiFi -->
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#wifiSection">
+                                        📶 WiFi
+                                    </button>
+                                </h2>
+                                <div id="wifiSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
+                                    <div class="accordion-body">
+                                        <div class="row g-3">
+                                            <div class="col-12"><h6>Access Point</h6>
+                                                <small class="text-muted">AP starts when callsign is NOCALL-7 or the USR button is held at boot.</small>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label" for="wifiAP.password">AP password</label>
+                                                <input type="text" class="form-control" id="wifiAP.password" name="wifiAP.password" />
+                                            </div>
+
+                                            <div class="col-12"><h6>Station (for iGate)</h6></div>
+                                            <div class="col-12">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="wifiSTA.enabled" name="wifiSTA.enabled" />
+                                                    <label class="form-check-label" for="wifiSTA.enabled">Connect to existing network</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-5">
+                                                <label class="form-label">SSID &amp; Password</label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="wifiSTA.ssid" name="wifiSTA.ssid" placeholder="SSID" />
+                                                    <input type="password" class="form-control" id="wifiSTA.password" name="wifiSTA.password" placeholder="Password" />
+                                                </div>
+                                            </div>
+
+                                            <!-- APRS-IS (shown when role = iGate) -->
+                                            <div id="aprsIsFields" class="col-12" style="display:none">
+                                                <hr /><h6>APRS-IS</h6>
+                                                <div class="row g-3">
+                                                    <div class="col-md-7">
+                                                        <label class="form-label">Server &amp; Port</label>
+                                                        <div class="input-group">
+                                                            <input type="text" class="form-control" id="aprsIS.server" name="aprsIS.server" placeholder="rotate.aprs.net" />
+                                                            <input type="number" class="form-control" style="max-width:7rem" id="aprsIS.port" name="aprsIS.port" placeholder="14580" />
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label" for="aprsIS.passcode">Passcode <span class="text-muted fw-normal small">(override)</span></label>
+                                                        <input type="text" class="form-control" id="aprsIS.passcode" name="aprsIS.passcode" placeholder="auto (derived from callsign)" />
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label" for="aprsIS.filter">Filter</label>
+                                                        <input type="text" class="form-control" id="aprsIS.filter" name="aprsIS.filter" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- TCP KISS (shown when role = iGate or digipeater) -->
+                                            <div id="tcpKissFields" class="col-12" style="display:none">
+                                                <hr /><h6>TCP KISS Server</h6>
+                                                <div class="row g-3">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label" for="tcpKISS.port">TCP port</label>
+                                                        <input type="number" class="form-control" id="tcpKISS.port" name="tcpKISS.port" />
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <p class="form-text mt-4 mb-0">TCP KISS server starts automatically when WiFi STA is connected.<br>USB serial is always KISS TNC. Type <code>setup</code> or <code>log</code> to switch modes.</p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -459,26 +499,24 @@
         </form>
 
         <!-- Save modal -->
-        <div class="modal fade" id="saveModal" tabindex="-1" aria-labelledby="saveModal" aria-hidden="true">
+        <div class="modal fade" id="saveModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Saving settings</h5>
-                    </div>
+                    <div class="modal-header"><h5 class="modal-title">Saving settings</h5></div>
                     <div class="modal-body">Settings will be saved and device will reboot.</div>
                     <div class="modal-footer">Stopping WiFi AP...</div>
                 </div>
             </div>
         </div>
         <!-- Saved modal -->
-        <div class="modal fade" id="savedModal" tabindex="-1" aria-labelledby="savedModal" aria-hidden="true">
+        <div class="modal fade" id="savedModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Settings</h5>
+                        <h5 class="modal-title">Settings saved</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <div class="modal-body">Settings saved!</div>
+                    <div class="modal-body">Settings saved and device rebooted.</div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>

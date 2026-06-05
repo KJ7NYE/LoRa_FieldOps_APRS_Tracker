@@ -18,7 +18,7 @@
     "codingRate4": 5,
     "power": 20
   }],
-  "display": { "ecoMode": false, "timeout": 4, "turn180": false, "ledEnabled": true },
+  "display": { "ecoMode": false, "timeout": 4, "turn180": false, "invertDisplay": false, "ledEnabled": true },
   "battery": { "sendVoltage": false, "sendVoltageAlways": false, "sleepVoltage": 2.9 },
   "other": {
     "sendCommentAfterXBeacons": 10,

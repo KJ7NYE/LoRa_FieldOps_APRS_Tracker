@@ -80,6 +80,7 @@ bool Configuration::writeFile() {
         data["display"]["ecoMode"]                  = display.ecoMode;
         data["display"]["timeout"]                  = display.timeout;
         data["display"]["turn180"]                  = display.turn180;
+        data["display"]["invertDisplay"]            = display.invertDisplay;
         data["display"]["ledEnabled"]               = display.ledEnabled;
 
         data["bluetooth"]["active"]                 = bluetooth.active;
@@ -214,10 +215,12 @@ bool Configuration::readFile() {
         if (data["display"]["ecoMode"].isNull() ||
             data["display"]["timeout"].isNull() ||
             data["display"]["turn180"].isNull() ||
+            data["display"]["invertDisplay"].isNull() ||
             data["display"]["ledEnabled"].isNull()) needsRewrite = true;
         display.ecoMode                 = data["display"]["ecoMode"] | false;
         display.timeout                 = data["display"]["timeout"] | 4;
         display.turn180                 = data["display"]["turn180"] | false;
+        display.invertDisplay           = data["display"]["invertDisplay"] | false;
         display.ledEnabled              = data["display"]["ledEnabled"] | true;
 
         if (data["bluetooth"]["active"].isNull() ||
@@ -371,6 +374,7 @@ void Configuration::setDefaultValues() {
     display.ecoMode                 = false;
     display.timeout                 = 4;
     display.turn180                 = false;
+    display.invertDisplay           = false;
     display.ledEnabled              = true;
 
     bluetooth.active                = false;

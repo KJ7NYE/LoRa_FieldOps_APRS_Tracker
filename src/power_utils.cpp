@@ -67,16 +67,22 @@ namespace POWER_Utils {
 
     #ifdef VEXT_CTRL
         void vext_ctrl_ON() {
-            #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY)
+            // Heltec V3 family (incl. our 433-APRS variant): VEXT HIGH = peripherals ON
+            #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || \
+                defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY) || \
+                defined(HELTEC_V3_433_APRS)
                 digitalWrite(VEXT_CTRL, HIGH);
             #endif
+            // Heltec V3.2 family: VEXT LOW = peripherals ON (inverted polarity)
             #if defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC)
                 digitalWrite(VEXT_CTRL, LOW);
             #endif
         }
 
         void vext_ctrl_OFF() {
-            #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY)
+            #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || \
+                defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY) || \
+                defined(HELTEC_V3_433_APRS)
                 digitalWrite(VEXT_CTRL, LOW);
             #endif
             #if defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC)
@@ -91,7 +97,10 @@ namespace POWER_Utils {
             #if defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC)
                 digitalWrite(ADC_CTRL, HIGH);
             #endif
-            #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || defined(HELTEC_V2_GPS) || defined(HELTEC_V2_GPS_915) || defined(HELTEC_V2_TNC) || defined(HELTEC_WSL_V3_GPS_DISPLAY)
+            // V3 family: drive ADC_CTRL LOW to enable the VBAT voltage divider
+            #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || \
+                defined(HELTEC_V2_GPS) || defined(HELTEC_V2_GPS_915) || defined(HELTEC_V2_TNC) || \
+                defined(HELTEC_WSL_V3_GPS_DISPLAY) || defined(HELTEC_V3_433_APRS)
                 digitalWrite(ADC_CTRL, LOW);
             #endif
         }
@@ -100,7 +109,9 @@ namespace POWER_Utils {
             #if defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC)
                 digitalWrite(ADC_CTRL, LOW);
             #endif
-            #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || defined(HELTEC_V2_GPS) || defined(HELTEC_V2_GPS_915) || defined(HELTEC_V2_TNC) || defined(HELTEC_WSL_V3_GPS_DISPLAY)
+            #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || \
+                defined(HELTEC_V2_GPS) || defined(HELTEC_V2_GPS_915) || defined(HELTEC_V2_TNC) || \
+                defined(HELTEC_WSL_V3_GPS_DISPLAY) || defined(HELTEC_V3_433_APRS)
                 digitalWrite(ADC_CTRL, HIGH);
             #endif
         }

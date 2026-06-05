@@ -26,6 +26,10 @@
 #include "aprs_is_utils.h"
 #include "tcp_kiss_utils.h"
 #include "wifi_utils.h"
+#ifdef HAS_WEB_UI
+#include "web_utils.h"
+#include <WiFi.h>
+#endif
 #endif
 
 extern Configuration Config;
@@ -115,9 +119,15 @@ namespace DeviceRoleUtils {
             APRS_IS_Utils::connect();
         }
 
-        // TCP KISS server — start automatically whenever WiFi STA is up
         if (WIFI_Utils::isSTAConnected()) {
+            // TCP KISS server
             TCP_KISS_Utils::setup();
+            // Web config UI accessible at the STA IP address
+            #ifdef HAS_WEB_UI
+            WEB_Utils::setup();
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Role",
+                       "Web config: http://%s", WiFi.localIP().toString().c_str());
+            #endif
         }
 
         bootStatus("iGate");
@@ -131,6 +141,16 @@ namespace DeviceRoleUtils {
         // so they appear on APRS maps. Tracker beaconing is driven by the main loop.
         if (Config.deviceRole == ROLE_IGATE || Config.deviceRole == ROLE_DIGIPEATER) {
             static uint32_t lastSelfBeacon = 0;
+
+            // Beacon immediately after each APRS-IS (re)connect — also resets the
+            // periodic timer so the next scheduled beacon is a full interval later.
+            #ifdef HAS_WIFI
+            if (APRS_IS_Utils::consumeBeaconTrigger()) {
+                STATION_Utils::sendBeacon();
+                lastSelfBeacon = millis();
+            }
+            #endif
+
             uint32_t beaconInterval = (uint32_t)Config.nonSmartBeaconRate * 60000UL;
             if (beaconInterval < 60000UL) beaconInterval = 60000UL;  // floor at 1 min
             if (millis() - lastSelfBeacon >= beaconInterval) {

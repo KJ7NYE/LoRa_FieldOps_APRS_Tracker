@@ -33,6 +33,13 @@ namespace APRS_IS_Utils {
     // Check connection health; reconnect if dropped. Call from loop.
     void    checkConnection();
 
+    // Returns true once after each successful connect() — used to trigger an
+    // immediate self-beacon.  Clears the flag on first call that returns true.
+    bool    consumeBeaconTrigger();
+
+    // Upload the iGate's own beacon directly and register it in the upload dedup.
+    void    uploadSelfBeacon(const String& packet);
+
 }
 
 #endif // HAS_WIFI

@@ -17,6 +17,7 @@
 
 void displaySetup() {}
 void displayToggle(bool) {}
+void displaySetInvert(bool) {}
 void displayTx(const String&) {}
 void displayTxFlash() {}
 void displayActivity() {}
@@ -290,7 +291,9 @@ void displayTxFlash() {}   // superseded by displayTx(); kept for build compat
     #if defined(TTGO_T_Beam_S3_SUPREME_V3) || defined(TTGO_T_BEAM_1W)
         #undef ssd1306
     #endif
-    #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC)
+    #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || \
+        defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC) || \
+        defined(HELTEC_V3_433_APRS)
         #define OLED_DISPLAY_HAS_RST_PIN
     #endif
 
@@ -306,7 +309,9 @@ void displayTxFlash() {}   // superseded by displayTx(); kept for build compat
 extern Configuration    Config;
 extern logging::Logger  logger;
 
-static uint8_t screenBrightness = 1;
+#ifdef HAS_TFT
+static uint8_t screenBrightness = 1;   // TFT backlight PWM level (0–255)
+#endif
 
 void displaySetup() {
     #ifdef HAS_TFT
@@ -336,24 +341,29 @@ void displaySetup() {
         Wire.begin(OLED_SDA, OLED_SCL);
         #ifdef ssd1306
             if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) {
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "SSD1306", "allocation failed!");
-                while (true) {}
+                // Buffer allocation failed (very rare on ESP32 — usually means OOM).
+                // Log and continue; display calls will be no-ops on the zeroed buffer.
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "SSD1306", "init failed — display disabled");
             }
         #else
             if (!display.begin(0x3c, false)) {
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "SH1106", "allocation failed!");
-                while (true) {}
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "SH1106", "init failed — display disabled");
             }
         #endif
+        // Maximum brightness: dim(false) sends SETCONTRAST + value in one I2C
+        // transaction (correct); two separate ssd1306_command() calls are NOT
+        // equivalent — the second byte is interpreted as a new command, not data.
+        // screenBrightness is a TFT-PWM value (1 = dim); do NOT use it here.
+        display.dim(false);
+        // Apply user invert preference (black-on-white vs white-on-black).
+        display.invertDisplay(Config.display.invertDisplay);
         if (Config.display.turn180) display.setRotation(2);
         display.clearDisplay();
         #ifdef ssd1306
             display.setTextColor(WHITE);
-            display.ssd1306_command(SSD1306_SETCONTRAST);
-            display.ssd1306_command(screenBrightness);
         #else
             display.setTextColor(SH110X_WHITE);
-            display.setContrast(screenBrightness);
+            display.setContrast(255);
         #endif
         display.setTextWrap(false);   // clip overlong lines instead of wrapping
         display.setTextSize(1);
@@ -372,6 +382,14 @@ void displayToggle(bool toggle) {
             display.oled_command(toggle ? SH110X_DISPLAYON : SH110X_DISPLAYOFF);
         #endif
     #endif
+}
+
+void displaySetInvert(bool invert) {
+    #ifndef HAS_TFT
+        // TFT boards don't support hardware invert — no-op there.
+        display.invertDisplay(invert);
+    #endif
+    Config.display.invertDisplay = invert;   // keep Config in sync
 }
 
 void bootStatus(const char* step) {
@@ -417,12 +435,6 @@ void startupScreen(const String& versionDate) {
         display.print("Multi-Mode v3");   // clips after ~10 chars — expected
         display.setCursor(0, 38);
         display.print(versionDate);
-        #ifdef ssd1306
-            display.ssd1306_command(SSD1306_SETCONTRAST);
-            display.ssd1306_command(screenBrightness);
-        #else
-            display.setContrast(screenBrightness);
-        #endif
         display.display();
     #endif
     delay(1500);
@@ -453,34 +465,121 @@ void displayStatus(const String& callsign, const String& tactical,
         #endif
     #else
         // OLED 128×64 layout:
-        //  y=0-15  : Callsign text×2 (16px high) — up to 10 chars at 12px/char
-        //  y=16    : separator
-        //  y=18    : line 2 — role + battery   (text×2, 16px, ends y=34)
-        //  y=36    : line 6 — Last: callsign   (text×2, 16px, ends y=52 < 64 ✓)
+        // ── OLED 128×64 role-aware layout ────────────────────────────────────────
+        // text×2 (12w×16h px, 10 chars/line) for header, role, and line 4.
+        // text×1 ( 6w× 8h px, 21 chars/line) for line 3 — fits full coords and IPs.
+        //
+        //   y=0  : callsign / tactical — bold header (text×2)
+        //   y=16 : separator
+        //   y=17 : device role (text×2)                          — always text×2
+        //   y=37 : role-specific detail (text×1, centred in slot) — GPS / IP / status
+        //   y=49 : battery or last-heard 4-s flash (text×2)
+        //
+        // Role → line 3 / line 4:
+        //   Tracker : line3 = lat/lon or "Waiting..."   line4 = battery
+        //   iGate   : line3 = IP or "No WiFi"           line4 = battery → last-heard 4 s
+        //   Digi    : line3 = IP / lat/lon / status      line4 = battery → last-heard 4 s
+        //
+        // line2 from main.cpp: "Role  B:XX%" (battery suffix) and optionally
+        // "Role  IP" or "Role  No WiFi" (WiFi suffix before battery suffix).
+        // Full path names kept in main.cpp for TFT; OLED abbreviations applied here.
+
+        // Persistent state for last-heard 4-second flash (iGate / Digi).
+        static String   _oledLastHeard    = "";
+        static uint32_t _oledLastHeardEnd = 0;
+
         display.clearDisplay();
         #ifdef ssd1306
             display.setTextColor(WHITE);
         #else
             display.setTextColor(SH110X_WHITE);
         #endif
-        // Callsign at text×2 — full 128px width now that symbol is removed
+
+        // ── Line 1: bold callsign header ─────────────────────────────────────────
+        // Draw twice at x=0 and x=1 to widen strokes from 2 px → 3 px.
         display.setTextSize(2);
-        display.setCursor(0, 0);
-        String cs = callsign;
-        while (cs.length() > 0 && (int)(cs.length() * 12) > 128) cs.remove(cs.length()-1);
-        display.print(cs);
-        // Separator
+        {
+            const String& hdr = tactical.length() > 0 ? tactical : callsign;
+            display.setCursor(0, 0);  display.print(hdr);
+            display.setCursor(1, 0);  display.print(hdr);
+        }
         display.drawLine(0, 16, 128, 16, 1);
-        // Lines 2 & 6 at text×2 (12px/char, 16px high; clips at edge if >~10 chars)
+
+        // ── Parse line2 → role + battery + WiFi/IP suffix ────────────────────────
+        String role = line2;
+        String batt = "";
+        {
+            int bIdx = line2.indexOf("  B:");
+            if (bIdx >= 0) {
+                role = line2.substring(0, bIdx);
+                batt = "B:" + line2.substring(bIdx + 4);
+            }
+        }
+        // Role suffix: IP address or "No WiFi" (iGate always; Digi when wifiSTA enabled).
+        String roleSuffix = "";
+        {
+            int sep = role.indexOf("  ");
+            if (sep > 0) {
+                roleSuffix = role.substring(sep + 2);
+                role       = role.substring(0, sep);
+            }
+        }
+        role.replace("WIDE1+W2", "W1+W2");
+        role.replace("WIDE1",    "W1");
+
+        // ── Line 2: device role ───────────────────────────────────────────────────
         display.setTextSize(2);
-        display.setCursor(0, 18);  display.print(line2);
-        display.setCursor(0, 36);  display.print(line6);
-        #ifdef ssd1306
-            display.ssd1306_command(SSD1306_SETCONTRAST);
-            display.ssd1306_command(screenBrightness);
-        #else
-            display.setContrast(screenBrightness);
-        #endif
+        display.setCursor(0, 17);
+        display.print(role);
+
+        // ── Last-heard flash tracking ─────────────────────────────────────────────
+        String lastHd = line6.startsWith("Last: ") ? line6.substring(6) : line6;
+        if (lastHd.length() > 0 && lastHd != _oledLastHeard) {
+            _oledLastHeard    = lastHd;
+            _oledLastHeardEnd = millis() + 4000;
+        }
+        bool showCallsign = (millis() < _oledLastHeardEnd && _oledLastHeard.length() > 0);
+
+        // ── Role-aware line 3 / line 4 ────────────────────────────────────────────
+        bool hasPosition    = (line3.indexOf('.') >= 0);
+        bool hasIP          = (roleSuffix.length() > 0 && roleSuffix != "No WiFi");
+        bool wifiConfigured = (roleSuffix.length() > 0);   // wifiSTA.enabled in main.cpp
+
+        String line3disp, line4disp;
+
+        if (role.startsWith("Track")) {
+            // Tracker: GPS coordinates / waiting status on line 3; battery on line 4.
+            line3disp = hasPosition              ? line3
+                      : line3.startsWith("W")   ? "Waiting..."
+                      :                           line3;      // "No GPS"
+            line4disp = batt;
+
+        } else if (role.startsWith("iGate")) {
+            // iGate: WiFi IP (or "No WiFi") on line 3; last-heard flash else battery.
+            line3disp = wifiConfigured ? roleSuffix : "No WiFi";
+            line4disp = showCallsign   ? _oledLastHeard : batt;
+
+        } else {
+            // Digi: IP → lat/lon → "No GPS/Net" → "No GPS" (in priority order).
+            // "No GPS/Net" = WiFi STA configured but neither connection nor GPS fix.
+            if      (hasIP)          line3disp = roleSuffix;
+            else if (hasPosition)    line3disp = line3;
+            else if (wifiConfigured) line3disp = "No GPS/Net";
+            else                     line3disp = "No GPS";
+            line4disp = showCallsign ? _oledLastHeard : batt;
+        }
+
+        // Line 3 at text×1 (6 w × 8 h px) — 21 chars/line handles full coords and IPs.
+        // Vertically centred in the 16-px slot (y=33..48): offset = 33+(16-8)/2 = 37.
+        display.setTextSize(1);
+        display.setCursor(0, 37);
+        display.print(line3disp);
+
+        // Line 4 at text×2.
+        display.setTextSize(2);
+        display.setCursor(0, 49);
+        display.print(line4disp);
+
         display.display();
     #endif
 }
@@ -523,12 +622,6 @@ void displayAPMode(const String& ssid, const String& password) {
         display.print(ssid);
         display.setCursor(0, 44);
         display.print("PW: " + password);
-        #ifdef ssd1306
-            display.ssd1306_command(SSD1306_SETCONTRAST);
-            display.ssd1306_command(screenBrightness);
-        #else
-            display.setContrast(screenBrightness);
-        #endif
         display.display();
     #endif
 }
@@ -575,12 +668,6 @@ void displayTx(const String& packet) {
             display.setCursor(0, 19 + i * 10);
             display.print(packet.substring(start, start + COLS));
         }
-        #ifdef ssd1306
-            display.ssd1306_command(SSD1306_SETCONTRAST);
-            display.ssd1306_command(screenBrightness);
-        #else
-            display.setContrast(screenBrightness);
-        #endif
         display.display();
     #endif
 }

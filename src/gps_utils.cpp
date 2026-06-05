@@ -83,7 +83,20 @@ namespace GPS_Utils {
 
         switch (Config.gpsSource) {
             case GPS_INTERNAL:
-                if (disableGPS) return false;
+                if (disableGPS) {
+                    // No GPS hardware on this board.  If fixed coordinates are
+                    // configured, use them so iGate/Digi beacons still work even
+                    // when the user forgot to set gpsSource = GPS_FIXED.
+                    if (Config.fixedPosition.latitude != 0 || Config.fixedPosition.longitude != 0) {
+                        posData.latitude  = Config.fixedPosition.latitude;
+                        posData.longitude = Config.fixedPosition.longitude;
+                        posData.elevation = Config.fixedPosition.elevation;
+                        posData.isValid   = true;
+                        lastValidPosition = posData;
+                        return true;
+                    }
+                    return false;
+                }
                 if (gps.location.isValid()) {
                     posData.latitude = gps.location.lat();
                     posData.longitude = gps.location.lng();

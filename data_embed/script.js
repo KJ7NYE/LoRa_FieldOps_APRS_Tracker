@@ -60,6 +60,7 @@ function loadSettings(s) {
     setVal('beacons.0.overlay',           b.overlay           ?? '/');
     setVal('beacons.0.micE',              b.micE              ?? '');
     setVal('beacons.0.comment',           b.comment           ?? '');
+    setVal('beacons.0.status',            b.status            ?? '');
     setVal('beacons.0.tacticalCallsign',  b.tacticalCallsign  ?? '');
     setVal('beacons.0.smartBeaconActive', b.smartBeaconActive ?? true);
     setVal('beacons.0.smartBeaconSetting',b.smartBeaconSetting ?? 2);
@@ -109,10 +110,11 @@ function loadSettings(s) {
     setVal('customSmartBeacon.turnSlope',      csb.turnSlope      ?? 60);
 
     const disp = s.display ?? {};
-    setVal('display.ecoMode',    disp.ecoMode    ?? false);
-    setVal('display.timeout',    disp.timeout    ?? 4);
-    setVal('display.turn180',    disp.turn180    ?? false);
-    setVal('display.showSymbol', disp.showSymbol ?? true);
+    setVal('display.ecoMode',      disp.ecoMode      ?? false);
+    setVal('display.timeout',      disp.timeout      ?? 4);
+    setVal('display.turn180',      disp.turn180      ?? false);
+    setVal('display.invertDisplay',disp.invertDisplay?? false);
+    setVal('display.ledEnabled',   disp.ledEnabled   ?? true);
 
     const bt = s.bluetooth ?? {};
     setVal('bluetooth.active',     bt.active     ?? false);
@@ -123,8 +125,15 @@ function loadSettings(s) {
     setVal('battery.sendVoltageAlways', bat.sendVoltageAlways ?? false);
     setVal('battery.sleepVoltage',      bat.sleepVoltage      ?? 2.9);
 
+    const ptt = s.ptt ?? {};
+    setVal('ptt.active',      ptt.active      ?? false);
+    setVal('ptt.io_pin',      ptt.io_pin      ?? 0);
+    setVal('ptt.reverse',     ptt.reverse     ?? false);
+    setVal('ptt.preDelay',    ptt.preDelay    ?? 100);
+    setVal('ptt.postDelay',   ptt.postDelay   ?? 100);
+
     const oth = s.other ?? {};
-    setVal('path',                    s.path                    ?? oth.beaconPath  ?? 'WIDE1-1');
+    setVal('beaconPath',              s.beaconPath              ?? s.path ?? oth.beaconPath  ?? 'WIDE1-1');
     setVal('nonSmartBeaconRate',      s.nonSmartBeaconRate      ?? oth.nonSmartBeaconRate  ?? 15);
     setVal('sendCommentAfterXBeacons',s.sendCommentAfterXBeacons?? oth.sendCommentAfterXBeacons ?? 10);
     setVal('sendAltitude',            s.sendAltitude            ?? oth.sendAltitude ?? true);

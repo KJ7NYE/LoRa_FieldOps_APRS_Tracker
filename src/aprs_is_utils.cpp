@@ -24,6 +24,36 @@ static WiFiClient   aprsIsClient;
 static bool         passcodeValid   = false;
 static uint32_t     lastConnectTry  = 0;
 static const uint32_t RECONNECT_MS  = 30000UL;   // retry interval
+static bool         _needsBeacon    = false;      // set true after each successful connect
+
+// ── iGate upload dedup ────────────────────────────────────────────────────
+// Prevents uploading both the direct copy and digipeated copies of the same
+// frame (same originating callsign + payload, different digi path).
+// 10-slot ring buffer, djb2 hash, 30-second TTL.
+// Intentionally separate from the digi dedup in station_utils so the two
+// subsystems don't interfere with each other.
+static constexpr int      IG_SLOTS = 10;
+static constexpr uint32_t IG_TTL   = 30000;
+struct IgSlot { uint32_t hash; uint32_t seenAt; };
+static IgSlot   igBuf[IG_SLOTS];
+static int      igHead = 0;
+
+static uint32_t igDjb2(const String& s) {
+    uint32_t h = 5381;
+    for (unsigned i = 0; i < s.length(); i++) h = ((h << 5) + h) + (uint8_t)s[i];
+    return h;
+}
+
+static bool igIsNew(const String& sender, const String& payload) {
+    uint32_t h   = igDjb2(sender + payload);
+    uint32_t now = millis();
+    for (int i = 0; i < IG_SLOTS; i++) {
+        if (igBuf[i].hash == h && (now - igBuf[i].seenAt) < IG_TTL) return false;
+    }
+    igBuf[igHead] = { h, now };
+    igHead = (igHead + 1) % IG_SLOTS;
+    return true;
+}
 
 // Compute the standard APRS-IS passcode (Friedman algorithm) from a callsign.
 // Strips the SSID (everything after '-') before hashing.
@@ -115,6 +145,7 @@ namespace APRS_IS_Utils {
 
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS", "Connected. Passcode %s",
                    passcodeValid ? "VALID" : "INVALID (Rx only)");
+        _needsBeacon = true;   // signal caller to send an immediate self-beacon
     }
 
     void checkConnection() {
@@ -122,6 +153,28 @@ namespace APRS_IS_Utils {
         if (millis() - lastConnectTry < RECONNECT_MS) return;
         lastConnectTry = millis();
         connect();
+    }
+
+    // Returns true (and clears the flag) the first time called after each successful
+    // connect().  Used by device_role to trigger an immediate self-beacon on (re)connect.
+    bool consumeBeaconTrigger() {
+        if (!_needsBeacon) return false;
+        _needsBeacon = false;
+        return true;
+    }
+
+    // Upload the iGate's own beacon directly (no qAR path — this is a direct TCP
+    // submission; the server handles path attribution).  Also registers the packet
+    // in the iGate upload dedup so that any RF echo of the same frame is suppressed.
+    void uploadSelfBeacon(const String& packet) {
+        if (!aprsIsClient.connected()) return;
+        String sender = packet.substring(0, packet.indexOf(">"));
+        int colonIdx  = packet.indexOf(":");
+        String payload = (colonIdx >= 0) ? packet.substring(colonIdx) : packet;
+        igIsNew(sender, payload);   // register in dedup (side-effect only)
+        upload(packet);
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS",
+                   "Self-beacon: %s", packet.c_str());
     }
 
     // Strip any "qA?" gate-path bytes that some servers prepend
@@ -134,11 +187,19 @@ namespace APRS_IS_Utils {
         if (!aprsIsClient.connected()) return;
         if (packet.indexOf("NOGATE") >= 0) return;
 
-        const String& callsign = Config.beacons[0].callsign;
-
-        // Build the upload line: ORIG_PATH,qAO,MYCALL:payload
+        // Dedup: skip if same originating callsign + payload was uploaded within 30 s.
+        // Filters duplicates that arrive via multiple digi paths (e.g. direct + via KG7XXX).
         int colonIdx = packet.indexOf(":");
         if (colonIdx < 3) return;
+        String sender  = packet.substring(0, packet.indexOf(">"));
+        String payload = packet.substring(colonIdx);
+        if (!igIsNew(sender, payload)) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS",
+                       "Dedup skip: %s", sender.c_str());
+            return;
+        }
+
+        const String& callsign = Config.beacons[0].callsign;
 
         String uploadLine = packet.substring(0, colonIdx);
         if (passcodeValid) {

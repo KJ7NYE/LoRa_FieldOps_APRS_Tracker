@@ -167,7 +167,11 @@ namespace BATTERY_Utils {
                                 POWER_Utils::adc_ctrl_OFF();
                                 measuringState = 1;
 
-                                if (batteryVoltage.toFloat() < (Config.battery.sleepVoltage - 0.1)) {
+                                // Only shut down if a battery is actually present.
+                                // Without a battery the ADC reads ~0 V through the
+                                // divider; batteryConnected is false in that case.
+                                if (batteryConnected &&
+                                    batteryVoltage.toFloat() < (Config.battery.sleepVoltage - 0.1)) {
                                     displayStatus("!BATTERY!", "",
                                                   "LOW VOLTAGE",
                                                   batteryVoltage + "V",

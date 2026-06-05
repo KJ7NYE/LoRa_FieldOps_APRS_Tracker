@@ -77,6 +77,7 @@ public:
     bool    ecoMode;
     int     timeout;
     bool    turn180;
+    bool    invertDisplay;   // true = black text on white (OLED invert mode)
     bool    ledEnabled;      // false = LED always off
 };
 

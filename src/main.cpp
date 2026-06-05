@@ -171,6 +171,12 @@ void setup() {
 
     POWER_Utils::lowerCpuFrequency();
     SERIAL_Setup::setup();
+
+    // Force the initial battery measurement before the first beacon fires.
+    // monitor() checks batteryMeasurmentTime==0 and performs the reading immediately
+    // (including the 50 ms ADC_CTRL settle delay on boards that need it).
+    BATTERY_Utils::monitor();
+
     startupScreen(versionDate);
     bootStatus("READY");
 }
@@ -321,6 +327,15 @@ void loop() {
                 line2 = "Digi";
                 if      (Config.digiMode == DIGI_WIDE1)       line2 += " WIDE1";
                 else if (Config.digiMode == DIGI_WIDE1_WIDE2) line2 += " WIDE1+W2";
+                // Append WiFi STA status so the OLED display can show IP on line 3.
+                // Only appended when WiFi STA is configured; RF-only digis stay clean.
+                #ifdef HAS_WIFI
+                if (Config.wifiSTA.enabled) {
+                    line2 += WIFI_Utils::isSTAConnected()
+                           ? ("  " + WiFi.localIP().toString())
+                           : "  No WiFi";
+                }
+                #endif
                 break;
             default:
                 line2 = "Unknown";

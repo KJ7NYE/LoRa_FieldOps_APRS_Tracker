@@ -156,6 +156,7 @@ namespace WEB_Utils {
             Config.display.timeout              = getParamIntSafe("display.timeout", Config.display.timeout);
         }
         Config.display.turn180                  = request->hasParam("display.turn180", true);
+        Config.display.invertDisplay            = request->hasParam("display.invertDisplay", true);
         Config.display.ledEnabled               = request->hasParam("display.ledEnabled", true);
 
         //  Bluetooth

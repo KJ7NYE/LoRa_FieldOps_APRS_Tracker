@@ -15,6 +15,9 @@
 #include "kiss_utils.h"
 #include "display.h"
 #include "logger.h"
+#ifdef HAS_WIFI
+#include "aprs_is_utils.h"
+#endif
 
 extern Configuration    Config;
 extern logging::Logger  logger;
@@ -190,8 +193,19 @@ namespace STATION_Utils {
             }
         }
 
+        // Register own beacon in the digi dedup buffer so that echoes heard back on
+        // RF (e.g. digipeated copies) are not re-repeated or re-uploaded.
+        {
+            int selfColon = packet.indexOf(":");
+            String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;
+            isInHashBuffer(b.callsign, selfPayload);   // side-effect: inserts, return ignored
+        }
         LoRa_Utils::sendNewPacket(packet);  // displayTx() is called inside sendNewPacket
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Beacon", "TX: %s", packet.c_str());
+        // iGate: upload own beacon directly to APRS-IS (also registers in upload dedup).
+        #ifdef HAS_WIFI
+        if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
+        #endif
 
         if (smartBeaconActive) {
             lastTxLat       = beaconLat;
@@ -211,8 +225,16 @@ namespace STATION_Utils {
             return;
         }
         String packet = b.callsign + ">APLRT1," + Config.beaconPath + ":>" + b.status;
+        {
+            int selfColon = packet.indexOf(":");
+            String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;
+            isInHashBuffer(b.callsign, selfPayload);
+        }
         LoRa_Utils::sendNewPacket(packet);   // displayTx() fires inside sendNewPacket
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Beacon", "Status TX: %s", packet.c_str());
+        #ifdef HAS_WIFI
+        if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
+        #endif
         lastTxTime = millis();
     }
 

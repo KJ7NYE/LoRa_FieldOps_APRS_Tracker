@@ -36,6 +36,10 @@ void displayTxFlash();
 // Turn display on/off (eco mode timeout).
 void displayToggle(bool on);
 
+// Apply display invert setting at runtime (no reboot required).
+// Also updates Config.display.invertDisplay so save/reload is consistent.
+void displaySetInvert(bool invert);
+
 // Reset the eco-mode idle timer and wake the display if it was sleeping.
 // Call on any user-visible event: button press, packet RX, packet TX.
 // displayTx() calls this automatically — no need to call it on TX.
