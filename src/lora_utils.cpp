@@ -20,17 +20,16 @@
 #include <RadioLib.h>
 #include <logger.h>
 #include <SPI.h>
-#include "notification_utils.h"
+
 #include "configuration.h"
 #include "board_pinout.h"
 #include "lora_utils.h"
 #include "display.h"
+#include "led_utils.h"
 
 extern logging::Logger  logger;
 extern Configuration    Config;
 extern LoraType         *currentLoRaType;
-extern uint8_t          loraIndex;
-extern int              loraIndexSize;
 
 bool operationDone   = true;
 bool transmitFlag    = true;
@@ -73,37 +72,22 @@ namespace LoRa_Utils {
     }
 
     void changeFreq() {
-        if(loraIndex >= (loraIndexSize - 1)) {
-            loraIndex = 0;
-        } else {
-            loraIndex++;
-        }
-        currentLoRaType = &Config.loraTypes[loraIndex];
-
+        // Single LoRa profile — nothing to cycle.
+        // Apply current profile settings (in case they changed via CLI/web).
         float freq = (float)currentLoRaType->frequency/1000000;
         radio.setFrequency(freq);
         radio.setSpreadingFactor(currentLoRaType->spreadingFactor);
-        // Hz → kHz as float; integer-divide would truncate 62500 to 62 and trip RADIOLIB_ERR_INVALID_BANDWIDTH (-2)
         float signalBandwidth = currentLoRaType->signalBandwidth / 1000.0f;
         radio.setBandwidth(signalBandwidth);
         radio.setCodingRate(currentLoRaType->codingRate4);
         #if (defined(HAS_SX1268) || defined(HAS_SX1262)) && !defined(HAS_1W_LORA)
-            radio.setOutputPower(currentLoRaType->power + 2); // values available: 10, 17, 22 --> if 20 in tracker_conf.json it will be updated to 22.
+            radio.setOutputPower(currentLoRaType->power + 2);
         #endif
         #if defined(HAS_SX1278) || defined(HAS_SX1276) || defined(HAS_1W_LORA)
             radio.setOutputPower(currentLoRaType->power);
         #endif
 
-        String loraCountryFreq;
-        switch (loraIndex) {
-            case 0: loraCountryFreq = "EU/WORLD"; break;
-            case 1: loraCountryFreq = "POLAND"; break;
-            case 2: loraCountryFreq = "UK"; break;
-            case 3: loraCountryFreq = "US"; break;
-        }
-        String currentLoRainfo = "LoRa ";
-        currentLoRainfo += loraCountryFreq;
-        currentLoRainfo += " / Freq: ";
+        String currentLoRainfo = "LoRa / Freq: ";
         currentLoRainfo += String(currentLoRaType->frequency);
         currentLoRainfo += " / SF:";
         currentLoRainfo += String(currentLoRaType->spreadingFactor);
@@ -111,7 +95,7 @@ namespace LoRa_Utils {
         currentLoRainfo += String(currentLoRaType->codingRate4);
 
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "LoRa", currentLoRainfo.c_str());
-        displayShow("LORA FREQ>", "", "CHANGED TO: " + loraCountryFreq, "", "", "", 2000);
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa", "Freq: %ld", currentLoRaType->frequency);
     }
 
     void setup() {
@@ -184,8 +168,8 @@ namespace LoRa_Utils {
             if (clampedPower > 22)  clampedPower = 22;
             if (clampedPower < -9)  clampedPower = -9;
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "LoRa",
-                       "loraIndex=%u, cfg power=%d, requested=%d, clamped=%d",
-                       (unsigned)loraIndex, (int)currentLoRaType->power,
+                       "cfg power=%d, requested=%d, clamped=%d",
+                       (int)currentLoRaType->power,
                        (int)requestedPower, (int)clampedPower);
             state = radio.setOutputPower(clampedPower);
             radio.setCurrentLimit(140);
@@ -236,12 +220,13 @@ namespace LoRa_Utils {
             return;
         }
 
+        displayTx(newPacket);
+
         if (Config.ptt.active) {
             digitalWrite(Config.ptt.io_pin, Config.ptt.reverse ? LOW : HIGH);
             delay(Config.ptt.preDelay);
         }
-        if (Config.notification.ledTx) digitalWrite(Config.notification.ledTxPin, HIGH);
-        if (Config.notification.buzzerActive && Config.notification.txBeep) NOTIFICATION_Utils::beaconTxBeep();
+        LED_Utils::txRxFlash();
 
         #if defined(TTGO_T_BEAM_1W)
             digitalWrite(RADIO_RXEN, LOW);
@@ -255,7 +240,6 @@ namespace LoRa_Utils {
             Serial.println(state);
         }
 
-        if (Config.notification.ledTx) digitalWrite(Config.notification.ledTxPin, LOW);
         if (Config.ptt.active) {
             delay(Config.ptt.postDelay);
             digitalWrite(Config.ptt.io_pin, Config.ptt.reverse ? HIGH : LOW);

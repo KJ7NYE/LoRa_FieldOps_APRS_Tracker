@@ -27,16 +27,23 @@
 #include "smartbeacon_utils.h"
 
 enum DeviceRole {
-    ROLE_TRACKER = 0,
-    ROLE_IGATE = 1,
+    ROLE_TRACKER    = 0,
+    ROLE_IGATE      = 1,
     ROLE_DIGIPEATER = 2
 };
 
+// Digipeat mode — independent of DeviceRole.
+// Any role (Tracker, iGate, Digipeater) can have digipeating enabled.
+enum DigiMode {
+    DIGI_OFF         = 0,  // No digipeating
+    DIGI_WIDE1       = 1,  // Fill-in: respond to WIDE1-1 only
+    DIGI_WIDE1_WIDE2 = 2   // Infrastructure: respond to WIDE1-1 and WIDE2-n
+};
+
 enum GPSSource {
-    GPS_INTERNAL = 0,
-    GPS_FIXED = 1,
-    GPS_EXTERNAL_SERIAL = 2,
-    GPS_EXTERNAL_BLE = 3
+    GPS_INTERNAL = 0,  // hardware UART GPS; SmartBeacon
+    GPS_FIXED    = 1,  // user-configured lat/lon/elev; fixed interval beaconing
+    GPS_NONE     = 2   // no position source; no beacons (pure TNC/relay)
 };
 
 class WiFiSTA {
@@ -48,8 +55,6 @@ public:
 
 class WiFiAP {
 public:
-    bool    active;
-    bool    bootWindow;
     String  password;
 };
 
@@ -62,7 +67,6 @@ public:
     String  comment;
     bool    smartBeaconActive;
     byte    smartBeaconSetting;
-    bool    gpsEcoMode;
     String  profileLabel;
     String  status;
     String  tacticalCallsign;
@@ -70,50 +74,17 @@ public:
 
 class Display {
 public:
-    bool    showSymbol;
     bool    ecoMode;
     int     timeout;
     bool    turn180;
+    bool    ledEnabled;      // false = LED always off
 };
 
 class Battery {
 public:
-    bool    sendVoltage;
-    bool    voltageAsTelemetry;
-    bool    sendVoltageAlways;
-    bool    monitorVoltage;
-    float   sleepVoltage;
-};
-
-class Winlink {
-public:
-    String  password;
-};
-
-class Telemetry {
-public:
-    bool    active;
-    bool    sendTelemetry;
-    float   temperatureCorrection;
-};
-
-class Notification {
-public:
-    bool    ledTx;
-    int     ledTxPin;
-    bool    ledMessage;
-    int     ledMessagePin;
-    bool    ledFlashlight;
-    int     ledFlashlightPin;
-    bool    buzzerActive;
-    int     buzzerPinTone;
-    int     buzzerPinVcc;
-    bool    bootUpBeep;
-    bool    txBeep;
-    bool    messageRxBeep;
-    bool    stationBeep;
-    bool    lowBatteryBeep;
-    bool    shutDownBeep;
+    bool    sendVoltage;        // append Bat=X.XXV to beacon comment
+    bool    sendVoltageAlways;  // on every beacon; otherwise every sendCommentAfterXBeacons
+    float   sleepVoltage;       // shutdown threshold (V); only active on ADC_CTRL boards
 };
 
 class LoraType {
@@ -138,8 +109,9 @@ class BLUETOOTH {
 public:
     bool    active;
     String  deviceName;
-    bool    useBLE;
-    bool    useKISS;
+    // Stack and framing are board-determined: nRF52 uses Bluefruit BLE,
+    // ESP32 uses NimBLE when available, otherwise BT Classic SPP.
+    // All paths use KISS (AX.25) framing — no config needed.
 };
 
 class APRSISS {
@@ -152,8 +124,9 @@ public:
 
 class TCPKISS {
 public:
-    bool    enabled;
-    uint16_t port;
+    uint16_t port;           // TCP port (server runs automatically when WiFi STA is connected)
+    // USB serial is always KISS TNC mode by default.
+    // Type 'setup' or 'log' over serial to switch modes.
 };
 
 class FixedPosition {
@@ -172,9 +145,6 @@ public:
     std::vector<Beacon>     beacons;
     Display                 display;
     Battery                 battery;
-    Winlink                 winlink;
-    Telemetry               telemetry;
-    Notification            notification;
     std::vector<LoraType>   loraTypes;
     PTT                     ptt;
     BLUETOOTH               bluetooth;
@@ -185,17 +155,12 @@ public:
 
     DeviceRole              deviceRole;
     GPSSource               gpsSource;
-    bool    simplifiedTrackerMode;
+    DigiMode                digiMode;       // replaces bool digipeating
 
     int     sendCommentAfterXBeacons;
-    String  path;
-    String  email;
+    String  beaconPath;     // APRS path for OWN TX (e.g. WIDE1-1). Not used by the digi relay.
     int     nonSmartBeaconRate;
-    int     rememberStationTime;
-    int     standingUpdateTime;
     bool    sendAltitude;
-    bool    disableGPS;
-    bool    digipeating;
 
     void setDefaultValues();
     bool writeFile();

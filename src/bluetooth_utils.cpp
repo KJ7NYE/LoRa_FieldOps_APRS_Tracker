@@ -16,7 +16,13 @@
  * along with LoRa APRS Tracker. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <TinyGPS++.h>
+/*
+ * Bluetooth Classic SPP KISS TNC.
+ * Used only on boards where HAS_BT_CLASSIC is defined and HAS_NIMBLE is not
+ * (i.e. plain ESP32 boards without NimBLE in their build flags).
+ * Always uses KISS (AX.25) framing — compatible with APRSDroid, Pinpoint, etc.
+ */
+
 #include <esp_bt.h>
 #include "bluetooth_utils.h"
 #include "configuration.h"
@@ -29,49 +35,45 @@
 extern Configuration    Config;
 extern BluetoothSerial  SerialBT;
 extern logging::Logger  logger;
-extern TinyGPSPlus      gps;
 extern bool             bluetoothConnected;
 extern bool             bluetoothActive;
 
 namespace BLUETOOTH_Utils {
-    String serialReceived;
-    bool shouldSendToLoRa = false;
-    bool useKiss = Config.bluetooth.useKISS? true : false;
+
+    static String   serialReceived;
+    static bool     shouldSendToLoRa = false;
 
     void setup() {
         if (!bluetoothActive) {
             btStop();
             esp_bt_controller_disable();
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Main", "BT controller disabled");
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BT", "Controller disabled (bluetooth.active = false)");
             return;
         }
 
         serialReceived.reserve(255);
 
         SerialBT.register_callback(BLUETOOTH_Utils::bluetoothCallback);
-        SerialBT.onData(BLUETOOTH_Utils::getData); // callback instead of while to avoid RX buffer limit when NMEA data received
+        SerialBT.onData(BLUETOOTH_Utils::getData);
 
-        String BTid = Config.bluetooth.deviceName;
-
-        if (!SerialBT.begin(String(BTid))) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Bluetooth", "Starting Bluetooth failed!");
-            displayShow("ERROR", "Starting Bluetooth failed!", "");
-            while(true) {
-                delay(1000);
-            }
+        if (!SerialBT.begin(Config.bluetooth.deviceName)) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "BT", "Starting Bluetooth Classic failed!");
+            bootStatus("ERROR: BT failed!");
+            while (true) { delay(1000); }
         }
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Bluetooth", "Bluetooth Classic init done!");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BT",
+                   "Classic KISS TNC ready as \"%s\"", Config.bluetooth.deviceName.c_str());
     }
 
     void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
         if (event == ESP_SPP_SRV_OPEN_EVT) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Bluetooth", "Client connected !");
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BT", "Client connected");
             bluetoothConnected = true;
         } else if (event == ESP_SPP_CLOSE_EVT) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Bluetooth", "Client disconnected !");
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BT", "Client disconnected");
             bluetoothConnected = false;
         } else {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Bluetooth", "Status: %d", event);
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT", "Event: %d", event);
         }
     }
 
@@ -79,58 +81,40 @@ namespace BLUETOOTH_Utils {
         if (size == 0) return;
         shouldSendToLoRa = false;
         serialReceived.clear();
-        bool isNmea = buffer[0] == '$';
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "bluetooth", "Received buffer size %d. Nmea=%d. %s", size, isNmea, buffer);
 
-        for (int i = 0; i < size; i++) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "bluetooth", "[%d/%d] %x -> %c", i + 1, size, buffer[i], buffer[i]);
+        for (size_t i = 0; i < size; i++) {
+            serialReceived += (char)buffer[i];
         }
-        for (int i = 0; i < size; i++) {
-            char c = (char) buffer[i];
-            if (isNmea) {
-                gps.encode(c);
-            } else {
-                serialReceived += c;
-            }
-        }
-        // Test if we have to send frame
-        isNmea = serialReceived.indexOf("$G") != -1 || serialReceived.indexOf("$B") != -1;
-        if (isNmea) useKiss = false;
-        if (isNmea || serialReceived.isEmpty()) return;
+
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT RX", "Received %u bytes", (unsigned)size);
+
+        // Validate as KISS frame; if so, decode and queue for TX
         if (KISS_Utils::validateKISSFrame(serialReceived)) {
-            bool dataFrame;
-            String decodeKiss = KISS_Utils::decodeKISS(serialReceived, dataFrame);
-            serialReceived.clear();
-            serialReceived += decodeKiss;
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "bluetooth", "It's a kiss frame. dataFrame: %d", dataFrame);
-            useKiss = true;
+            bool dataFrame = false;
+            String decoded = KISS_Utils::decodeKISS(serialReceived, dataFrame);
+            if (dataFrame && KISS_Utils::validateTNC2Frame(decoded)) {
+                serialReceived = decoded;
+                shouldSendToLoRa = true;
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT RX KISS",
+                           "Queued for RF: %s", serialReceived.c_str());
+            }
         } else {
-            useKiss = false;
-        }
-        if (KISS_Utils::validateTNC2Frame(serialReceived)) {
-            shouldSendToLoRa = true;
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "bluetooth", "Data received should be transmitted to RF => %s", serialReceived.c_str());
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT RX", "Not a valid KISS frame, discarding");
         }
     }
 
     void sendToLoRa() {
         if (!shouldSendToLoRa) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT TX", "%s", serialReceived.c_str());
-        displayShow("BT Tx >>", "", serialReceived, 1000);
+        displayTx(serialReceived);   // show TX overlay with packet content
         LoRa_Utils::sendNewPacket(serialReceived);
         shouldSendToLoRa = false;
     }
 
     void sendToPhone(const String& packet) {
-        if (!packet.isEmpty()) {
-            if (useKiss) {
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT RX Kiss", "%s", serialReceived.c_str());
-                SerialBT.print(KISS_Utils::encodeKISS(packet));
-            } else {
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT RX TNC2", "%s", serialReceived.c_str());
-                SerialBT.println(packet);
-            }
-        }
+        if (packet.isEmpty()) return;
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT RX KISS", "%s", packet.c_str());
+        SerialBT.print(KISS_Utils::encodeKISS(packet));
     }
 
 }

@@ -4,9 +4,11 @@
  * Pin numbers cross-checked against meshtastic's variant.h for this board.
  * nRF52840 port encoding: P0.x = 0 + x, P1.x = 32 + x.
  *
- * Capability flags deliberately NOT set on this variant (no WiFi/BT-Classic/
- * NimBLE/Web UI on nRF52). HAS_DISPLAY + HAS_TFT_ST7789 are set below to
- * route display.cpp into the ST7789 software-SPI driver path.
+ * Capability flags: no WiFi/BT-Classic/NimBLE/Web UI on nRF52840.
+ * BLE is available via the nRF52840 SoftDevice (Adafruit Bluefruit) — detected
+ * at compile time via ARDUINO_ARCH_NRF52, not a board_pinout.h flag.
+ * HAS_DISPLAY + HAS_TFT_ST7789 are set below to route display.cpp into the
+ * ST7789 software-SPI driver path.
  */
 #ifndef BOARD_PINOUT_H_
 #define BOARD_PINOUT_H_
@@ -53,22 +55,6 @@
 // ---- Button + LED -----------------------------------------------------------
 #define BUTTON_PIN              (32 + 10)
 #define INTERNAL_LED_PIN        (32 + 3)
-
-// ---- Notification-feature pin defaults --------------------------------------
-// The generic defaults in setDefaultValues() (LED_TX_PIN_DEFAULT = 13, etc.)
-// land on pins that have critical hardware functions on the T114:
-//   pin  2 = TFT_RST_PIN   (toggling resets the ST7789)
-//   pin 13 = PIN_WIRE1_SCL (I2C bus 1)
-//   pin 14 = NEOPIXEL_DATA (T114 has 2 onboard neopixels)
-//   pin 25 = SX126X_RESET  (toggling resets the LoRa radio)
-//   pin 33 = P1.1          (appears unused on T114 V1)
-// Override to -1 so even if the user later enables a feature, the pin write
-// is a no-op until they pick a safe pad via the CLI.
-#define LED_TX_PIN_DEFAULT          -1
-#define LED_MESSAGE_PIN_DEFAULT     -1
-#define BUZZER_TONE_PIN_DEFAULT     -1
-#define BUZZER_VCC_PIN_DEFAULT      -1
-#define LED_FLASHLIGHT_PIN_DEFAULT  -1
 
 // ---- I2C --------------------------------------------------------------------
 // Adafruit nRF52 BSP exposes Wire on PIN_WIRE_SDA/SCL via the variant — we use

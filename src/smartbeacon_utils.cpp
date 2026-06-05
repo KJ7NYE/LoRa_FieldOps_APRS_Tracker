@@ -18,17 +18,15 @@
 
 #include "smartbeacon_utils.h"
 #include "configuration.h"
-#include "winlink_utils.h"
 
 extern Configuration    Config;
 extern Beacon           *currentBeacon;
-extern bool             smartBeaconActive;
 extern uint32_t         txInterval;
 extern uint32_t         lastTxTime;
 extern bool             sendUpdate;
-extern uint8_t          winlinkStatus;
 
-
+// SmartBeacon runtime state — owned here, read via extern in station_utils.cpp.
+bool                smartBeaconActive       = false;
 SmartBeaconValues   currentSmartBeaconValues;
 byte                smartBeaconSettingsIndex    = 10;
 bool                wxRequestStatus             = false;
@@ -94,7 +92,7 @@ namespace SMARTBEACON_Utils {
 
     void checkState() {
         if (wxRequestStatus && (millis() - wxRequestTime) > 20000) wxRequestStatus = false;
-        smartBeaconActive = (winlinkStatus == 0 && !wxRequestStatus) ? currentBeacon->smartBeaconActive : false;
+        smartBeaconActive = !wxRequestStatus ? currentBeacon->smartBeaconActive : false;
     }
 
 }

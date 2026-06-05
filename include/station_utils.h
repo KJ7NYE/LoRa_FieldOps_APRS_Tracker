@@ -1,40 +1,33 @@
-/* Copyright (C) 2025 Ricardo Guzman - CA2RXU
- *
- * This file is part of LoRa APRS Tracker.
- *
- * LoRa APRS Tracker is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * LoRa APRS Tracker is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with LoRa APRS Tracker. If not, see <https://www.gnu.org/licenses/>.
- */
-
+#pragma once
 #ifndef STATION_UTILS_H_
 #define STATION_UTILS_H_
 
 #include <Arduino.h>
 
-
 namespace STATION_Utils {
 
-    void    nearStationInit();
-    String  getNearStation(uint8_t position);
+    // Send the device's own APRS position beacon via LoRa.
+    // Uses Config.gpsSource to get position (GPS, fixed, external).
+    // Called by device_role.cpp on the beacon interval timer.
+    void sendBeacon();
 
-    void    deleteListenedStationsByTime();
-    void    checkListenedStationsByTimeAndDelete();
-    void    orderListenedStationsByDistance(const String& callsign, float distance, float course);
+    // Send an APRS status beacon: CALLSIGN>APLRT1,path:>status
+    // Falls back to sendBeacon() if beacons[0].status is empty.
+    void sendStatusBeacon();
 
-    void    checkStandingUpdateTime();
-    void    sendBeacon();
-    void    saveIndex(uint8_t type, uint8_t index);
-    void    loadIndex(uint8_t type);
+    // Queue a packet for LoRa TX (used by digi and iGate downlink).
+    // Packets are dequeued and sent by processOutputPacketBuffer().
+    void addToOutputPacketBuffer(const String& packet);
+
+    void processOutputPacketBuffer();
+
+    // Track the most recently heard callsign for the status display.
+    void updateLastHeard(const String& callsign);
+    String getLastHeardSummary();  // returns the single most-recently-heard callsign
+
+    // Packet dedup (digi/iGate): true if this exact callsign+payload was seen
+    // within the last ~30 seconds. Records the packet on first sight.
+    bool isInHashBuffer(const String& callsign, const String& payload);
 
 }
 

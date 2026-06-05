@@ -1,197 +1,162 @@
-/* Copyright (C) 2025 Ricardo Guzman - CA2RXU
+/* Minimal status display for LoRa APRS Multi-Mode Firmware.
+ * Supports: Heltec T114 (ST7789 TFT via Adafruit), Heltec V3 / T-Beam
+ * (SSD1306/SH1106 OLED via Adafruit), and headless builds (no display).
  *
- * This file is part of LoRa APRS Tracker.
- *
- * LoRa APRS Tracker is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * LoRa APRS Tracker is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with LoRa APRS Tracker. If not, see <https://www.gnu.org/licenses/>.
+ * No menu system, no keyboard nav, no profile selection.
+ * Public API: displaySetup, bootStatus, startupScreen, displayStatus,
+ *             displayTxFlash, displayToggle.
  */
 
-#include "board_pinout.h"  // pulled to top so HAS_DISPLAY is in scope before headers it gates
+#include "board_pinout.h"  // HAS_DISPLAY, HAS_TFT_ST7789, HAS_TFT must be in scope first
 
 #ifndef HAS_DISPLAY
 
-// No-op stubs for headless variants (e.g. Heltec T114 during bring-up) so the
-// rest of the codebase can call into displayShow / displayToggle / etc.
-// without a real driver. Real implementations live below the #else.
+// ── Headless / no-display build ──────────────────────────────────────────────
 #include <Arduino.h>
 #include "display.h"
 
-// Globals also referenced from other TUs (keyboard/menu/station_utils). Keep
-// the same names/types as the real-display branch so external linkers resolve.
-uint8_t     screenBrightness    = 1;
-bool        symbolAvailable     = true;
-
 void displaySetup() {}
 void displayToggle(bool) {}
-void displayShow(const String&, const String&, const String&, int) {}
-void displayShow(const String&, const String&, const String&, const String&,
-                 const String&, const String&, int) {}
-void startupScreen(uint8_t, const String&) {}
+void displayTx(const String&) {}
+void displayTxFlash() {}
+void displayActivity() {}
+void displayEcoTick(bool, unsigned long) {}
+void startupScreen(const String&) {}
+void displayStatus(const String&, const String&,
+                   const String&, const String&, const String&,
+                   const String&, const String&) {}
+void displayAPMode(const String&, const String&) {}
+
 void bootStatus(const char* step) {
     if (!step) return;
     Serial.print(F("[boot ")); Serial.print(millis()); Serial.print(F("ms] ")); Serial.println(step);
 }
 
-#else  // HAS_DISPLAY is defined
+#else  // HAS_DISPLAY defined
 
+#include <Arduino.h>
+#include "display.h"
+
+// TX overlay deadline — shared by all display paths.
+// displayStatus() returns early while millis() < txDisplayEnd.
+// Uses unsigned long (= millis() type) to avoid pulling in stdint.h here.
+static unsigned long txDisplayEnd = 0;
+
+// ── Display eco mode state ────────────────────────────────────────────────────
+// lastActivityMs: reset on button press, RX packet, or TX — anything that
+// justifies keeping the display on.  The 1-second status-refresh tick does NOT
+// count; it uses this to decide whether to sleep, not to stay awake.
+// displayOff: true while the display has been blanked by eco timeout.
+static unsigned long _lastActivityMs = 0;   // 0 → treat as "just booted, display is on"
+static bool          _displayOff     = false;
+
+// Wake the display (if sleeping) and reset the eco-mode idle timer.
+// Call from: button press, LoRa RX, LoRa TX.
+void displayActivity() {
+    _lastActivityMs = millis();
+    if (_displayOff) {
+        displayToggle(true);
+        _displayOff = false;
+    }
+}
+
+// Called once per second from the main loop.
+// If eco mode is enabled and the idle timer has expired, blank the display.
+void displayEcoTick(bool ecoMode, unsigned long timeoutMs) {
+    if (!ecoMode || timeoutMs == 0 || _displayOff) return;
+    if (millis() - _lastActivityMs > timeoutMs) {
+        displayToggle(false);
+        _displayOff = true;
+    }
+}
+
+// ── Heltec T114 — Adafruit ST7789 path ───────────────────────────────────────
 #ifdef HAS_TFT_ST7789
-
-// Standalone nRF52 + ST7789 path. Used by Heltec T114 (software SPI on
-// dedicated TFT pins; the LoRa SX1262 owns the default SPI bus on different
-// pins). Self-contained — implements the 5 public functions in display.h
-// using Adafruit_ST7789 + Adafruit_GFX. Does NOT share globals or render
-// helpers with the legacy TFT_eSPI / SSD1306 paths below the #else.
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
 #include "display.h"
+#include "configuration.h"
 
-// Hardware SPI on the BSP's secondary `SPI1` global, which the vendored
-// variants_bsp/heltec_t114/variant.h wires to ST7789_SDA/SCK (P1.9/P1.8) on
-// NRF_SPIM2. This avoids the ~20-second software-SPI fillScreen hang of the
-// previous bit-banged path. The default `SPI` (NRF_SPIM3) is owned by RadioLib
-// for the LoRa SX1262 on its own dedicated pins.
+// BSP secondary SPI bus (NRF_SPIM2) wired to ST7789_SDA/SCK on P1.9/P1.8.
 extern SPIClass SPI1;
+extern Configuration Config;
 static Adafruit_ST7789 tft(&SPI1, TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
-// Globals also referenced from other TUs (keyboard/menu/station_utils).
-uint8_t     screenBrightness    = 255;
-bool        symbolAvailable     = true;
-
 namespace {
-    constexpr uint16_t COLOR_BG     = 0x0000;   // black
-    constexpr uint16_t COLOR_HEADER = 0xFFE0;   // yellow
-    constexpr uint16_t COLOR_BODY   = 0xFFFF;   // white
-    constexpr uint16_t COLOR_BANNER = 0x07E0;   // green
-    constexpr int      HEADER_Y     = 0;
-    constexpr int      BODY_Y       = 24;       // below 16 px size-2 header + padding
-    constexpr int      LINE_HEIGHT  = 14;       // size-1 char height + spacing
+    // Colours (RGB565)
+    constexpr uint16_t COLOR_BG   = 0x0000;   // black background
+    constexpr uint16_t COLOR_HDR  = 0xFFE0;   // yellow  – callsign / separator
+    constexpr uint16_t COLOR_BODY = 0xFFFF;   // white   – body text
+    constexpr uint16_t COLOR_TX   = 0x07E0;   // green   – TX overlay
+    constexpr uint16_t COLOR_DIM  = 0x5D1F;   // sky blue – secondary callsign under tactical
 
-    // Cached last-drawn content. Only lines that actually changed get
-    // re-painted, avoiding flicker on every refresh tick when (e.g.) only
-    // the seconds field updates.
-    constexpr int MAX_CACHED_LINES = 5;
-    String  _prevHeader     = "\xFF";    // sentinel — won't match any real header on first call
-    String  _prevLines[MAX_CACHED_LINES];
-    bool    _cacheValid     = false;     // false after displaySetup, forces full repaint
-    bool    _tftReady       = false;     // becomes true at end of displaySetup; bootStatus
-                                         // must skip TFT writes until then or the early
-                                         // calls (before displaySetup) deadlock on SPI1
-                                         // and the backlight pin never gets driven LOW.
+    bool    _tftReady    = false;
+    bool    _cacheValid  = false;
+    String  _prevCall    = "\xFF";
+    String  _prevTactical= "\xFF";
+    String  _prevLine2   = "\xFF";
+    String  _prevLine3  = "\xFF";
+    String  _prevLine4  = "\xFF";
+    String  _prevLine5  = "\xFF";
+    String  _prevLine6  = "\xFF";
 
-    void drawScreen(const String& header, const String* lines, int nLines) {
-        const int16_t w = tft.width();
-
-        if (!_cacheValid || header != _prevHeader) {
-            tft.fillRect(0, HEADER_Y, w, 16, COLOR_BG);
-            tft.setCursor(0, HEADER_Y);
-            tft.setTextSize(2);
-            tft.setTextColor(COLOR_HEADER);
-            tft.print(header);
-            _prevHeader = header;
-        }
-
-        tft.setTextSize(1);
-        tft.setTextColor(COLOR_BODY);
-        int y = BODY_Y;
-        for (int i = 0; i < nLines && i < MAX_CACHED_LINES; i++) {
-            if (!_cacheValid || lines[i] != _prevLines[i]) {
-                tft.fillRect(0, y, w, LINE_HEIGHT, COLOR_BG);
-                tft.setCursor(0, y);
-                tft.print(lines[i]);
-                _prevLines[i] = lines[i];
-            }
-            y += LINE_HEIGHT;
-        }
-        _cacheValid = true;
-    }
 }
 
 void displaySetup() {
-    // The TFT was just (re)initialized; whatever drawScreen thought it
-    // had drawn is gone. Force a full redraw on the next drawScreen call.
-    // (anon-namespace symbol; visible at file scope.)
     _cacheValid = false;
     #ifdef HELTEC_T114
-        // T114 has a separate VTFT_CTRL pin (P0.3) that gates power to the
-        // TFT regulator. Active-LOW per meshtastic's TFTDisplay.cpp — drive
-        // LOW to enable, HIGH to disable. Without enabling this, the TFT is
-        // unpowered and SPI commands disappear into the void.
-        pinMode(3, OUTPUT);              // VTFT_CTRL = (0 + 3)
+        pinMode(3, OUTPUT);          // VTFT_CTRL (P0.3) — active-LOW to enable TFT power
         digitalWrite(3, LOW);
-        delay(10);                       // let TFT power settle
+        delay(10);
     #endif
-    // Backlight: T114 variant.h declares TFT_BACKLIGHT_ON LOW (active-LOW),
-    // so drive LOW to turn the backlight on. Other ST7789 boards may differ.
     pinMode(TFT_BL_PIN, OUTPUT);
-    digitalWrite(TFT_BL_PIN, LOW);
-    SPI1.begin();                       // bring up the BSP's secondary SPI bus (NRF_SPIM2)
-    tft.init(135, 240);                 // native portrait 135x240
-    tft.setRotation(1);                 // landscape -> 240x135
+    digitalWrite(TFT_BL_PIN, LOW);  // backlight on (active-LOW per T114 variant.h)
+    SPI1.begin();
+    tft.init(135, 240);
+    tft.setRotation(Config.display.turn180 ? 3 : 1);   // landscape; 3 = flipped 180°
     tft.fillScreen(COLOR_BG);
     tft.setTextWrap(false);
     _tftReady = true;
 }
 
-void displayToggle(bool toggle) {
-    digitalWrite(TFT_BL_PIN, toggle ? HIGH : LOW);
+void displayToggle(bool on) {
+    digitalWrite(TFT_BL_PIN, on ? LOW : HIGH);
 }
 
-void displayShow(const String& header, const String& line1,
-                 const String& line2, int wait) {
-    const String lines[] = { line1, line2 };
-    drawScreen(header, lines, 2);
-    if (wait > 0) delay(wait);
-}
-
-void displayShow(const String& header, const String& line1,
-                 const String& line2, const String& line3,
-                 const String& line4, const String& line5, int wait) {
-    const String lines[] = { line1, line2, line3, line4, line5 };
-    drawScreen(header, lines, 5);
-    if (wait > 0) delay(wait);
-}
-
-void startupScreen(uint8_t index, const String& version) {
-    String workingFreq = "LoRa Freq [";
-    switch (index) {
-        case 0: workingFreq += "EU]"; break;
-        case 1: workingFreq += "PL]"; break;
-        case 2: workingFreq += "UK]"; break;
-        case 3: workingFreq += "US]"; break;
-        default: workingFreq += "??]"; break;
-    }
-    tft.fillScreen(COLOR_BG);
+void bootStatus(const char* step) {
+    if (!step) return;
+    Serial.print(F("[boot ")); Serial.print(millis()); Serial.print(F("ms] ")); Serial.println(step);
+    if (!_tftReady) return;
+    constexpr int STATUS_Y = 90;   // 2× font: below startup content
+    constexpr int STATUS_H = 18;   // text size 2 = 16px + 2px margin
+    tft.fillRect(0, STATUS_Y, tft.width(), STATUS_H, COLOR_BG);
+    tft.setCursor(0, STATUS_Y);
     tft.setTextSize(2);
-    tft.setTextColor(COLOR_BANNER, COLOR_BG);
-    tft.setCursor(0, 0);
-    tft.println("LoRanger");
-    tft.setTextSize(1);
     tft.setTextColor(COLOR_BODY, COLOR_BG);
-    tft.setCursor(0, 24);
-    tft.println("APRS Tracker");
-    tft.setCursor(0, 38);
-    tft.println("v " + version);
-    tft.setCursor(0, 56);
-    tft.println(workingFreq);
-    tft.setCursor(0, 74);
-    tft.println("Booting...");
-    // Load-bearing settle window before the SPI-heavy peripheral inits
-    // (SX1262 in particular). Removing this caused radio config to hang
-    // post-begin() on the T114 — the rail / reset timing isn't satisfied
-    // without ~1 s of slack between TFT init and radio config.
-    // Chunked so bootStatus() ticks visibly instead of looking frozen.
+    tft.print("> ");
+    tft.print(step);
+    _cacheValid = false;
+}
+
+void startupScreen(const String& versionDate) {
+    tft.fillScreen(COLOR_BG);
+    tft.setTextSize(4);    // 2× — title is 32px high
+    tft.setTextColor(COLOR_TX, COLOR_BG);
+    tft.setCursor(0, 0);
+    tft.println("LoRa APRS");
+    tft.setTextSize(2);    // 2× — body is 16px high
+    tft.setTextColor(COLOR_BODY, COLOR_BG);
+    tft.setCursor(0, 36);
+    tft.println("Multi-Mode v3");
+    tft.setCursor(0, 54);
+    tft.println(versionDate);
+    tft.setCursor(0, 72);
+    tft.println("433 MHz");
+    tft.setCursor(0, 90);
+    tft.println("Starting...");
+    // Settle window for peripheral inits (LoRa SX1262 timing).
     for (int i = 1; i <= 3; ++i) {
         delay(500);
         char step[16];
@@ -200,70 +165,128 @@ void startupScreen(uint8_t index, const String& version) {
     }
 }
 
-void bootStatus(const char* step) {
-    if (!step) return;
-    Serial.print(F("[boot ")); Serial.print(millis()); Serial.print(F("ms] ")); Serial.println(step);
-    if (!_tftReady) return;     // tft.init() hasn't run yet — SPI1 not begun, panel uninitialized
-    // Overwrite the "Booting..." line under the startup banner with the
-    // current step. Each new step is the heartbeat — if the screen sits on
-    // one label, that's the subsystem that's hanging.
-    constexpr int STATUS_Y = 74;     // matches startupScreen's "Booting..." y
-    constexpr int STATUS_H = 12;     // size-1 line height
-    tft.fillRect(0, STATUS_Y, tft.width(), STATUS_H, COLOR_BG);
-    tft.setCursor(0, STATUS_Y);
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR_BODY, COLOR_BG);
-    tft.print("> ");
-    tft.print(step);
-    _cacheValid = false;     // first drawScreen() in loop() will repaint fully
+void displayStatus(const String& callsign, const String& tactical,
+                   const String& line2, const String& line3,
+                   const String& line4, const String& line5,
+                   const String& line6) {
+    if (millis() < txDisplayEnd) return;
+    if (!_tftReady) return;
+    const int16_t W = tft.width();   // 240
+
+    // ── Header: Tactical (primary) / Callsign (secondary), or Callsign only ────
+    // Header is always 44px tall.
+    // With tactical: tactical text×3 (y=2..26), callsign text×2 (y=27..43).
+    // Without tactical: callsign text×4 (y=2..34).
+    // Separator: y=44.  Body: y=46+i×17, i=0..4 → last line ends y=130 < 135 ✓
+    if (!_cacheValid || callsign != _prevCall || tactical != _prevTactical) {
+        tft.fillRect(0, 0, W, 45, COLOR_BG);
+        if (tactical.length() > 0) {
+            tft.setCursor(2, 2);
+            tft.setTextSize(3);
+            tft.setTextColor(COLOR_HDR, COLOR_BG);
+            tft.print(tactical);
+            tft.setCursor(2, 27);
+            tft.setTextSize(2);
+            tft.setTextColor(COLOR_DIM, COLOR_BG);
+            tft.print(callsign);
+        } else {
+            tft.setCursor(2, 2);
+            tft.setTextSize(4);
+            tft.setTextColor(COLOR_HDR, COLOR_BG);
+            tft.print(callsign);
+        }
+        tft.drawLine(0, 44, W, 44, COLOR_HDR);
+        _prevCall     = callsign;
+        _prevTactical = tactical;
+    }
+
+    // ── Lines 2-6 (text×2, 17px spacing, starting at y=46) ─────────────────
+    // text×2 = 12px/char × 16px high; ~20 chars/line at 240px.
+    // Line 6 (i=4): y = 46 + 4×17 = 114; ends at 130 < 135 ✓
+    const String* lv[5]  = { &line2, &line3, &line4, &line5, &line6 };
+    String*       pv[5]  = { &_prevLine2, &_prevLine3, &_prevLine4,
+                              &_prevLine5, &_prevLine6 };
+    for (int i = 0; i < 5; i++) {
+        if (!_cacheValid || *lv[i] != *pv[i]) {
+            int16_t y = 46 + i * 17;
+            tft.fillRect(0, y, W, 17, COLOR_BG);
+            tft.setCursor(0, y);
+            tft.setTextSize(2);
+            tft.setTextColor(COLOR_BODY, COLOR_BG);
+            tft.print(*lv[i]);
+            *pv[i] = *lv[i];
+        }
+    }
+    _cacheValid = true;
 }
 
-#else  // !HAS_TFT_ST7789 — existing TFT_eSPI / SSD1306 paths
+void displayAPMode(const String& ssid, const String& password) {
+    if (!_tftReady) return;
+    tft.fillScreen(COLOR_BG);
+    tft.setCursor(0, 2);
+    tft.setTextSize(4);    // 2×  — "AP MODE" = 7 chars × 24px = 168px, fits in 240px
+    tft.setTextColor(COLOR_HDR, COLOR_BG);
+    tft.print("AP MODE");
+    tft.drawLine(0, 36, tft.width(), 36, COLOR_HDR);
+    tft.setTextSize(2);    // 2×
+    tft.setTextColor(COLOR_BODY, COLOR_BG);
+    tft.setCursor(0, 38);  tft.println("SSID: " + ssid);
+    tft.setCursor(0, 56);  tft.println("PW: " + password);
+    tft.setCursor(0, 74);  tft.println("192.168.4.1");
+    tft.setCursor(0, 92);  tft.println("Waiting...");
+    _cacheValid = false;
+}
 
+void displayTx(const String& packet) {
+    if (!_tftReady) return;
+    displayActivity();   // wake display if sleeping; reset idle timer
+    txDisplayEnd = millis() + 2000;
+    _cacheValid  = false;
+    const int16_t W = tft.width();
+    tft.fillScreen(COLOR_BG);
+    tft.setCursor(0, 2);
+    tft.setTextSize(4);    // 2×  — "<< TX >>" = 9 chars × 24px = 216px, fits in 240px
+    tft.setTextColor(COLOR_TX, COLOR_BG);
+    tft.print("<< TX >>");
+    tft.drawLine(0, 44, W, 44, COLOR_TX);   // separator matches status display (y=44)
+    // Body: text×2 (12px/char, 20 chars/line), 17px row height.
+    // 5 rows fit: y=46,63,80,97,114 — last ends y=130 < 135 ✓
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_BODY, COLOR_BG);
+    const int COLS = 20, ROWS = 5;
+    for (int i = 0; i < ROWS; i++) {
+        int start = i * COLS;
+        if (start >= (int)packet.length()) break;
+        tft.setCursor(0, 46 + i * 17);
+        tft.print(packet.substring(start, start + COLS));
+    }
+}
+
+void displayTxFlash() {}   // superseded by displayTx(); kept for build compat
+
+#else  // !HAS_TFT_ST7789 — SSD1306 / SH1106 OLED or TFT_eSPI path
+
+// ── OLED (SSD1306 / SH1106) and TFT_eSPI ─────────────────────────────────────
 #include <logger.h>
 #include <Wire.h>
-#include "custom_characters.h"
-#include "custom_colors.h"
 #include "configuration.h"
-#include "station_utils.h"
 #include "display.h"
-#include "TimeLib.h"
-
 
 #ifdef HAS_TFT
     #include <TFT_eSPI.h>
-
-    TFT_eSPI    tft     = TFT_eSPI();
-    TFT_eSprite sprite  = TFT_eSprite(&tft);
+    TFT_eSPI    tft    = TFT_eSPI();
+    TFT_eSprite sprite = TFT_eSprite(&tft);
 
     #ifdef HELTEC_WIRELESS_TRACKER
-        #define bigSizeFont     2
-        #define smallSizeFont   1
-        #define lineSpacing     12
-        #define maxLineLength   26
-    #endif
-    #if defined(TTGO_T_DECK_GPS) || defined(TTGO_T_DECK_PLUS)
-        #define color1  TFT_BLACK
-        #define color2  0x0249
-        #define green   0x1B08
-
-        #define bigSizeFont     4
-        #define normalSizeFont  2
-        #define smallSizeFont   1
-        #define lineSpacing     20
-        #define maxLineLength   22
-
-        extern String topHeader1;
-        extern String topHeader1_1;
-        extern String topHeader1_2;
-        extern String topHeader1_3;
-        extern String topHeader2;
+        #define bigSizeFont   2
+        #define smallSizeFont 1
+        #define lineSpacing   12
+        #define maxLineLength 26
     #endif
 #else
     #include <Adafruit_GFX.h>
 
-    #define ssd1306 //comment this line with "//" when using SH1106 screen instead of SSD1306
-
+    #define ssd1306  // comment to use SH1106 instead
     #if defined(TTGO_T_Beam_S3_SUPREME_V3) || defined(TTGO_T_BEAM_1W)
         #undef ssd1306
     #endif
@@ -280,167 +303,17 @@ void bootStatus(const char* step) {
     #endif
 #endif
 
-#define SYMBOL_HEIGHT 14
-#define SYMBOL_WIDTH  16
-
 extern Configuration    Config;
-extern Beacon           *currentBeacon;
-extern int              menuDisplay;
-extern bool             bluetoothConnected;
+extern logging::Logger  logger;
 
-const char* symbolArray[]     = { "[", ">", "j", "b", "<", "s", "u", "R", "v", "(", ";", "-", "k",
-                                "C", "a", "Y", "O", "'", "=", "y", "U", "p", "_", ")"};
-int   symbolArraySize         = sizeof(symbolArray)/sizeof(symbolArray[0]);
-const uint8_t *symbolsAPRS[]  = {runnerSymbol, carSymbol, jeepSymbol, bikeSymbol, motorcycleSymbol, shipSymbol,
-                                truck18Symbol, recreationalVehicleSymbol, vanSymbol, carsateliteSymbol, tentSymbol,
-                                houseSymbol, truckSymbol, canoeSymbol, ambulanceSymbol, yatchSymbol, baloonSymbol,
-                                aircraftSymbol, trainSymbol, yagiSymbol, busSymbol, dogSymbol, wxSymbol, wheelchairSymbol};
-// T-Beams bought with soldered OLED Screen comes with only 4 pins (VCC, GND, SDA, SCL)
-// If your board didn't come with 4 pins OLED Screen and comes with 5 and one of them is RST...
-// Uncomment Next Line (Remember ONLY if your OLED Screen has a RST pin). This is to avoid memory issues.
-//#define OLED_DISPLAY_HAS_RST_PIN
-
-int         lastMenuDisplay         = 0;
-uint8_t     screenBrightness        = 1;    //from 1 to 255 to regulate brightness of screens
-bool        symbolAvailable         = true;
-
-extern logging::Logger logger;
-
-
-#if defined(HAS_TFT) && (defined(TTGO_T_DECK_GPS) || defined(TTGO_T_DECK_PLUS))
-    void drawButton(int xPos, int yPos, int wide, int height, String buttonText, int color) {
-        uint16_t baseColor, lightColor, darkColor;
-        switch (color) {
-            case 0:     // Grey Theme
-                baseColor   = greyColor;
-                lightColor  = greyColorLight;
-                darkColor   = greyColorDark;
-                break;
-            case 1:     // Green Theme
-                baseColor   = greenColor;
-                lightColor  = greenColorLight;
-                darkColor   = greenColorDark;
-                break;
-            case 2:     // Red Theme
-                baseColor   = redColor;
-                lightColor  = redColorLight;
-                darkColor   = redColorDark;
-                break;
-            default:    // Fallback color
-                baseColor   = 0x0000;   // Black
-                lightColor  = 0xFFFF;   // White
-                darkColor   = 0x0000;   // Black
-                break;
-        }
-
-        sprite.fillRect(xPos, yPos, wide, height, baseColor);           // Dibuja el fondo del botón
-        sprite.fillRect(xPos, yPos + height - 2, wide, 2, darkColor);   // Línea inferior
-        sprite.fillRect(xPos, yPos, wide, 2, lightColor);               // Línea superior
-        sprite.fillRect(xPos, yPos, 2, height, lightColor);             // Línea izquierda
-        sprite.fillRect(xPos + wide - 2, yPos, 2, height, darkColor);   // Línea derecha
-
-        sprite.setTextSize(2);
-        sprite.setTextColor(TFT_WHITE, baseColor);
-
-        // Calcula la posición del texto para que esté centrado
-        int textWidth = sprite.textWidth(buttonText);           // Ancho del texto
-        int textHeight = 16;                                    // Altura aproximada (depende de `setTextSize`)
-        int textX = xPos + (wide - textWidth) / 2;              // Centrado horizontal
-        int textY = yPos + (height - textHeight) / 2;           // Centrado vertical
-
-        sprite.drawString(buttonText, textX, textY);
-    }
-
-    void draw_T_DECK_Top() {
-        sprite.fillSprite(TFT_BLACK);
-        sprite.fillRect(0, 0, 320, 38, redColor);
-        sprite.setTextFont(0);
-        sprite.setTextSize(bigSizeFont);
-        sprite.setTextColor(TFT_WHITE, redColor);
-        sprite.drawString(topHeader1, 3, 5);
-
-        sprite.setTextSize(smallSizeFont);
-        sprite.setTextColor(TFT_WHITE, redColor);
-        sprite.drawString(topHeader1_1, 258, 5);
-        sprite.drawString("UTC:" + topHeader1_2, 246, 15);
-
-        sprite.fillRect(0, 38, 320, 2, redColorDark);
-
-        sprite.fillRect(0, 40, 320, 2, greyColorLight);
-        sprite.fillRect(0, 42, 320, 20, greyColor);
-        sprite.setTextSize(2);
-        sprite.setTextColor(TFT_WHITE, greyColor);
-        sprite.drawString(topHeader2, 8, 44);
-        sprite.fillRect(0, 60, 320, 2, greyColorDark);
-    }
-
-    void draw_T_DECK_MenuButtons(int menu) {
-        int ladoCuadrado            = 45;
-        int curvaCuadrado           = 8;
-        int espacioEntreCuadrados   = 18;
-        int margenLineaCuadrados    = 10;
-        int alturaPrimeraLinea      = 75;
-        int alturaSegundaLinea      = 145;
-        int16_t colorCuadrados      = 0x2925;
-        int16_t colorDestacado      = greyColor;
-
-        for (int i = 0; i < 5; i++) {
-            if (i == menu - 1) {
-                sprite.fillRoundRect(
-                    margenLineaCuadrados + (i * (ladoCuadrado + espacioEntreCuadrados)) - 1,
-                    alturaPrimeraLinea - 1,
-                    ladoCuadrado + 2,
-                    ladoCuadrado + 2,
-                    curvaCuadrado,
-                    TFT_WHITE
-                );
-                sprite.fillRoundRect(
-                    margenLineaCuadrados + (i * (ladoCuadrado + espacioEntreCuadrados)),
-                    alturaPrimeraLinea,
-                    ladoCuadrado,
-                    ladoCuadrado,
-                    curvaCuadrado,
-                    TFT_BLACK
-                );
-                sprite.fillRoundRect(
-                    margenLineaCuadrados + (i * (ladoCuadrado + espacioEntreCuadrados)),    // x-coordinate
-                    alturaPrimeraLinea,                                                     // y-coordinate
-                    ladoCuadrado,                                                           // width
-                    ladoCuadrado,                                                           // height
-                    curvaCuadrado,                                                          // corner radius
-                    colorDestacado                                                          // color
-                );
-            } else {
-                sprite.fillRoundRect(
-                    margenLineaCuadrados + (i * (ladoCuadrado + espacioEntreCuadrados)),    // x-coordinate
-                    alturaPrimeraLinea,                                                     // y-coordinate
-                    ladoCuadrado,                                                           // width
-                    ladoCuadrado,                                                           // height
-                    curvaCuadrado,                                                          // corner radius
-                    colorCuadrados                                                          // color
-                );
-            }
-            sprite.fillRoundRect(
-                margenLineaCuadrados + (i * (ladoCuadrado + espacioEntreCuadrados)),    // x-coordinate
-                alturaSegundaLinea,                                                     // y-coordinate
-                ladoCuadrado,                                                           // width
-                ladoCuadrado,                                                           // height
-                curvaCuadrado,                                                          // corner radius
-                colorCuadrados                                                          // color
-            );
-        }
-    }
-
-#endif
+static uint8_t screenBrightness = 1;
 
 void displaySetup() {
-    delay(500);
-    STATION_Utils::loadIndex(2);    // Screen Brightness value
     #ifdef HAS_TFT
         tft.init();
         tft.begin();
         if (Config.display.turn180) {
-                tft.setRotation(3);
+            tft.setRotation(3);
         } else {
             tft.setRotation(1);
         }
@@ -448,10 +321,10 @@ void displaySetup() {
         analogWrite(TFT_BL, screenBrightness);
         tft.setTextFont(0);
         tft.fillScreen(TFT_BLACK);
-        #if defined(TTGO_T_DECK_GPS) || defined(TTGO_T_DECK_PLUS)
-            sprite.createSprite(320,240);
+        #ifdef HELTEC_WIRELESS_TRACKER
+            sprite.createSprite(160, 80);
         #else
-            sprite.createSprite(160,80);
+            sprite.createSprite(160, 80);
         #endif
     #else
         #ifdef OLED_DISPLAY_HAS_RST_PIN
@@ -460,7 +333,6 @@ void displaySetup() {
             delay(20);
             digitalWrite(OLED_RST, HIGH);
         #endif
-
         Wire.begin(OLED_SDA, OLED_SCL);
         #ifdef ssd1306
             if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) {
@@ -477,230 +349,53 @@ void displaySetup() {
         display.clearDisplay();
         #ifdef ssd1306
             display.setTextColor(WHITE);
-        #else
-            display.setTextColor(SH110X_WHITE);
-        #endif
-        display.setTextSize(1);
-        display.setCursor(0, 0);
-        #ifdef ssd1306
             display.ssd1306_command(SSD1306_SETCONTRAST);
             display.ssd1306_command(screenBrightness);
         #else
+            display.setTextColor(SH110X_WHITE);
             display.setContrast(screenBrightness);
         #endif
+        display.setTextWrap(false);   // clip overlong lines instead of wrapping
+        display.setTextSize(1);
+        display.setCursor(0, 0);
         display.display();
     #endif
 }
 
 void displayToggle(bool toggle) {
-    if (toggle) {
-        #ifdef HAS_TFT
-            analogWrite(TFT_BL, screenBrightness);
+    #ifdef HAS_TFT
+        analogWrite(TFT_BL, toggle ? screenBrightness : 0);
+    #else
+        #ifdef ssd1306
+            display.ssd1306_command(toggle ? SSD1306_DISPLAYON : SSD1306_DISPLAYOFF);
         #else
-            #ifdef ssd1306
-                display.ssd1306_command(SSD1306_DISPLAYON);
-            #else
-                display.oled_command(SH110X_DISPLAYON);
-            #endif
+            display.oled_command(toggle ? SH110X_DISPLAYON : SH110X_DISPLAYOFF);
         #endif
-    } else {
-        #ifdef HAS_TFT
-            analogWrite(TFT_BL, 0);
-        #else
-            #ifdef ssd1306
-                display.ssd1306_command(SSD1306_DISPLAYOFF);
-            #else
-                display.oled_command(SH110X_DISPLAYOFF);
-            #endif
-        #endif
-    }
+    #endif
 }
 
-void displayShow(const String& header, const String& line1, const String& line2, int wait) {
+void bootStatus(const char* step) {
+    if (!step) return;
+    Serial.print(F("[boot ")); Serial.print(millis()); Serial.print(F("ms] ")); Serial.println(step);
+}
+
+void startupScreen(const String& versionDate) {
     #ifdef HAS_TFT
-        #if defined(TTGO_T_DECK_GPS) || defined(TTGO_T_DECK_PLUS)
-            draw_T_DECK_Top();
-
-            sprite.setTextSize(normalSizeFont);
-            sprite.setTextColor(TFT_WHITE, TFT_BLACK);
-
-            const String* const lines[] = {&header, &line1, &line2};
-            int yLineOffset = 70;
-
-            for (int i = 0; i < 3; i++) {
-                String text = *lines[i];
-                if (text.length() > 0) {
-                    while (text.length() > 0) {
-                        String chunk = text.substring(0, maxLineLength);
-                        sprite.drawString(chunk, 35, yLineOffset);
-                        text = text.substring(maxLineLength);
-                        yLineOffset += lineSpacing;
-                    }
-                } else {
-                    sprite.drawString(text, 3, yLineOffset);
-                    yLineOffset += lineSpacing;
-                }
-            }
-        #endif
-        #if defined(HELTEC_WIRELESS_TRACKER)
+        #ifdef HELTEC_WIRELESS_TRACKER
             sprite.fillSprite(TFT_BLACK);
             sprite.fillRect(0, 0, 160, 19, TFT_YELLOW);
             sprite.setTextFont(0);
             sprite.setTextSize(bigSizeFont);
             sprite.setTextColor(TFT_BLACK, TFT_YELLOW);
-            sprite.drawString(header, 3, 3);
-
-            const String* const lines[] = {&line1, &line2};
-
+            sprite.drawString("LoRa APRS", 3, 3);
             sprite.setTextSize(smallSizeFont);
             sprite.setTextColor(TFT_WHITE, TFT_BLACK);
-
-            int yLineOffset = (lineSpacing * 2) - 2;
-
-            for (int i = 0; i < 2; i++) {
-                String text = *lines[i];
-                if (text.length() > 0) {
-                    while (text.length() > 0) {
-                        String chunk = text.substring(0, maxLineLength);
-                        sprite.drawString(chunk, 3, yLineOffset);
-                        text = text.substring(maxLineLength);
-                        yLineOffset += lineSpacing;
-                    }
-                } else {
-                    sprite.drawString(text, 3, yLineOffset);
-                    yLineOffset += lineSpacing;
-                }
-            }
-        #endif
-        sprite.pushSprite(0,0);
-    #else
-        const String* const lines[] = {&line1, &line2};
-
-        display.clearDisplay();
-        #ifdef ssd1306
-            display.setTextColor(WHITE);
-        #else
-            display.setTextColor(SH110X_WHITE);
-        #endif
-        display.setTextSize(2);
-        display.setCursor(0, 0);
-        display.println(header);
-        display.setTextSize(1);
-        for (int i = 0; i < 2; i++) {
-            display.setCursor(0, 16 + (10 * i));
-            display.println(*lines[i]);
-        }
-        #ifdef ssd1306
-            display.ssd1306_command(SSD1306_SETCONTRAST);
-            display.ssd1306_command(screenBrightness);
-        #else
-            display.setContrast(screenBrightness);
-        #endif
-        display.display();
-    #endif
-    delay(wait);
-}
-
-void drawSymbol(int symbolIndex, bool bluetoothActive) {
-    const uint8_t *bitMap = symbolsAPRS[symbolIndex];
-    #ifdef HAS_TFT
-        if (bluetoothActive) bitMap = bluetoothSymbol;
-        #if defined(HELTEC_WIRELESS_TRACKER)
-            sprite.drawBitmap(128 - SYMBOL_WIDTH, 3, bitMap, SYMBOL_WIDTH, SYMBOL_HEIGHT, TFT_WHITE);
-        #endif
-        #if defined(TTGO_T_DECK_GPS) || defined(TTGO_T_DECK_PLUS)
-            sprite.drawBitmap(280, 70, bitMap, SYMBOL_WIDTH, SYMBOL_HEIGHT, TFT_WHITE);
+            sprite.drawString("Multi-Mode v3", 3, 22);
+            sprite.drawString(versionDate, 3, 34);
+            sprite.drawString("433 MHz", 3, 46);
+            sprite.pushSprite(0, 0);
         #endif
     #else
-        display.drawBitmap((display.width() - SYMBOL_WIDTH), 0, bitMap, SYMBOL_WIDTH, SYMBOL_HEIGHT, 1);
-    #endif
-}
-
-void displayShow(const String& header, const String& line1, const String& line2, const String& line3, const String& line4, const String& line5, int wait) {
-    #ifdef HAS_TFT
-        #if defined(TTGO_T_DECK_GPS) || defined(TTGO_T_DECK_PLUS)
-            draw_T_DECK_Top();
-            sprite.setTextSize(normalSizeFont);
-            sprite.setTextColor(TFT_WHITE, TFT_BLACK);
-
-            const String* const lines[] = {&header, &line1, &line2, &line3, &line4, &line5};
-            int yLineOffset = 70;
-
-            for (int i = 0; i < 6; i++) {
-                String text = *lines[i];
-                if (text.length() > 0) {
-                    while (text.length() > 0) {
-                        String chunk = text.substring(0, maxLineLength);
-                        sprite.drawString(chunk, 35, yLineOffset);
-                        text = text.substring(maxLineLength);
-                        yLineOffset += lineSpacing;
-                    }
-                } else {
-                    sprite.drawString(text, 3, yLineOffset);
-                    yLineOffset += lineSpacing;
-                }
-            }
-
-            drawButton(30,  210, 80, 28, "Send", 1);
-            drawButton(125, 210, 80, 28, "Menu", 0);
-            drawButton(220, 210, 80, 28, "Exit", 2);
-        #endif
-        #if defined(HELTEC_WIRELESS_TRACKER)
-            sprite.fillSprite(TFT_BLACK);
-            sprite.fillRect(0, 0, 160, 19, redColor);
-            sprite.setTextFont(0);
-            sprite.setTextSize(bigSizeFont);
-            sprite.setTextColor(TFT_WHITE, redColor);
-            sprite.drawString(header, 3, 3);
-
-            const String* const lines[] = {&line1, &line2, &line3, &line4, &line5};
-
-            sprite.setTextSize(smallSizeFont);
-            sprite.setTextColor(TFT_WHITE, TFT_BLACK);
-
-            int yLineOffset = (lineSpacing * 2) - 2;
-
-            for (int i = 0; i < 5; i++) {
-                String text = *lines[i];
-                if (text.length() > 0) {
-                    while (text.length() > 0) {
-                        String chunk = text.substring(0, maxLineLength);
-                        sprite.drawString(chunk, 3, yLineOffset);
-                        text = text.substring(maxLineLength);
-                        yLineOffset += lineSpacing;
-                    }
-                } else {
-                    sprite.drawString(text, 3, yLineOffset);
-                    yLineOffset += lineSpacing;
-                }
-            }
-        #endif
-            if (menuDisplay == 0 && Config.display.showSymbol) {
-                int symbol = 100;
-                for (int i = 0; i < symbolArraySize; i++) {
-                    if (currentBeacon->symbol == symbolArray[i]) {
-                        symbol = i;
-                        break;
-                    }
-                }
-
-                symbolAvailable = symbol != 100;
-
-                /*  Symbol alternate every 5s
-                *   If bluetooth is disconnected or if we are in the first part of the clock, then we show the APRS symbol
-                *   Otherwise, we are in the second part of the clock, then we show BT connected */
-
-                const auto time_now = now();
-                if (!bluetoothConnected || time_now % 10 < 5) {
-                    if (symbolAvailable) drawSymbol(symbol, false);
-                } else if (bluetoothConnected) {    // TODO In this case, the text symbol stay displayed due to symbolAvailable false in menu_utils
-                    drawSymbol(symbol, true);
-                }
-            }
-        sprite.pushSprite(0,0);
-    #else
-        const String* const lines[] = {&line1, &line2, &line3, &line4, &line5};
-
         display.clearDisplay();
         #ifdef ssd1306
             display.setTextColor(WHITE);
@@ -711,13 +406,174 @@ void displayShow(const String& header, const String& line1, const String& line2,
             display.drawLine(0, 16, 128, 16, SH110X_WHITE);
             display.drawLine(0, 17, 128, 17, SH110X_WHITE);
         #endif
+        // title: text×2 (9 chars × 12px = 108px fits; text×3 = 162px > 128px)
         display.setTextSize(2);
         display.setCursor(0, 0);
-        display.println(header);
+        display.print("LoRa APRS");
+        display.drawLine(0, 17, 128, 17, 1);
+        // body: text×2 (2× larger than before; 128px / 12px = 10 chars max)
+        display.setTextSize(2);
+        display.setCursor(0, 20);
+        display.print("Multi-Mode v3");   // clips after ~10 chars — expected
+        display.setCursor(0, 38);
+        display.print(versionDate);
+        #ifdef ssd1306
+            display.ssd1306_command(SSD1306_SETCONTRAST);
+            display.ssd1306_command(screenBrightness);
+        #else
+            display.setContrast(screenBrightness);
+        #endif
+        display.display();
+    #endif
+    delay(1500);
+}
+
+void displayStatus(const String& callsign, const String& tactical,
+                   const String& line2, const String& line3,
+                   const String& line4, const String& line5,
+                   const String& line6) {
+    if (millis() < txDisplayEnd) return;
+    #ifdef HAS_TFT
+        #ifdef HELTEC_WIRELESS_TRACKER
+            sprite.fillSprite(TFT_BLACK);
+            sprite.fillRect(0, 0, 160, 19, TFT_YELLOW);
+            sprite.setTextFont(0);
+            sprite.setTextSize(bigSizeFont);
+            sprite.setTextColor(TFT_BLACK, TFT_YELLOW);
+            String hdr = callsign;
+            if (tactical.length() > 0) hdr += " " + tactical;
+            sprite.drawString(hdr, 3, 3);
+            sprite.setTextSize(smallSizeFont);
+            sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+            sprite.drawString(line2, 3, 22);
+            sprite.drawString(line3, 3, 34);
+            sprite.drawString(line4, 3, 46);
+            sprite.drawString(line5, 3, 58);
+            sprite.pushSprite(0, 0);
+        #endif
+    #else
+        // OLED 128×64 layout:
+        //  y=0-15  : Callsign text×2 (16px high) — up to 10 chars at 12px/char
+        //  y=16    : separator
+        //  y=18    : line 2 — role + battery   (text×2, 16px, ends y=34)
+        //  y=36    : line 6 — Last: callsign   (text×2, 16px, ends y=52 < 64 ✓)
+        display.clearDisplay();
+        #ifdef ssd1306
+            display.setTextColor(WHITE);
+        #else
+            display.setTextColor(SH110X_WHITE);
+        #endif
+        // Callsign at text×2 — full 128px width now that symbol is removed
+        display.setTextSize(2);
+        display.setCursor(0, 0);
+        String cs = callsign;
+        while (cs.length() > 0 && (int)(cs.length() * 12) > 128) cs.remove(cs.length()-1);
+        display.print(cs);
+        // Separator
+        display.drawLine(0, 16, 128, 16, 1);
+        // Lines 2 & 6 at text×2 (12px/char, 16px high; clips at edge if >~10 chars)
+        display.setTextSize(2);
+        display.setCursor(0, 18);  display.print(line2);
+        display.setCursor(0, 36);  display.print(line6);
+        #ifdef ssd1306
+            display.ssd1306_command(SSD1306_SETCONTRAST);
+            display.ssd1306_command(screenBrightness);
+        #else
+            display.setContrast(screenBrightness);
+        #endif
+        display.display();
+    #endif
+}
+
+void displayAPMode(const String& ssid, const String& password) {
+    #ifdef HAS_TFT
+        #ifdef HELTEC_WIRELESS_TRACKER
+            sprite.fillSprite(TFT_BLACK);
+            sprite.fillRect(0, 0, 160, 19, TFT_YELLOW);
+            sprite.setTextFont(0);
+            sprite.setTextSize(bigSizeFont);
+            sprite.setTextColor(TFT_BLACK, TFT_YELLOW);
+            sprite.drawString("** AP Mode **", 3, 3);
+            sprite.setTextSize(smallSizeFont);
+            sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+            sprite.drawString("SSID: " + ssid,    3, 22);
+            sprite.drawString("PW:   " + password, 3, 34);
+            sprite.drawString("192.168.4.1",       3, 46);
+            sprite.pushSprite(0, 0);
+        #endif
+    #else
+        display.clearDisplay();
+        #ifdef ssd1306
+            display.setTextColor(WHITE);
+            display.drawLine(0, 16, 128, 16, WHITE);
+            display.drawLine(0, 17, 128, 17, WHITE);
+        #else
+            display.setTextColor(SH110X_WHITE);
+            display.drawLine(0, 16, 128, 16, SH110X_WHITE);
+            display.drawLine(0, 17, 128, 17, SH110X_WHITE);
+        #endif
+        // text×3: "AP Mode" = 7 chars × 18px = 126px — just fits in 128px
+        display.setTextSize(3);
+        display.setCursor(0, 0);
+        display.print("AP Mode");
+        display.drawLine(0, 25, 128, 25, 1);
+        // text×2 body: 12px/char, 16px high; 2 lines fit in remaining 64-26=38px
+        display.setTextSize(2);
+        display.setCursor(0, 27);
+        display.print(ssid);
+        display.setCursor(0, 44);
+        display.print("PW: " + password);
+        #ifdef ssd1306
+            display.ssd1306_command(SSD1306_SETCONTRAST);
+            display.ssd1306_command(screenBrightness);
+        #else
+            display.setContrast(screenBrightness);
+        #endif
+        display.display();
+    #endif
+}
+
+void displayTxFlash() {}   // superseded by displayTx(); kept for build compat
+
+void displayTx(const String& packet) {
+    displayActivity();   // wake display if sleeping; reset idle timer
+    txDisplayEnd = millis() + 2000;
+    #ifdef HAS_TFT
+        #ifdef HELTEC_WIRELESS_TRACKER
+            sprite.fillSprite(TFT_BLACK);
+            sprite.fillRect(0, 0, 160, 19, TFT_GREEN);
+            sprite.setTextFont(0);
+            sprite.setTextSize(bigSizeFont);
+            sprite.setTextColor(TFT_BLACK, TFT_GREEN);
+            sprite.drawString("<< TX >>", 3, 3);
+            sprite.setTextSize(smallSizeFont);
+            sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+            sprite.drawString(packet.substring(0, 26), 3, 22);
+            if (packet.length() > 26)
+                sprite.drawString(packet.substring(26, 52), 3, 34);
+            sprite.pushSprite(0, 0);
+        #endif
+    #else
+        // OLED at 2× fonts: text×2 header (9×12=108px fits), text×2 body (10 chars max)
+        display.clearDisplay();
+        #ifdef ssd1306
+            display.setTextColor(WHITE);
+        #else
+            display.setTextColor(SH110X_WHITE);
+        #endif
+        display.setTextSize(2);    // "<< TX >>" = 9 chars × 12px = 108px, fits in 128px
+        display.setCursor(0, 0);
+        display.print("<< TX >>");
+        display.drawLine(0, 17, 128, 17, 1);
+        // Body: text×1 (6px/char, 8px high, 21 chars/line), 10px row spacing.
+        // 4 rows fit: y=19,29,39,49 — last ends y=57 < 64 ✓
         display.setTextSize(1);
-        for (int i = 0; i < 5; i++) {
-            display.setCursor(0, 20 + (9 * i));
-            display.println(*lines[i]);
+        const int COLS = 21, ROWS = 4;
+        for (int i = 0; i < ROWS; i++) {
+            int start = i * COLS;
+            if (start >= (int)packet.length()) break;
+            display.setCursor(0, 19 + i * 10);
+            display.print(packet.substring(start, start + COLS));
         }
         #ifdef ssd1306
             display.ssd1306_command(SSD1306_SETCONTRAST);
@@ -725,63 +581,10 @@ void displayShow(const String& header, const String& line1, const String& line2,
         #else
             display.setContrast(screenBrightness);
         #endif
-
-        if (menuDisplay == 0 && Config.display.showSymbol) {
-            int symbol = 100;
-            for (int i = 0; i < symbolArraySize; i++) {
-                if (currentBeacon->symbol == symbolArray[i]) {
-                    symbol = i;
-                    break;
-                }
-            }
-
-            symbolAvailable = symbol != 100;
-
-            /*
-            * Symbol alternate every 5s
-            * If bluetooth is disconnected or if we are in the first part of the clock, then we show the APRS symbol
-            * Otherwise, we are in the second part of the clock, then we show BT connected
-            */
-            const auto time_now = now();
-            if (!bluetoothConnected || time_now % 10 < 5) {
-                if (symbolAvailable) drawSymbol(symbol, false);
-            } else if (bluetoothConnected) {    // TODO In this case, the text symbol stay displayed due to symbolAvailable false in menu_utils
-                drawSymbol(symbol, true);
-            }
-        }
         display.display();
     #endif
-    delay(wait);
 }
 
-void startupScreen(uint8_t index, const String& version) {
-    String workingFreq = "    LoRa Freq [";
-    switch (index) {
-        case 0: workingFreq += "EU]"; break;
-        case 1: workingFreq += "PL]"; break;
-        case 2: workingFreq += "UK]"; break;
-        case 3: workingFreq += "US]"; break;
-    }
-    displayShow(" LoRa APRS", "      (TRACKER)", workingFreq, "", "", "  CA2RXU  " + version, 4000);
-    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Main", "RichonGuzman (CA2RXU) --> LoRa APRS Tracker/Station");
-    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Main", "Version: %s", version);
-}
+#endif  // !HAS_TFT_ST7789
 
-String fillMessageLine(const String& line, const int& length) {
-    String completeLine = line;
-    for (int i = 0; completeLine.length() <= length; i++) {
-        completeLine = completeLine + " ";
-    }
-    return completeLine;
-}
-
-void bootStatus(const char* step) {
-    // Legacy display paths don't have a dedicated banner-line slot; just
-    // mirror progress to the serial log. Every build prints these.
-    if (!step) return;
-    Serial.print(F("[boot ")); Serial.print(millis()); Serial.print(F("ms] ")); Serial.println(step);
-}
-
-#endif // !HAS_TFT_ST7789
-
-#endif // HAS_DISPLAY
+#endif  // HAS_DISPLAY

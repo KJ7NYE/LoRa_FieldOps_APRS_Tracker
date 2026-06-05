@@ -211,7 +211,6 @@ Four region presets are stored: `0=EU`, `1=PL`, `2=UK`, `3=US`.
 | `sendalt on\|off`                | Include altitude in beacons.                                   |
 | `nonsmartrate <sec>`             | Beacon interval when SmartBeacon is off.                       |
 | `rememberstation <sec>`          | How long to remember heard stations.                           |
-| `standingupdate <sec>`           | Update interval when standing still.                           |
 | `commentafter <n>`               | Send beacon comment every Nth beacon.                          |
 
 ---

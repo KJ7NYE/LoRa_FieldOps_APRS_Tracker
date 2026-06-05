@@ -18,6 +18,8 @@ namespace SERIAL_Setup {
 
     void setup();
     void loop();
+    bool isActive();    // true while setup CLI is open
+    bool isKISSMode();  // true while in KISS TNC mode (normal operating state)
 
 }
 

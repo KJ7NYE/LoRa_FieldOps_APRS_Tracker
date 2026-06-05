@@ -17,13 +17,13 @@
  */
 
 #include <SPI.h>
-#include "notification_utils.h"
+
 #include "configuration.h"
 #include "battery_utils.h"
 #include "board_pinout.h"
 #include "power_utils.h"
 #include "lora_utils.h"
-#ifdef HAS_NIMBLE
+#if defined(HAS_NIMBLE) || defined(ARDUINO_ARCH_NRF52)
 #include "ble_utils.h"
 #endif
 #include "gps_utils.h"
@@ -227,36 +227,6 @@ namespace POWER_Utils {
     }
 
     void externalPinSetup() {
-        if (Config.notification.buzzerActive && Config.notification.buzzerPinTone >= 0 && Config.notification.buzzerPinVcc >= 0) {
-            pinMode(Config.notification.buzzerPinTone, OUTPUT);
-            pinMode(Config.notification.buzzerPinVcc, OUTPUT);
-            if (Config.notification.bootUpBeep) NOTIFICATION_Utils::start();
-        } else if (Config.notification.buzzerActive && (Config.notification.buzzerPinTone < 0 || Config.notification.buzzerPinVcc < 0)) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "PINOUT", "Buzzer Pins not defined");
-            while (1);
-        }
-
-        if (Config.notification.ledTx && Config.notification.ledTxPin >= 0) {
-            pinMode(Config.notification.ledTxPin, OUTPUT);
-        } else if (Config.notification.ledTx && Config.notification.ledTxPin < 0) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "PINOUT", "Led Tx Pin not defined");
-            while (1);
-        }
-
-        if (Config.notification.ledMessage && Config.notification.ledMessagePin >= 0) {
-            pinMode(Config.notification.ledMessagePin, OUTPUT);
-        } else if (Config.notification.ledMessage && Config.notification.ledMessagePin < 0) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "PINOUT", "Led Message Pin not defined");
-            while (1);
-        }
-
-        if (Config.notification.ledFlashlight && Config.notification.ledFlashlightPin >= 0) {
-            pinMode(Config.notification.ledFlashlightPin, OUTPUT);
-        } else if (Config.notification.ledFlashlight && Config.notification.ledFlashlightPin < 0) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "PINOUT", "Led Flashlight Pin not defined");
-            while (1);
-        }
-
         if (Config.ptt.active && Config.ptt.io_pin >= 0) {
             pinMode(Config.ptt.io_pin, OUTPUT);
             digitalWrite(Config.ptt.io_pin, Config.ptt.reverse ? HIGH : LOW);
@@ -331,11 +301,8 @@ namespace POWER_Utils {
         #ifdef HAS_NO_GPS
             disableGPS = true;
         #else
-            if (Config.wifiAP.active) {
-                disableGPS = true;
-            } else {
-                disableGPS = Config.disableGPS;
-            }
+            // GPS_NONE means "no position source" — treat same as no GPS hardware.
+            disableGPS = (Config.gpsSource == GPS_NONE);
         #endif
 
         #ifdef HAS_AXP192
@@ -463,16 +430,13 @@ namespace POWER_Utils {
         delay(3000);
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Main", "SHUTDOWN !!!");
         #if defined(HAS_AXP192) || defined(HAS_AXP2101)
-            if (Config.notification.shutDownBeep) NOTIFICATION_Utils::shutDownBeep();
             displayToggle(false);
             PMU.shutdown();
         #else
-            #ifdef HAS_NIMBLE
-                if (Config.bluetooth.active && Config.bluetooth.useBLE) {
+            #if defined(ARDUINO_ARCH_NRF52) || defined(HAS_NIMBLE)
+                if (Config.bluetooth.active) {
                     BLE_Utils::stop();
-                } /*else {
-                    // turn off BT classic ???
-                }*/
+                }
             #endif
 
             #ifdef VEXT_CTRL

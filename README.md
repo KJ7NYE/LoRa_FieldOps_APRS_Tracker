@@ -1,4 +1,324 @@
-# LoRanger APRS Tracker — KJ7NYE Fork
+# LoRa Field Ops APRS Tracker
+
+A multi-role LoRa APRS firmware for 433 MHz amateur radio operations. Supports tracker, iGate, and digipeater roles on a single configurable firmware build. Designed for field deployment at events, search and rescue operations, and remote area monitoring where cellular coverage is absent.
+
+Derived from [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/LoRa_APRS_Tracker) (CA2RXU), with significant architectural changes and new features targeted at 433 MHz APRS operation.
+
+> **License:** GPL-3.0 — see [LICENSE](LICENSE)
+
+---
+
+## Supported Hardware
+
+| Board | MCU | LoRa | GPS | Display | WiFi | BLE |
+|---|---|---|---|---|---|---|
+| **Heltec T114** | nRF52840 | SX1262 | Quectel L76K (onboard) | ST7789 1.14" TFT | — | ✅ BLE 5 |
+| **Heltec WiFi LoRa 32 V3** | ESP32-S3 | SX1262 | None (fixed position) | SSD1306/SH1106 OLED | ✅ | ✅ NimBLE |
+| **LilyGo T-Beam** | ESP32 | SX1278 | u-blox NEO-6M/M8N | SSD1306/SH1106 OLED | ✅ | ✅ NimBLE |
+| **LilyGo T3 V1.6** | ESP32 | SX1278 | None (fixed position) | SSD1306 OLED | ✅ | ✅ NimBLE |
+| **LoRanger V1** (KJ7NYE) | ESP32-S3 | EBYTE E22-400 (SX1262) | ATGM336H (onboard) | None (headless) | ✅ | ✅ NimBLE |
+
+---
+
+## Roles
+
+Each device can be configured as one of three roles at runtime — no reflash needed:
+
+| Role | Function |
+|---|---|
+| **Tracker** | Beacons position via LoRa RF using SmartBeacon adaptive rate |
+| **iGate** | Receives LoRa RF packets and uploads to APRS-IS over WiFi |
+| **Digipeater** | Receives and re-transmits LoRa RF packets following standard APRS path rules |
+
+Any role can also digipeat simultaneously. The digipeater includes a 30-second hash deduplication buffer to suppress repeated copies of the same packet.
+
+---
+
+## Features
+
+### APRS / RF
+- **SmartBeacon** — adaptive beaconing rate based on speed and heading change; parked tracker falls back to slow-rate beacons automatically (no separate timer needed)
+- **Mic-E encoding** — compact position format
+- **Status beacons** — configurable status text, triggered by long button press (>3 s)
+- **WIDE1-1 / WIDE1-1,WIDE2-1** path selection
+- **Digipeater deduplication** — 25-slot djb2 hash ring, 30 s TTL prevents duplicate relays
+- **6-character Maidenhead grid square** — displayed on TFT (format: `AA00aa`)
+
+### Connectivity
+- **USB serial KISS TNC** — default mode at 115200 baud; compatible with APRSDroid, Xastir, Direwolf
+- **BLE KISS TNC** — APRS.fi GATT service UUID; compatible with APRSDroid (Android), APRS.fi (iOS)
+- **TCP KISS server** — starts automatically when WiFi STA is connected (configurable port, default 8001)
+- **APRS-IS upload** — iGate role; passcode auto-computed from callsign (Friedman algorithm), optional override
+- **Bluetooth Classic SPP** — ESP32 boards with HAS_BT_CLASSIC
+
+### Serial interface
+USB serial operates in three modes, switchable at runtime without reconnecting:
+- **KISS mode** (default) — binary APRS passthrough for TNC clients
+- **Setup mode** — interactive CLI for all configuration
+- **Log mode** — live firmware log output at configurable verbosity
+
+Type `setup` or `log` over serial to switch; any mode returns to KISS on disconnect or reboot.
+
+### Configuration
+- **Web UI** — served over WiFi AP (hold USR button at boot, or callsign = NOCALL-7); full configuration via browser
+- **Serial config tool** (`serial_config.html`) — standalone HTML page using the Web Serial API; works in Chrome/Edge 89+; no server required
+- **Serial CLI** — `setup` → interactive command line with `help`, `show`, `save`, `reboot`
+- **JSON config file** — `tracker_conf.json` on LittleFS/SPIFFS; importable/exportable via serial config tool
+
+### Display
+- **TFT (T114)** — 240×135 ST7789; tactical or callsign large header, 5 body lines, TX overlay, eco mode backlight timeout
+- **OLED (V3/T-Beam/T3)** — 128×64; callsign header, role+battery, last-heard station
+- **Tactical callsign** — when set, shown as the large primary identifier; RF callsign shown smaller below
+- **Display eco mode** — configurable timeout; wakes on button press, packet RX, or TX
+- **LED indicator** — heartbeat (50 ms/1.5 s) + TX/RX flash; can be disabled in config
+
+### Button (USR)
+- **Short press (50 ms – 3 s)** — send position beacon immediately
+- **Long press (≥3 s)** — send status beacon
+- **Hold at boot** — force AP config mode (WiFi boards)
+
+---
+
+## Building
+
+### Requirements
+- [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
+- Python 3.x (for build scripts)
+
+### Quick start
+```bash
+git clone https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker_ESP
+cd LoRa_FieldOps_APRS_Tracker_ESP
+
+# Build all supported targets
+pio run
+
+# Build a specific target
+pio run -e heltec_t114
+
+# Flash + upload filesystem
+pio run -e heltec_t114 -t upload
+pio run -e heltec_t114 -t uploadfs
+```
+
+### Environments
+
+| Environment | Board |
+|---|---|
+| `heltec_t114` | Heltec T114 (nRF52840) |
+| `heltec_v3_433_aprs` | Heltec WiFi LoRa 32 V3 |
+| `tbeam_433_aprs` | LilyGo T-Beam |
+| `lilygo_t3_433_aprs` | LilyGo T3 V1.6 |
+| `LoRanger_V1` | LoRanger V1 (KJ7NYE) |
+
+---
+
+## First-Time Setup
+
+1. Flash firmware and filesystem (`upload` + `uploadfs`)
+2. On first boot, callsign defaults to `NOCALL-7` → device starts in AP mode
+3. Connect to the `LoRaAPRS` WiFi network (password: `1234567890`)
+4. Open `http://192.168.4.1` in a browser
+5. Set your callsign, role, frequency, and path; click **Save**
+6. Device reboots into normal operation
+
+Alternatively, use the serial config tool:
+1. Open `serial_config.html` in Chrome or Edge
+2. Click **Select Port** and choose your device's USB serial port
+3. The tool auto-enters Setup mode and reads the current config
+4. Edit fields; each change is sent immediately
+5. Click **Save** to persist, or **Reboot** to apply
+
+---
+
+## Configuration Reference
+
+### Beacon
+| Setting | Description |
+|---|---|
+| Callsign | Your amateur radio callsign with SSID (e.g., `KJ7NYE-9`) |
+| Tactical callsign | Short event/role identifier (≤9 chars); shown large on display when set |
+| Symbol | APRS symbol code (e.g., `>` = car, `[` = runner) |
+| Overlay | Symbol table (`/` = primary, `\` = alternate, or overlay letter) |
+| Comment | Appended to beacon packet every N beacons |
+| Status | Status text sent on long button press |
+| SmartBeacon | Adaptive rate based on speed/heading; profiles: Runner, Bike, Car, Custom |
+| Beacon TX path | `WIDE1-1` (1 hop) or `WIDE1-1,WIDE2-1` (2 hops) |
+| Non-smart rate | Fallback interval (minutes) when SmartBeacon is disabled |
+
+### Device Role
+| Setting | Description |
+|---|---|
+| Device role | Tracker / iGate / Digipeater (dedicated) |
+| GPS source | Internal GPS / Fixed position / None |
+| Digi mode | Off / WIDE1 fill-in / WIDE1+WIDE2 infrastructure |
+| Fixed position | Lat/lon/elevation when GPS source = Fixed |
+
+### Display
+| Setting | Description |
+|---|---|
+| Eco mode | Blank display after N seconds of inactivity |
+| Eco timeout | Seconds before display blanks (eco mode) |
+| Rotate 180° | Flip display for reversed mounting |
+| LED indicator | Enable/disable the onboard status LED |
+
+### WiFi (iGate/AP)
+| Setting | Description |
+|---|---|
+| AP password | Password for the config AP (default: `1234567890`) |
+| WiFi STA | SSID and password for iGate uplink |
+| APRS-IS server | Default: `rotate.aprs.net:14580` |
+| APRS-IS filter | Default: `m/20` (packets within 20 km) |
+| APRS-IS passcode | Leave blank to auto-compute from callsign; set only for override |
+| TCP KISS port | Port for TCP KISS server (auto-starts with WiFi STA) |
+
+---
+
+## Serial CLI Reference
+
+Connect USB serial at 115200 baud, then type `setup` to enter the CLI.
+
+```
+help                              show all commands
+show [section]                    show current config (all or specific section)
+save                              write config to flash
+reboot                            reboot device
+discard                           discard unsaved changes
+export                            print full config as JSON (copy/paste to save)
+import                            paste JSON config (ends with Ctrl+Z or empty line)
+
+-- beacons --
+beacon callsign <CALL-SSID>
+beacon symbol <c>          overlay <c>          micE <0..7>
+beacon comment <text>      status <text>        label <text>
+beacon tactical <text>     (≤9 chars)
+beacon smart on|off
+beacon smartset <0..3>     (0=Runner 1=Bike 2=Car 3=Custom)
+beaconpath <path>
+
+-- display --
+display eco|turn180|led on|off
+display timeout <sec>
+
+-- role --
+role set tracker|igate|digipeater
+role gps internal|fixed|none
+digi off|wide1|wide1+wide2
+
+-- network --
+wifista on|off    ssid <ssid>    password <pw>
+aprsiss server <host>    port <n>    passcode <code>    filter <f>
+tcpkiss port <n>
+
+-- bluetooth --
+bt on|off    name <device-name>
+
+-- lora --
+lora freq <hz>    sf <7..12>    bw <hz>    cr <5..8>    power <dbm>
+
+-- serial mode --
+log [off|error|warn|info|debug]   switch to log monitor mode
+exit                              return to KISS TNC mode
+```
+
+---
+
+## Serial Modes
+
+The USB serial port operates in three mutually exclusive modes:
+
+```
+KISS mode (default)  →  type "setup"  →  Setup mode
+                     →  type "log"    →  Log mode
+Setup / Log mode     →  type "exit"   →  KISS mode (also on disconnect/reboot)
+```
+
+**KISS mode** — binary APRS TNC passthrough. Compatible with APRSDroid (USB TNC), Xastir, Direwolf, and other KISS TNC clients.
+
+**Setup mode** — interactive CLI. All changes take effect immediately; `save` persists to flash.
+
+**Log mode** — real-time firmware log. Verbosity controlled with `log <level>`. Does not interfere with BLE KISS TNC operation.
+
+---
+
+## BLE KISS TNC
+
+The BLE KISS TNC uses the [APRS.fi GATT service](https://aprs.fi/info/a/APRSDROID) profile:
+
+| | UUID |
+|---|---|
+| Service | `00000001-ba2a-46c9-ae49-01b0961f68bb` |
+| TX (device → phone, notify) | `00000003-ba2a-46c9-ae49-01b0961f68bb` |
+| RX (phone → device, write) | `00000002-ba2a-46c9-ae49-01b0961f68bb` |
+
+**Compatible apps:** APRSDroid (Android), APRS.fi (iOS)
+
+BLE KISS and USB serial log monitoring are fully independent — you can run both simultaneously. BLE KISS is unaffected by which serial mode is active.
+
+---
+
+## APRS-IS Passcode
+
+The APRS-IS passcode is automatically computed from your callsign using the standard Friedman algorithm. You do not need to enter it manually.
+
+To use a different passcode (e.g., for club callsigns where your personal call generates the valid passcode), enter it in the **Passcode (override)** field. Leave blank to use auto-computation.
+
+---
+
+## SmartBeacon Behaviour
+
+SmartBeacon adjusts the beacon interval dynamically:
+- **Moving fast** → short interval (fastRate)
+- **Moving slow** → long interval (slowRate)
+- **Stopped** (speed < 1 km/h) → beacons at slowRate regardless of distance; prevents the tracker from going silent when parked
+
+Heading changes above `turnMinDeg` threshold trigger an immediate beacon regardless of time elapsed.
+
+---
+
+## LoRanger V1 Notes
+
+The LoRanger V1 uses a headless (no display) build. The `HAS_DISPLAY` flag is unset to avoid a boot hang that would otherwise occur when the I2C display initialisation fails.
+
+The EBYTE E22-400M30S module is branded as SX1268 but ships with SX1262 silicon — the RadioLib SX1262 driver is used. Confirmed via `VERSION_STRING` readback during bring-up.
+
+---
+
+## Project Structure
+
+```
+src/                  Firmware source (all platforms)
+include/              Headers and configuration structs
+variants/             Per-board pin definitions and PlatformIO environments
+  heltec_t114/        nRF52840 + ST7789 TFT
+  heltec_v3_433_aprs/ ESP32-S3 + OLED
+  tbeam_433_aprs/     ESP32 + GPS + AXP PMU
+  lilygo_t3_433_aprs/ ESP32 + OLED
+  LoRanger_V1/        ESP32-S3 + SX1262 (headless)
+variants_bsp/         BSP-level variant overrides (T114 nRF52 BSP)
+data/                 Default config JSON (flashed to filesystem)
+data_embed/           Web UI assets (gzip-embedded in firmware)
+tools/                Build scripts (compress.py, build_uf2.py)
+serial_config.html    Standalone serial config tool (Chrome/Edge)
+```
+
+---
+
+## Acknowledgements
+
+- **Ricardo Guzman (CA2RXU)** — [LoRa_APRS_Tracker](https://github.com/richonguzman/LoRa_APRS_Tracker) and [LoRa_APRS_iGate](https://github.com/richonguzman/LoRa_APRS_iGate) — original firmware
+- **SparkFun Electronics** — SparkFun Thing Plus ESP32-S3 design, the hardware base for LoRanger V1 (CC BY-SA 4.0)
+- **Adafruit Industries** — Bluefruit BLE library and nRF52 BSP
+- **h2zero** — NimBLE-Arduino library
+- **jgromes** — RadioLib
+
+---
+
+## Legal
+
+Operation on amateur radio frequencies requires a valid amateur radio licence. In the United States, comply with FCC Part 97. High-power modules (>30 dBm) exceed ISM band power limits and are for licensed amateur radio use only.
+
+*73 de KJ7NYE*
 
 > **Fork notice.** This is a fork of [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/LoRa_APRS_Tracker),
 > maintained at [KJ7NYE/LoRanger_APRS_Tracker](https://github.com/KJ7NYE/LoRanger_APRS_Tracker). The upstream

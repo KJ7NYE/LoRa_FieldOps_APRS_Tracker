@@ -33,7 +33,7 @@ files = [
 string_to_find_str = "String"
 string_to_find_ver = "versionDate"
 
-CPP_SRC = 'src/LoRa_APRS_Tracker.cpp'
+CPP_SRC = 'src/main.cpp' if os.path.exists('src/main.cpp') else 'src/LoRa_APRS_Tracker.cpp'
 
 with open(CPP_SRC, encoding='utf-8') as cpp_file:
   for line in cpp_file:

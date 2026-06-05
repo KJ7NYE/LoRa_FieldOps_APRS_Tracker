@@ -27,6 +27,7 @@ namespace BATTERY_Utils {
     String  getPercentVoltageBattery(float voltage);
     String  getBatteryInfoVoltage();
     float   readBatteryVoltage();
+    void    obtainBatteryInfo();   // force a fresh ADC/PMU sample
     void    monitor();
 
 }

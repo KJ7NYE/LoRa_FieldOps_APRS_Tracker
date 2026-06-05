@@ -24,7 +24,6 @@
 #include "station_utils.h"
 #include "board_pinout.h"
 #include "power_utils.h"
-#include "sleep_utils.h"
 #include "gps_utils.h"
 #include "display.h"
 #include "logger.h"
@@ -48,7 +47,6 @@ extern TinyGPSPlus          gps;
 extern Beacon               *currentBeacon;
 extern logging::Logger      logger;
 extern bool                 sendUpdate;
-extern bool		            sendStandingUpdate;
 
 extern uint32_t             lastTxTime;
 extern uint32_t             txInterval;
@@ -57,17 +55,13 @@ extern double               lastTxLng;
 extern double               lastTxDistance;
 extern uint32_t             lastTx;
 extern bool                 disableGPS;
-extern bool                 gpsShouldSleep;
 extern SmartBeaconValues    currentSmartBeaconValues;
 
 double      currentHeading  = 0;
 double      previousHeading = 0;
 float       bearing         = 0;
 
-bool        gpsIsActive     = true;
-
-TinyGPSPlus externalGPS;  // For external GPS sources (serial or BLE)
-uint32_t    lastExternalGPSUpdate = 0;
+bool        gpsIsActive     = false;  // set to true in setup() only when GPS hardware is started
 
 
 namespace GPS_Utils {
@@ -82,13 +76,6 @@ namespace GPS_Utils {
     };
 
     PositionData lastValidPosition = {0, 0, 0, 0, 0, false};
-
-    void feedExternalGPSData(uint8_t byte) {
-        externalGPS.encode(byte);
-        if (externalGPS.location.isUpdated()) {
-            lastExternalGPSUpdate = millis();
-        }
-    }
 
     bool getPositionData(PositionData &posData) {
         posData.timestamp = millis();
@@ -119,28 +106,8 @@ namespace GPS_Utils {
                 }
                 return posData.isValid;
 
-            case GPS_EXTERNAL_SERIAL:
-            case GPS_EXTERNAL_BLE:
-                if (externalGPS.location.isValid()) {
-                    posData.latitude = externalGPS.location.lat();
-                    posData.longitude = externalGPS.location.lng();
-                    posData.elevation = externalGPS.altitude.meters();
-                    posData.satelliteCount = externalGPS.satellites.value();
-                    posData.isValid = true;
-                    lastValidPosition = posData;
-                    return true;
-                }
-                // Fallback to fixed position if external GPS has no fix
-                if (Config.fixedPosition.latitude != 0 || Config.fixedPosition.longitude != 0) {
-                    posData.latitude = Config.fixedPosition.latitude;
-                    posData.longitude = Config.fixedPosition.longitude;
-                    posData.elevation = Config.fixedPosition.elevation;
-                    posData.satelliteCount = 0;
-                    posData.isValid = true;
-                    lastValidPosition = posData;
-                    return true;
-                }
-                break;
+            case GPS_NONE:
+                return false;  // no position source configured
 
             default:
                 break;
@@ -167,10 +134,32 @@ namespace GPS_Utils {
     }
 
     void setup() {
-        if (disableGPS) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Main", "GPS disabled");
+        // No hardware needed for fixed position or when GPS is explicitly disabled.
+        if (Config.gpsSource == GPS_FIXED) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "GPS", "Fixed position — GPS hardware not started");
+            gpsIsActive = false;
             return;
         }
+        if (Config.gpsSource == GPS_NONE) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "GPS", "GPS_NONE — no position source, no beaconing");
+            gpsIsActive = false;
+            return;
+        }
+
+        // Board has no GPS connector or pin assignment.
+        #ifdef HAS_NO_GPS
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "GPS", "No GPS hardware on this board");
+            gpsIsActive = false;
+            return;
+        #endif
+
+        // Runtime override (e.g. WiFi AP active on T-Beam)
+        if (disableGPS) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "GPS", "GPS disabled (runtime override)");
+            gpsIsActive = false;
+            return;
+        }
+
         #ifdef LIGHTTRACKER_PLUS_1_0
             pinMode(GPS_VCC, OUTPUT);
             digitalWrite(GPS_VCC, LOW);
@@ -189,13 +178,14 @@ namespace GPS_Utils {
         #else
             gpsSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_TX, GPS_RX);
         #endif
+
+        gpsIsActive = true;
     }
 
     void calculateDistanceCourse(const String& callsign, double checkpointLatitude, double checkPointLongitude) {
-        double distanceKm = TinyGPSPlus::distanceBetween(gps.location.lat(), gps.location.lng(), checkpointLatitude, checkPointLongitude) / 1000.0;
-        double courseTo   = TinyGPSPlus::courseTo(gps.location.lat(), gps.location.lng(), checkpointLatitude, checkPointLongitude);
-        STATION_Utils::deleteListenedStationsByTime();
-        STATION_Utils::orderListenedStationsByDistance(callsign, distanceKm, courseTo);
+        (void)TinyGPSPlus::distanceBetween(gps.location.lat(), gps.location.lng(), checkpointLatitude, checkPointLongitude);
+        (void)TinyGPSPlus::courseTo(gps.location.lat(), gps.location.lng(), checkpointLatitude, checkPointLongitude);
+        STATION_Utils::updateLastHeard(callsign);  // track heard station for display
     }
 
     void getData() {
@@ -211,17 +201,13 @@ namespace GPS_Utils {
         currentHeading  = gps.course.deg();
         lastTxDistance  = TinyGPSPlus::distanceBetween(gps.location.lat(), gps.location.lng(), lastTxLat, lastTxLng);
         if (lastTx >= txInterval) {
-            if (lastTxDistance > currentSmartBeaconValues.minTxDist) {
+            // Beacon if moved far enough OR if stationary (speed < 1 km/h).
+            // GPS speed uses Doppler and reads 0 reliably when stopped, so this
+            // cleanly handles the parked-tracker case without a separate timer.
+            // minTxDist still suppresses jitter-triggered updates while moving.
+            int speed = (int)gps.speed.kmph();
+            if (speed < 1 || lastTxDistance > currentSmartBeaconValues.minTxDist) {
                 sendUpdate = true;
-                sendStandingUpdate = false;
-            } else {
-                if (currentBeacon->gpsEcoMode) {
-                    //
-                    Serial.print("minTxDistance not achieved : ");
-                    Serial.println(lastTxDistance);
-                    //
-                    gpsShouldSleep = true;
-                }
             }
         }
     }
@@ -235,9 +221,10 @@ namespace GPS_Utils {
             } else {
                 TurnMinAngle = currentSmartBeaconValues.turnMinDeg + (currentSmartBeaconValues.turnSlope/speed);
             }
-            if (headingDelta > TurnMinAngle && lastTxDistance > currentSmartBeaconValues.minTxDist) {
+            // Heading trigger still requires minTxDist — GPS course is unreliable
+            // at low speeds, so we don't want stationary jitter firing heading beacons.
+            if (speed > 1 && headingDelta > TurnMinAngle && lastTxDistance > currentSmartBeaconValues.minTxDist) {
                 sendUpdate = true;
-                sendStandingUpdate = false;
             }
         }
     }
@@ -248,8 +235,26 @@ namespace GPS_Utils {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "GPS",
                         "No GPS frames detected! Try to reset the GPS Chip with this "
                         "firmware: https://github.com/richonguzman/TTGO_T_BEAM_GPS_RESET");
-            displayShow("ERROR", "No GPS frames!", "Reset the GPS Chip", 2000);
+            bootStatus("ERROR: No GPS frames!");
         }
+    }
+
+    // Returns a parseable single-line status string consumed by serial_config.html.
+    // Format: "gps.lat=47.123456 gps.lon=-122.345678 gps.alt=150.0 gps.sats=8 gps.valid=1"
+    String getStatusString() {
+        PositionData pd;
+        bool ok = getPositionData(pd);
+        String s = "gps.lat=";
+        s += ok ? String(pd.latitude,  6) : "0.000000";
+        s += " gps.lon=";
+        s += ok ? String(pd.longitude, 6) : "0.000000";
+        s += " gps.alt=";
+        s += ok ? String(pd.elevation, 1) : "0.0";
+        s += " gps.sats=";
+        s += ok ? String(pd.satelliteCount) : "0";
+        s += " gps.valid=";
+        s += ok ? "1" : "0";
+        return s;
     }
 
     String getHumanBearing(const String& left, const String& center, const String& right) {

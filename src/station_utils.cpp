@@ -1,355 +1,219 @@
-/* Copyright (C) 2025 Ricardo Guzman - CA2RXU
+/* station_utils.cpp — beacon TX, output packet buffer, last-heard tracking,
+ * and hash-based dedup for the LoRa APRS Multi-Mode Firmware.
  *
- * This file is part of LoRa APRS Tracker.
- *
- * LoRa APRS Tracker is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * LoRa APRS Tracker is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with LoRa APRS Tracker. If not, see <https://www.gnu.org/licenses/>.
+ * No menu, no telemetry, no WX, no Winlink.  Clean single-beacon impl.
  */
 
 #include <APRSPacketLib.h>
 #include <TinyGPS++.h>
-#include <SPIFFS.h>
-#include "telemetry_utils.h"
-#include "station_utils.h"
-#include "battery_utils.h"
+#include <queue>
 #include "configuration.h"
-#include "board_pinout.h"
-#include "power_utils.h"
-#include "sleep_utils.h"
+#include "station_utils.h"
+#include "gps_utils.h"
 #include "lora_utils.h"
-#ifdef HAS_NIMBLE
-#include "ble_utils.h"
-#endif
-#include "wx_utils.h"
+#include "battery_utils.h"
+#include "kiss_utils.h"
 #include "display.h"
 #include "logger.h"
 
-extern Configuration        Config;
-extern Beacon               *currentBeacon;
-extern logging::Logger      logger;
-extern TinyGPSPlus          gps;
-extern uint8_t              myBeaconsIndex;
-extern uint8_t              loraIndex;
-extern uint8_t              screenBrightness;
+extern Configuration    Config;
+extern logging::Logger  logger;
+extern TinyGPSPlus      gps;
 
-extern uint32_t             lastTx;
-extern uint32_t             lastTxTime;
-
-extern bool                 sendUpdate;
-
-extern double               currentHeading;
-extern double               previousHeading;
-
-extern double               lastTxLat;
-extern double               lastTxLng;
-extern double               lastTxDistance;
-
-extern bool                 miceActive;
-extern bool                 smartBeaconActive;
-extern bool                 winlinkCommentState;
-
-extern int                  wxModuleType;
-extern bool                 wxModuleFound;
-extern bool                 gpsIsActive;
-extern bool                 gpsShouldSleep;
+// Declared in main.cpp
+extern bool             sendUpdate;
+extern bool             gpsIsActive;
 
 
-bool	    sendStandingUpdate      = false;
-uint8_t     updateCounter           = 100;
+// ── Globals defined in this TU ────────────────────────────────────────────────
+// smartBeaconActive is owned by smartbeacon_utils.cpp — extern here.
+// currentHeading / previousHeading are defined in gps_utils.cpp.
+
+extern bool smartBeaconActive;
+extern double currentHeading;
+extern double previousHeading;
+double      lastTxLat           = 0.0;
+double      lastTxLng           = 0.0;
+double      lastTxDistance      = 0.0;
+uint32_t    lastTx              = 0;
+uint32_t    lastTxTime          = 0;
+
+static uint8_t  updateCounter  = 100;
 
 
-bool        sendStartTelemetry      = true;
+// ── Output packet buffer ──────────────────────────────────────────────────────
 
-uint32_t    lastDeleteListenedStation;
-const int   nearbyStationsSize  = 4;
-
-
-struct nearStation {
-    String      callsign;
-    float       distance;
-    int         course;
-    uint32_t    lastTime;
-};
-
-nearStation nearbyStations[nearbyStationsSize];
-
+static std::queue<String>  outBuffer;
+static uint32_t            lastOutTx = 0;
+static constexpr uint32_t  OUT_DELAY_MS = 200;  // inter-packet gap
 
 namespace STATION_Utils {
 
-    void nearStationInit() {
-        for (int i = 0; i < nearbyStationsSize; i++) {
-            nearbyStations[i].callsign    = "";
-            nearbyStations[i].distance    = 0.0;
-            nearbyStations[i].course      = 0;
-            nearbyStations[i].lastTime    = 0;
-        }
+    void addToOutputPacketBuffer(const String& packet) {
+        outBuffer.push(packet);
     }
 
-    String getNearStation(uint8_t position) {
-        if (nearbyStations[position].callsign == "") return "";
-        return nearbyStations[position].callsign + "> " + String(nearbyStations[position].distance,2) + "km " + String(nearbyStations[position].course);
+    void processOutputPacketBuffer() {
+        if (outBuffer.empty()) return;
+        uint32_t now = millis();
+        if (now - lastOutTx < OUT_DELAY_MS) return;
+        String pkt = outBuffer.front();
+        outBuffer.pop();
+        LoRa_Utils::sendNewPacket(pkt);
+        lastOutTx = now;
     }
 
-    void deleteListenedStationsByTime() {
-        for (int a = 0; a < nearbyStationsSize; a++) {                       // clean nearbyStations[] after time
-            if (nearbyStations[a].callsign != "" && (millis() - nearbyStations[a].lastTime > (uint32_t)(Config.rememberStationTime * 60 * 1000))) {
-                nearbyStations[a].callsign    = "";
-                nearbyStations[a].distance    = 0.0;
-                nearbyStations[a].course      = 0;
-                nearbyStations[a].lastTime    = 0;
-            }
-        }
 
-        for (int b = 0; b < nearbyStationsSize - 1; b++) {
-            for (int c = 0; c < nearbyStationsSize - b - 1; c++) {
-                if (nearbyStations[c].callsign == "") {       // get "" nearbyStations[] at the end
-                    nearStation temp    = nearbyStations[c];
-                    nearbyStations[c]     = nearbyStations[c + 1];
-                    nearbyStations[c + 1] = temp;
-                }
-            }
-        }
-        lastDeleteListenedStation = millis();
+    // ── Last-heard (display) ──────────────────────────────────────────────────
+    // Single most-recently-heard callsign for line3 of the status display.
+    // No buffer, no expiry — always shows whoever was heard last.
+
+    static String lastHeardCallsign = "";
+
+    void updateLastHeard(const String& callsign) {
+        if (callsign.length() == 0) return;
+        lastHeardCallsign = callsign;
     }
 
-    void checkListenedStationsByTimeAndDelete() {
-        if (millis() - lastDeleteListenedStation > (uint32_t)(Config.rememberStationTime * 60 * 1000)) deleteListenedStationsByTime();
+    String getLastHeardSummary() {
+        return lastHeardCallsign;
     }
 
-    void orderListenedStationsByDistance(const String& callsign, float distance, float course) {
-        bool shouldSortbyDistance = false;
-        bool callsignInNearStations = false;
 
-        for (int a = 0; a < nearbyStationsSize; a++) {                       // check if callsign is in nearbyStations[]
-            if (nearbyStations[a].callsign == callsign) {
-                callsignInNearStations  = true;
-                nearbyStations[a].lastTime = millis();        // update listened millis()
-                if (nearbyStations[a].distance != distance) { // update distance if needed
-                    nearbyStations[a].distance    = distance;
-                    shouldSortbyDistance        = true;
-                }
-                break;
-            }
+    // ── Hash-based dedup buffer ───────────────────────────────────────────────
+
+    static constexpr int   HASH_SIZE    = 25;
+    static constexpr uint32_t HASH_TTL  = 30000;  // 30 seconds
+
+    struct HashEntry {
+        uint32_t hash;
+        uint32_t seenAt;
+    };
+
+    static HashEntry hashBuf[HASH_SIZE];
+    static int       hashHead = 0;
+
+    // Simple djb2-style hash over a String.
+    static uint32_t djb2(const String& s) {
+        uint32_t h = 5381;
+        for (unsigned i = 0; i < s.length(); i++) {
+            h = ((h << 5) + h) + (uint8_t)s[i];
         }
-
-        if (!callsignInNearStations) {                      // callsign not in nearbyStations[]
-            for (int b = 0; b < nearbyStationsSize; b++) {                   // if nearbyStations[] is available
-                if (nearbyStations[b].callsign == "") {
-                    shouldSortbyDistance        = true;
-                    nearbyStations[b].callsign    = callsign;
-                    nearbyStations[b].distance    = distance;
-                    nearbyStations[b].course      = int(course);
-                    nearbyStations[b].lastTime    = millis();
-                    break;
-                }
-            }
-
-            if (!shouldSortbyDistance) {                    // if no more nearbyStations[] available , it compares distances to move and replace
-                for (int c = 0; c < nearbyStationsSize; c++) {
-                    if (nearbyStations[c].distance > distance) {
-                        for (int d = nearbyStationsSize - 1; d > c; d--) nearbyStations[d] = nearbyStations[d - 1]; // move all one position down
-                        nearbyStations[c].callsign    = callsign;
-                        nearbyStations[c].distance    = distance;
-                        nearbyStations[c].course      = int(course);
-                        nearbyStations[c].lastTime    = millis();
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (shouldSortbyDistance) { /*  BUBLE SORT  */      // sorts by distance (only nearbyStations[] that are not "")
-            for (int e = 0; e < nearbyStationsSize - 1; e++) {
-                for (int f = 0; f < nearbyStationsSize - e - 1; f++) {
-                    if (nearbyStations[f].callsign != "" && nearbyStations[f + 1].callsign != "") {
-                        if (nearbyStations[f].distance > nearbyStations[f + 1].distance) {
-                            nearStation temp        = nearbyStations[f];
-                            nearbyStations[f]       = nearbyStations[f + 1];
-                            nearbyStations[f + 1]   = temp;
-                        }
-                    }
-                }
-            }
-        }
+        return h;
     }
 
-    void checkStandingUpdateTime() {
-        if (!sendUpdate && lastTx >= (uint32_t)(Config.standingUpdateTime * 60 * 1000)) {
-            sendUpdate = true;
-            sendStandingUpdate = true;
-            if (!gpsIsActive) {
-                SLEEP_Utils::gpsWakeUp();
+    bool isInHashBuffer(const String& callsign, const String& payload) {
+        uint32_t h = djb2(callsign + payload);
+        uint32_t now = millis();
+        for (int i = 0; i < HASH_SIZE; i++) {
+            if (hashBuf[i].hash == h && (now - hashBuf[i].seenAt) < HASH_TTL) {
+                return true;
             }
         }
+        // Not found — record it.
+        hashBuf[hashHead] = { h, now };
+        hashHead = (hashHead + 1) % HASH_SIZE;
+        return false;
     }
+
+
+    // ── Beacon TX ─────────────────────────────────────────────────────────────
 
     void sendBeacon() {
-        if (sendStartTelemetry && ((Config.battery.sendVoltage && Config.battery.voltageAsTelemetry) || (Config.telemetry.sendTelemetry && wxModuleFound)) && lastTxTime > 0) TELEMETRY_Utils::sendEquationsUnitsParameters();
+        double beaconLat = 0, beaconLng = 0;
+        float  beaconElev = 0;
+        if (!GPS_Utils::getCurrentLocation(beaconLat, beaconLng, beaconElev)) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Beacon", "No position — skipping beacon");
+            return;
+        }
 
-        String path = Config.path;
-        if (gps.speed.kmph() > 200 || gps.altitude.meters() > 9000) path = ""; // avoid plane speed and altitude
+        bool   hasLiveGPS  = (Config.gpsSource == GPS_INTERNAL) && gps.location.isValid();
+        double speedKnots  = hasLiveGPS ? gps.speed.knots()    : 0.0;
+        double courseDeg   = hasLiveGPS ? gps.course.deg()     : 0.0;
+        float  altFeet     = hasLiveGPS ? gps.altitude.feet()  : (beaconElev * 3.28084f);
+        float  altMeters   = hasLiveGPS ? gps.altitude.meters(): beaconElev;
+
+        Beacon& b   = Config.beacons[0];
+        String  path = Config.beaconPath;
+        // No path for high-alt / high-speed sources.
+        if (hasLiveGPS && (gps.speed.kmph() > 200 || gps.altitude.meters() > 9000)) path = "";
+
         String packet;
-        String tactical = currentBeacon->tacticalCallsign;
+        String tactical = b.tacticalCallsign;
         tactical.trim();
         if (tactical.length() > 0) {
             char ts[16];
-            snprintf(ts, sizeof(ts), "%02d%02d%02dz", gps.date.day() % 100, gps.time.hour() % 100, gps.time.minute() % 100);
-            packet = APRSPacketLib::generateObjectPacket(currentBeacon->callsign, "APLRT1", path, tactical, String(ts), currentBeacon->overlay, APRSPacketLib::encodeGPSIntoBase91(gps.location.lat(), gps.location.lng(), gps.course.deg(), gps.speed.knots(), currentBeacon->symbol, Config.sendAltitude, gps.altitude.feet(), sendStandingUpdate));
-        } else if (miceActive) {
-            packet = APRSPacketLib::generateMiceGPSBeaconPacket(currentBeacon->micE, currentBeacon->callsign, currentBeacon->symbol, currentBeacon->overlay, path, gps.location.lat(), gps.location.lng(), gps.course.deg(), gps.speed.knots(), gps.altitude.meters());
+            if (hasLiveGPS) {
+                snprintf(ts, sizeof(ts), "%02d%02d%02dz",
+                    gps.date.day() % 100, gps.time.hour() % 100, gps.time.minute() % 100);
+            } else {
+                snprintf(ts, sizeof(ts), "000000z");
+            }
+            packet = APRSPacketLib::generateObjectPacket(
+                b.callsign, "APLRT1", path, tactical, String(ts), b.overlay,
+                APRSPacketLib::encodeGPSIntoBase91(
+                    beaconLat, beaconLng, courseDeg, speedKnots,
+                    b.symbol, Config.sendAltitude, altFeet, false));
+        } else if (b.micE.length() > 0) {
+            packet = APRSPacketLib::generateMiceGPSBeaconPacket(
+                b.micE, b.callsign, b.symbol, b.overlay, path,
+                beaconLat, beaconLng, courseDeg, speedKnots, altMeters);
         } else {
-            packet = APRSPacketLib::generateBase91GPSBeaconPacket(currentBeacon->callsign, "APLRT1", path, currentBeacon->overlay, APRSPacketLib::encodeGPSIntoBase91(gps.location.lat(),gps.location.lng(), gps.course.deg(), gps.speed.knots(), currentBeacon->symbol, Config.sendAltitude, gps.altitude.feet(), sendStandingUpdate));
+            packet = APRSPacketLib::generateBase91GPSBeaconPacket(
+                b.callsign, "APLRT1", path, b.overlay,
+                APRSPacketLib::encodeGPSIntoBase91(
+                    beaconLat, beaconLng, courseDeg, speedKnots,
+                    b.symbol, Config.sendAltitude, altFeet, false));
         }
 
-        String batteryVoltage = BATTERY_Utils::getBatteryInfoVoltage();
-        bool shouldSleepLowVoltage = false;
-        #if defined(BATTERY_PIN) || defined(HAS_AXP192) || defined(HAS_AXP2101)
-            if (Config.battery.monitorVoltage && batteryVoltage.toFloat() < Config.battery.sleepVoltage) shouldSleepLowVoltage = true;
-        #endif
-
-        if (!shouldSleepLowVoltage) {
-            String comment = (winlinkCommentState ? "winlink" : currentBeacon->comment);
-            int sendCommentAfterXBeacons = ((winlinkCommentState || Config.battery.sendVoltageAlways) ? 1 : Config.sendCommentAfterXBeacons);
-
-            if (Config.battery.sendVoltage && !Config.battery.voltageAsTelemetry) {
-                #if defined(HAS_AXP192) || defined(HAS_AXP2101)
-                    String batteryChargeCurrent = POWER_Utils::getBatteryInfoCurrent();
-                    #if defined(HAS_AXP192)
-                        comment += " Bat=";
-                        comment += batteryVoltage;
-                        comment += "V (";
-                        comment += batteryChargeCurrent;
-                        comment += "mA)";
-                    #elif defined(HAS_AXP2101)
-                        comment += " Bat=";
-                        comment += String(batteryVoltage.toFloat(),2);
-                        comment += "V (";
-                        comment += batteryChargeCurrent;
-                        comment += "%)";
-                    #endif
-                #elif defined(BATTERY_PIN)
-                    comment += " Bat=";
-                    comment += String(batteryVoltage.toFloat(),2);
-                    comment += "V";
-                    comment += BATTERY_Utils::getPercentVoltageBattery(batteryVoltage.toFloat());
-                    comment += "%";
-                #endif
-            }
-
-            if (comment != "" || (Config.battery.sendVoltage && Config.battery.voltageAsTelemetry) || (Config.telemetry.sendTelemetry && wxModuleFound)) {
+        // Battery voltage comment.
+        if (Config.battery.sendVoltage) {
+            String bv = BATTERY_Utils::getBatteryInfoVoltage();
+            if (bv.length() > 0) {
                 updateCounter++;
-                if (updateCounter >= sendCommentAfterXBeacons) {
-                    if (comment != "") packet += comment;
-                    if ((Config.battery.sendVoltage && Config.battery.voltageAsTelemetry) || (Config.telemetry.sendTelemetry && wxModuleFound)) packet += TELEMETRY_Utils::generateEncodedTelemetry();
+                int threshold = Config.battery.sendVoltageAlways
+                    ? 1
+                    : Config.sendCommentAfterXBeacons;
+                if (updateCounter >= threshold) {
+                    packet += b.comment;
+                    packet += " Bat=";
+                    packet += String(bv.toFloat(), 2);
+                    packet += "V";
                     updateCounter = 0;
                 }
             }
-        } else {
-            packet += "**LowVoltagePowerOff**";
+        } else if (b.comment.length() > 0) {
+            updateCounter++;
+            if (updateCounter >= Config.sendCommentAfterXBeacons) {
+                packet += b.comment;
+                updateCounter = 0;
+            }
         }
 
-        displayShow("<<< TX >>>", "", packet, 100);
-        LoRa_Utils::sendNewPacket(packet);
-
-        #ifdef HAS_NIMBLE
-            if (Config.bluetooth.useBLE) BLE_Utils::sendToPhone(packet);   // send Tx packets to Phone too
-        #endif
-
-        if (shouldSleepLowVoltage) POWER_Utils::shutdown();
+        LoRa_Utils::sendNewPacket(packet);  // displayTx() is called inside sendNewPacket
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Beacon", "TX: %s", packet.c_str());
 
         if (smartBeaconActive) {
-            lastTxLat       = gps.location.lat();
-            lastTxLng       = gps.location.lng();
+            lastTxLat       = beaconLat;
+            lastTxLng       = beaconLng;
             previousHeading = currentHeading;
             lastTxDistance  = 0.0;
         }
-        lastTxTime  = millis();
-        sendUpdate  = false;
-        if (currentBeacon->gpsEcoMode) gpsShouldSleep = true;
+        lastTxTime      = millis();
+        sendUpdate      = false;
     }
 
-    void saveIndex(uint8_t type, uint8_t index) {
-        String filePath;
-        switch (type) {
-            case 0: filePath = "/callsignIndex.txt"; break;
-            case 1: filePath = "/freqIndex.txt"; break;
-            case 2: filePath = "/brightness.txt"; break;
-            default: return; // Invalid type, exit function
-        }
-
-        #ifdef ARDUINO_ARCH_NRF52
-            SPIFFS.remove(filePath);
-        #endif
-        File fileIndex = SPIFFS.open(filePath, "w");
-        if (!fileIndex) return;
-
-        String dataToSave = String(index);
-        if (fileIndex.println(dataToSave)) {
-            String logMessage;
-            switch (type) {
-                case 0: logMessage = "New Callsign Index"; break;
-                case 1: logMessage = "New Frequency Index"; break;
-                case 2: logMessage = "New Brightness"; break;
-                default: return; // Invalid type, exit function
-            }
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Main", "%s saved to SPIFFS", logMessage.c_str());
-        }
-        fileIndex.close();
-    }
-
-    void loadIndex(uint8_t type) {
-        String filePath;
-        switch (type) {
-            case 0: filePath = "/callsignIndex.txt"; break;
-            case 1: filePath = "/freqIndex.txt"; break;
-            case 2: filePath = "/brightness.txt"; break;
-            default: return; // Invalid type, exit function
-        }
-
-        if (!SPIFFS.exists(filePath)) {
-            switch (type) {
-                case 0: myBeaconsIndex = 0; break;
-                case 1: loraIndex = 0; break;
-                case 2:
-                    #ifdef HAS_TFT
-                        screenBrightness = 255;
-                    #else
-                        screenBrightness = 1;
-                    #endif
-                    break;
-                default: return; // Invalid type, exit function
-            }
+    void sendStatusBeacon() {
+        const Beacon& b = Config.beacons[0];
+        if (b.status.length() == 0) {
+            // No status text configured — fall back to a normal position beacon.
+            sendBeacon();
             return;
-        } else {
-            File fileIndex = SPIFFS.open(filePath, "r");
-            while (fileIndex.available()) {
-                String firstLine = fileIndex.readStringUntil('\n');
-                int index = firstLine.toInt();
-                String logMessage;
-                if (type == 0) {
-                    myBeaconsIndex = index;
-                    logMessage = "Callsign Index:";
-                } else if (type == 1) {
-                    loraIndex = index;
-                    logMessage = "LoRa Freq Index:";
-                } else {
-                    screenBrightness = index;
-                    logMessage = "Brightness:";
-                }
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Main", "%s %s", logMessage.c_str(), firstLine);
-            }
-            fileIndex.close();
         }
+        String packet = b.callsign + ">APLRT1," + Config.beaconPath + ":>" + b.status;
+        LoRa_Utils::sendNewPacket(packet);   // displayTx() fires inside sendNewPacket
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Beacon", "Status TX: %s", packet.c_str());
+        lastTxTime = millis();
     }
 
-}
+}  // namespace STATION_Utils

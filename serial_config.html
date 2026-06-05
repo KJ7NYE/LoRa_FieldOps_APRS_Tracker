@@ -141,10 +141,21 @@
 
     <div class="vr"></div>
 
-    <button id="btn-save"    class="btn btn-sm btn-success"          disabled>💾 Save</button>
-    <button id="btn-exit"    class="btn btn-sm btn-outline-secondary" disabled>Exit Setup</button>
-    <button id="btn-discard" class="btn btn-sm btn-outline-warning"  disabled>Discard</button>
-    <button id="btn-reboot"  class="btn btn-sm btn-outline-danger"   disabled>Reboot</button>
+    <button id="btn-save"    class="btn btn-sm btn-success"         disabled>💾 Save</button>
+    <button id="btn-discard" class="btn btn-sm btn-outline-warning" disabled>Discard</button>
+    <button id="btn-reboot"  class="btn btn-sm btn-outline-danger"  disabled>Reboot</button>
+
+    <div class="vr"></div>
+
+    <span class="text-muted" style="font-size:0.78rem">Mode:</span>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Serial mode">
+      <button id="btn-mode-kiss"  class="btn btn-outline-success" disabled
+              title="KISS TNC — binary passthrough for APRSDroid, APRS.fi, Xastir">📡 KISS</button>
+      <button id="btn-mode-setup" class="btn btn-outline-primary" disabled
+              title="Setup — interactive configuration CLI">⚙ Setup</button>
+      <button id="btn-mode-log"   class="btn btn-outline-info"    disabled
+              title="Log — monitor firmware serial output">📋 Log</button>
+    </div>
 
     <div class="vr"></div>
 
@@ -212,11 +223,11 @@ if (!('serial' in navigator)) {
 // ─────────────────────────────────────────────
 //  1. Serial state
 // ─────────────────────────────────────────────
-let port       = null;
-let writer     = null;
-let reader     = null;
-let connected  = false;
-let inSetup    = false;
+let port        = null;
+let writer      = null;
+let reader      = null;
+let connected   = false;
+let serialMode  = 'kiss';   // 'kiss' | 'setup' | 'log'
 
 // ─────────────────────────────────────────────
 //  2. App state
@@ -256,11 +267,42 @@ function setStatus(state, text) {
 }
 
 function setConnectedControls(on) {
-  const ids = ['btn-disconnect','btn-read-config','btn-save','btn-exit','btn-discard',
-               'btn-reboot','sel-log-level','btn-show-secrets','btn-export-json',
-               'btn-import-json','console-input','btn-send-cmd'];
-  ids.forEach(id => { document.getElementById(id).disabled = !on; });
+  // Always-available when connected
+  ['btn-disconnect','btn-reboot','sel-log-level','console-input','btn-send-cmd',
+   'btn-mode-kiss','btn-mode-setup','btn-mode-log'].forEach(id => {
+    document.getElementById(id).disabled = !on;
+  });
   document.getElementById('btn-select-port').disabled = on;
+  // Setup-mode-only controls are managed by updateModeButtons()
+  if (!on) {
+    ['btn-read-config','btn-save','btn-discard','btn-show-secrets',
+     'btn-export-json','btn-import-json'].forEach(id => {
+      document.getElementById(id).disabled = true;
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+//  4b. Mode button state + mode-gated controls
+// ─────────────────────────────────────────────
+function updateModeButtons() {
+  const modeColors = { kiss: 'success', setup: 'primary', log: 'info' };
+  ['kiss', 'setup', 'log'].forEach(m => {
+    const btn = document.getElementById('btn-mode-' + m);
+    const c   = modeColors[m];
+    btn.className = `btn btn-sm btn-${m === serialMode ? '' : 'outline-'}${c}`;
+  });
+
+  // Setup-only actions
+  const inSetup = (connected && serialMode === 'setup');
+  ['btn-read-config','btn-save','btn-discard','btn-show-secrets',
+   'btn-export-json','btn-import-json'].forEach(id => {
+    document.getElementById(id).disabled = !inSetup;
+  });
+
+  // Status bar
+  const labels = { kiss: 'KISS TNC', setup: 'Setup Mode', log: 'Log Mode' };
+  if (connected) setStatus('connected', 'Connected — ' + (labels[serialMode] || serialMode));
 }
 
 // ─────────────────────────────────────────────
@@ -379,10 +421,18 @@ function onData(text) {
   logRecv(text);
   _handleExportChunk(text);
 
-  // Setup mode detection
-  if (!inSetup && text.includes('SETUP MODE ACTIVE')) {
-    inSetup = true;
-    setStatus('connected', 'Connected — Setup Mode');
+  // ── Firmware mode-banner detection ──────────────────────────────────
+  // These strings come from serial_setup.cpp banners on mode transitions.
+  if (text.includes('SETUP MODE ACTIVE')) {
+    serialMode = 'setup';
+    updateModeButtons();
+  } else if (text.includes('[LOG] Serial log output active')) {
+    serialMode = 'log';
+    updateModeButtons();
+  } else if (text.includes('Returning to KISS TNC mode') ||
+             text.includes('[KISS TNC] Type')) {
+    serialMode = 'kiss';
+    updateModeButtons();
   }
 
   streamBuf += text;
@@ -397,18 +447,18 @@ async function connectSerial() {
     port = await navigator.serial.requestPort();
     setStatus('connecting', 'Opening port…');
     await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none' });
-    connected = true;
+    connected  = true;
+    serialMode = 'kiss';   // device defaults to KISS TNC on boot
     writer = port.writable.getWriter();
     reader = port.readable.getReader();
     setConnectedControls(true);
-    setStatus('connecting', 'Connected — entering setup…');
-    logInfo('Port opened at 115200. Sending "setup"…');
+    updateModeButtons();
+    setStatus('connecting', 'Connected — entering Setup…');
+    logInfo('Port opened at 115200. Entering Setup mode…');
     _readLoop();
 
-    // Enter setup mode, then auto-load config
-    await sendCmd('setup');
-    await _delay(300);
-    await readConfig();
+    // Enter setup mode via switchToMode — handles device already being in any mode
+    await switchToMode('setup');
 
   } catch (e) {
     setStatus('error', 'Error: ' + e.message);
@@ -442,16 +492,77 @@ async function disconnectSerial() {
   logInfo('Disconnected.');
 }
 
+function resetLeftPanel() {
+  const cont = document.getElementById('config-sections');
+  cont.innerHTML = '';
+  cont.style.display = 'none';
+  _accIdx = 0;
+  config  = null;
+  document.getElementById('config-placeholder').style.display = '';
+}
+
 function _cleanup() {
-  connected = false; inSetup = false;
+  connected  = false;
+  serialMode = 'kiss';
   try { reader && reader.cancel(); }  catch {}
   try { writer && writer.close(); }   catch {}
   try { port   && port.close(); }     catch {}
   port = writer = reader = null;
   setConnectedControls(false);
+  updateModeButtons();
+  resetLeftPanel();
 }
 
 const _delay = ms => new Promise(r => setTimeout(r, ms));
+
+// ─────────────────────────────────────────────
+//  9b. Mode switching
+//
+//  Key insight: always force-send 'exit\r\n' before switching, regardless of
+//  what serialMode says the current state is.  This makes the function safe
+//  even when serialMode is stale (e.g. device was already in Setup on connect):
+//    • From KISS  : 'exit' is not a trigger word → silently discarded ✓
+//    • From SETUP : executes 'exit' CLI command → returns to KISS ✓
+//    • From LOG   : executes 'exit' → returns to KISS ✓
+//
+//  Command-queue notes:
+//    • 'setup' (KISS trigger) → firmware shows banner + \n> → sendCmd() works
+//    • 'log'   (KISS trigger) → firmware shows banner, NO \n> → serialWrite only
+//    • 'exit'  (SETUP/LOG cmd) → firmware shows message, NO \n> → serialWrite only
+// ─────────────────────────────────────────────
+async function switchToMode(target) {
+  if (!connected) return;
+
+  // Flush any prompt-gated command that is waiting (mode change bypasses the queue)
+  if (cmdResolve) {
+    clearTimeout(cmdTimer);
+    const r = cmdResolve; cmdResolve = null; cmdBusy = false;
+    r('');
+  }
+  cmdQueue.length = 0;
+
+  // Step 1 — always force-exit to KISS (safe from any device state)
+  await serialWrite('exit\r\n');
+  serialMode = 'kiss';
+  updateModeButtons();
+  await _delay(400);
+
+  if (target === 'kiss') {
+    resetLeftPanel();
+    return;
+  }
+
+  // Step 2 — enter the requested mode from KISS
+  if (target === 'setup') {
+    await sendCmd('setup');   // waits for \n> prompt after the setup banner
+    await _delay(200);
+    if (serialMode === 'setup') await readConfig();
+  } else if (target === 'log') {
+    resetLeftPanel();
+    logSent('log');
+    await serialWrite('log\r\n');   // no \n> prompt in log mode
+  }
+}
 
 // ─────────────────────────────────────────────
 //  10. Read config via export
@@ -495,6 +606,13 @@ function _fieldRow(label, control, isBool = false) {
     row.appendChild(control);
   }
   return row;
+}
+
+function mkInfo(text) {
+  const p = document.createElement('p');
+  p.className = 'form-text text-muted small mb-1 mt-1';
+  p.textContent = text;
+  return p;
 }
 
 function mkText(label, value, onCommit, opts = {}) {
@@ -637,6 +755,206 @@ function mkTabStrip(container, tabs) {
 const LORA_REGIONS    = ['EU', 'PL', 'UK', 'US'];
 const SMARTSET_LABELS = ['0 — Runner', '1 — Bike', '2 — Car', '3 — Custom'];
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  APRS Symbol lookup tables
+//  Key  = symbol character (as stored in config beacon.symbol)
+//  Value = { l: description, e: emoji approximation }
+//
+//  Two tables: PRIMARY (overlay '/') and ALTERNATE (overlay '\' or A-Z/0-9).
+//  The device display renders the raw overlay+symbol characters (e.g. "/>").
+//  The emoji here is for web-UI visual context only — the canonical identity
+//  is always the character pair shown in the preview box.
+// ─────────────────────────────────────────────────────────────────────────────
+const APRS_SYM_PRIMARY = {
+  '!': { l:'Police station',        e:'🚔' },
+  '"': { l:'(reserved)',            e:'—'  },
+  '#': { l:'Digipeater',            e:'📡' },
+  '$': { l:'Phone',                 e:'📞' },
+  '%': { l:'DX cluster',            e:'📶' },
+  '&': { l:'HF gateway',            e:'🌐' },
+  "'": { l:'Small aircraft',        e:'🛩' },
+  '(': { l:'Mobile satellite',      e:'🛰' },
+  ')': { l:'Thunderstorm',          e:'⛈' },
+  '*': { l:'Snowflake',             e:'❄' },
+  '+': { l:'Red cross / church',    e:'✝' },
+  ',': { l:'Store',                 e:'🏪' },
+  '-': { l:'House (QTH)',           e:'🏠' },
+  '.': { l:'X mark',                e:'✖' },
+  '/': { l:'Dot (small circle)',    e:'●' },
+  '0': { l:'Circle #0',             e:'⓪' },
+  '1': { l:'Circle #1',             e:'①' },
+  '2': { l:'Circle #2',             e:'②' },
+  '3': { l:'Circle #3',             e:'③' },
+  '4': { l:'Circle #4',             e:'④' },
+  '5': { l:'Circle #5',             e:'⑤' },
+  '6': { l:'Circle #6',             e:'⑥' },
+  '7': { l:'Circle #7',             e:'⑦' },
+  '8': { l:'Circle #8',             e:'⑧' },
+  '9': { l:'Circle #9',             e:'⑨' },
+  ':': { l:'Fire',                  e:'🔥' },
+  ';': { l:'Campground / tent',     e:'⛺' },
+  '<': { l:'Motorcycle',            e:'🏍' },
+  '=': { l:'Railroad engine',       e:'🚂' },
+  '>': { l:'Car',                   e:'🚗' },
+  '?': { l:'Info kiosk',            e:'ℹ' },
+  '@': { l:'Hurricane / storm',     e:'🌀' },
+  'A': { l:'Aid station',           e:'🏥' },
+  'B': { l:'BBS',                   e:'💬' },
+  'C': { l:'Canoe',                 e:'🛶' },
+  'D': { l:'(reserved)',            e:'—'  },
+  'E': { l:'Eyeball (event)',       e:'👁' },
+  'F': { l:'Farm vehicle',          e:'🚜' },
+  'G': { l:'Grid square (3-char)',  e:'⬜' },
+  'H': { l:'Hotel',                 e:'🏨' },
+  'I': { l:'TCP/IP gateway',        e:'💻' },
+  'J': { l:'Jeep',                  e:'🚙' },
+  'K': { l:'School',                e:'🏫' },
+  'L': { l:'Laptop / PC user',      e:'💻' },
+  'M': { l:'Mac',                   e:'🖥' },
+  'N': { l:'NTS station',           e:'📻' },
+  'O': { l:'Balloon',               e:'🎈' },
+  'P': { l:'Police / parking',      e:'🅿' },
+  'Q': { l:'(TBD)',                 e:'—'  },
+  'R': { l:'RV',                    e:'🚐' },
+  'S': { l:'Space shuttle',         e:'🚀' },
+  'T': { l:'SSTV',                  e:'📷' },
+  'U': { l:'Bus',                   e:'🚌' },
+  'V': { l:'ATV',                   e:'📺' },
+  'W': { l:'National WX service',   e:'🌦' },
+  'X': { l:'Helicopter',            e:'🚁' },
+  'Y': { l:'Yacht / sailboat',      e:'⛵' },
+  'Z': { l:'WinAPRS / Windows',     e:'🪟' },
+  '[': { l:'Runner / jogger',       e:'🏃' },
+  '\\':{ l:'Triangle',              e:'▽' },
+  ']': { l:'APRS symbol',           e:'📍' },
+  '^': { l:'Large aircraft',        e:'✈' },
+  '_': { l:'Weather station',       e:'🌡' },
+  '`': { l:'Dish antenna',          e:'📡' },
+  'a': { l:'Ambulance',             e:'🚑' },
+  'b': { l:'Bicycle',               e:'🚲' },
+  'c': { l:'Incident command post', e:'🏴' },
+  'd': { l:'Fire department',       e:'🔴' },
+  'e': { l:'Horse / equestrian',    e:'🐎' },
+  'f': { l:'Fire truck',            e:'🚒' },
+  'g': { l:'Glider',                e:'🛩' },
+  'h': { l:'Hospital / store',      e:'🏥' },
+  'i': { l:'Info kiosk (alt)',      e:'ℹ' },
+  'j': { l:'Jeep (off-road)',       e:'🚙' },
+  'k': { l:'Truck (pickup)',        e:'🚚' },
+  'l': { l:'Area object marker',    e:'⬛' },
+  'm': { l:'Mic-E repeater',        e:'🔁' },
+  'n': { l:'Node (star)',           e:'⭐' },
+  'o': { l:'Emergency EOC',         e:'⚠' },
+  'p': { l:'Dog / rover',           e:'🐕' },
+  'q': { l:'Grid square (4-char)', e:'⬜' },
+  'r': { l:'Antenna / radio',       e:'📡' },
+  's': { l:'Marine ship',           e:'🚢' },
+  't': { l:'Thunderstorm (sm)',     e:'⛈' },
+  'u': { l:'18-wheeler truck',      e:'🚛' },
+  'v': { l:'Van',                   e:'🚐' },
+  'w': { l:'Water station',         e:'💧' },
+  'x': { l:'X / unknown',          e:'❓' },
+  'y': { l:'Yagi antenna',          e:'📡' },
+  'z': { l:'Shelter',               e:'🏕' },
+  '{': { l:'Fog',                   e:'🌫' },
+  '}': { l:'Spot',                  e:'📍' },
+};
+
+const APRS_SYM_ALTERNATE = {
+  '!': { l:'Emergency (!)',          e:'🚨' },
+  '"': { l:'(reserved)',            e:'—'  },
+  '#': { l:'Digi (overlay number)', e:'📡' },
+  '$': { l:'Bank / ATM',            e:'🏦' },
+  '%': { l:'Power plant',           e:'⚡' },
+  '&': { l:'I=iGate D=Digi',        e:'📡' },
+  "'": { l:'Crash / incident site', e:'💥' },
+  '(': { l:'Cloudy',                e:'☁'  },
+  ')': { l:'Firenet MEO',           e:'🔥' },
+  '*': { l:'Snow (alt)',            e:'❄'  },
+  '+': { l:'Church',                e:'⛪' },
+  ',': { l:'Girl scouts',           e:'👧' },
+  '-': { l:'HF mobile (1-char)',    e:'📻' },
+  '.': { l:'Rain',                  e:'🌧' },
+  '/': { l:'No symbol',             e:'—'  },
+  '0': { l:'Circle overlay 0',      e:'⓪' },
+  '1': { l:'Circle overlay 1',      e:'①' },
+  '2': { l:'Circle overlay 2',      e:'②' },
+  '3': { l:'Circle overlay 3',      e:'③' },
+  '4': { l:'Circle overlay 4',      e:'④' },
+  '5': { l:'Circle overlay 5',      e:'⑤' },
+  '6': { l:'Circle overlay 6',      e:'⑥' },
+  '7': { l:'Circle overlay 7',      e:'⑦' },
+  '8': { l:'Circle overlay 8',      e:'⑧' },
+  '9': { l:'Circle overlay 9',      e:'⑨' },
+  ':': { l:'Haze',                  e:'🌫' },
+  ';': { l:'Park / picnic area',    e:'🌳' },
+  '<': { l:'Advisory (1-char)',     e:'⚠'  },
+  '=': { l:'Railroad (alt)',        e:'🚂' },
+  '>': { l:'Car (overlaid)',        e:'🚗' },
+  '?': { l:'Info (alt)',            e:'ℹ'  },
+  '@': { l:'Hurricane (alt)',       e:'🌀' },
+  'A': { l:'ARES / RACES',          e:'🔴' },
+  'B': { l:'Blowing snow',          e:'🌨' },
+  'C': { l:'Coast guard',           e:'⚓' },
+  'D': { l:'Drizzle',               e:'🌦' },
+  'E': { l:'Smoke',                 e:'💨' },
+  'F': { l:'Freezing rain',         e:'🌨' },
+  'G': { l:'Snow shower',           e:'🌨' },
+  'H': { l:'Haze',                  e:'🌫' },
+  'I': { l:'Rain shower',           e:'🌧' },
+  'J': { l:'Lightning',             e:'⚡' },
+  'K': { l:'Kenwood (D7/D700)',     e:'📻' },
+  'L': { l:'Lighthouse',            e:'🗼' },
+  'M': { l:'Mobile (multiple)',     e:'📱' },
+  'N': { l:'Navigation buoy',       e:'⚓' },
+  'O': { l:'Rocket',                e:'🚀' },
+  'P': { l:'Parking',               e:'🅿' },
+  'Q': { l:'Quake',                 e:'🌍' },
+  'R': { l:'Restaurant',            e:'🍽' },
+  'S': { l:'Satellite (alt)',       e:'🛰' },
+  'T': { l:'Thunderstorm (alt)',    e:'⛈' },
+  'U': { l:'Sunny',                 e:'☀'  },
+  'V': { l:'VORTAC nav beacon',     e:'✈'  },
+  'W': { l:'NWS weather site',      e:'🌡' },
+  'X': { l:'Pharmacy (Rx)',         e:'💊' },
+  'Y': { l:'(TBD)',                 e:'—'  },
+  'Z': { l:'Shelter (alt)',         e:'🏕' },
+  '[': { l:'Wall cloud',            e:'☁'  },
+  '\\':{ l:'Geo square (alt)',      e:'⬜' },
+  ']': { l:'Repeater (alt)',        e:'📡' },
+  '^': { l:'Large aircraft (alt)',  e:'✈'  },
+  '_': { l:'WX station (surface)', e:'🌡' },
+  '`': { l:'Rain (alt)',            e:'🌧' },
+  'a': { l:'ARRL / ARES',           e:'🔴' },
+  'b': { l:'Blowing dust/sand',     e:'💨' },
+  'c': { l:'Civil defense (CERT)',  e:'🏛' },
+  'd': { l:'DX spot',               e:'📡' },
+  'e': { l:'Sleet',                 e:'🌨' },
+  'f': { l:'Funnel cloud',          e:'🌪' },
+  'g': { l:'Gale flags',            e:'🚩' },
+  'h': { l:'HAM store',             e:'🏪' },
+  'i': { l:'Indoor item',           e:'🏠' },
+  'j': { l:'WorkZone (ARES)',       e:'🚧' },
+  'k': { l:'Special vehicle (alt)', e:'🚗' },
+  'l': { l:'Lighthouse (alt)',      e:'🗼' },
+  'm': { l:'Milepost',              e:'📍' },
+  'n': { l:'Numbered node',         e:'⭐' },
+  'o': { l:'Small circle (alt)',    e:'●'  },
+  'p': { l:'Partly cloudy',         e:'⛅' },
+  'q': { l:'(TBD)',                 e:'—'  },
+  'r': { l:'Restrooms',             e:'🚻' },
+  's': { l:'Skywarn',               e:'🌩' },
+  't': { l:'Tornado',               e:'🌪' },
+  'u': { l:'18-wheeler (alt)',      e:'🚛' },
+  'v': { l:'Van (alt)',             e:'🚐' },
+  'w': { l:'Flooding',              e:'🌊' },
+  'x': { l:'Wreck / explosion',     e:'💥' },
+  'y': { l:'Skywarn (alt)',         e:'⚡' },
+  'z': { l:'Shelter (alt)',         e:'⛺' },
+  '{': { l:'Haze (alt)',            e:'🌫' },
+  '}': { l:'Bicycle (alt)',         e:'🚲' },
+};
+
 function renderConfig() {
   const cont = document.getElementById('config-sections');
   document.getElementById('config-placeholder').style.display = 'none';
@@ -649,151 +967,573 @@ function renderConfig() {
   const sc      = config.customSmartBeacon || {};
   const disp    = config.display           || {};
   const bt      = config.bluetooth         || {};
-  const notif   = config.notification      || {};
   const bat     = config.battery           || {};
-  const telem   = config.telemetry         || {};
   const ptt     = config.pttTrigger        || {};
   const wifi    = config.wifiAP            || {};
-  const wlink   = config.winlink           || {};
   const other   = config.other             || {};
 
   // ── Beacons ──────────────────────────────
   mkSection(cont, 'beacons', '📡 Beacons', body => {
     if (!beacons.length) { body.textContent = 'No beacons in config.'; return; }
-    mkTabStrip(body, beacons.map((b, i) => ({
-      label: `${i}: ${b.profileLabel || ('Bcn '+i)}`,
-      fillFn: pane => {
-        const S = cmds => sendSet(cmds);
-        const sel = () => `beacon select ${i}`;
-        pane.appendChild(mkText('Callsign',               b.callsign,        v => S([sel(), `beacon callsign ${v.toUpperCase()}`])));
-        pane.appendChild(mkText('Symbol (1 char)',         b.symbol,          v => S([sel(), `beacon symbol ${v}`]),    { maxlength: 1 }));
-        pane.appendChild(mkText('Overlay (1 char)',        b.overlay,         v => S([sel(), `beacon overlay ${v}`]),   { maxlength: 1 }));
-        pane.appendChild(mkNumber('Mic-E code (0–7)',      b.micE,            v => S([sel(), `beacon micE ${v}`]),      { min:0, max:7 }));
-        pane.appendChild(mkText('Comment',                 b.comment,         v => S([sel(), `beacon comment ${v}`])));
-        pane.appendChild(mkText('Status',                  b.status,          v => S([sel(), `beacon status ${v}`])));
-        pane.appendChild(mkText('Tactical callsign (≤9)', b.tacticalCallsign,v => S([sel(), `beacon tactical ${v}`]),  { maxlength: 9 }));
-        pane.appendChild(mkText('Profile label',           b.profileLabel,    v => S([sel(), `beacon label ${v}`])));
-        pane.appendChild(mkBool('SmartBeacon active',      b.smartBeaconActive,    v => S([sel(), `beacon smart ${boolStr(v)}`])));
-        pane.appendChild(mkSelect('SmartBeacon profile', b.smartBeaconSetting,
-          SMARTSET_LABELS.map((l,j) => ({ v: j, l })),    v => S([sel(), `beacon smartset ${v}`])));
-        pane.appendChild(mkBool('GPS eco mode',            b.gpsEcoMode,           v => S([sel(), `beacon gpseco ${boolStr(v)}`])));
-      }
-    })));
-  });
+    const b = beacons[0];
 
-  // ── LoRa ─────────────────────────────────
-  mkSection(cont, 'lora', '📻 LoRa', body => {
-    if (!loras.length) { body.textContent = 'No LoRa regions in config.'; return; }
-    mkTabStrip(body, loras.map((l, i) => ({
-      label: LORA_REGIONS[i] || String(i),
-      fillFn: pane => {
-        const sel = () => `lora select ${i}`;
-        pane.appendChild(mkNumber('Frequency (Hz)',          l.frequency,      v => sendSet([sel(), `lora freq ${v}`])));
-        pane.appendChild(mkNumber('Spreading factor (7–12)', l.spreadingFactor,v => sendSet([sel(), `lora sf ${v}`]),   { min:7, max:12 }));
-        pane.appendChild(mkNumber('Bandwidth (Hz)',          l.signalBandwidth,v => sendSet([sel(), `lora bw ${v}`])));
-        pane.appendChild(mkNumber('Coding rate denom (5–8)', l.codingRate4,   v => sendSet([sel(), `lora cr ${v}`]),   { min:5, max:8 }));
-        pane.appendChild(mkNumber('TX power (dBm)',          l.power,         v => sendSet([sel(), `lora power ${v}`]),{ min:0, max:22 }));
+    // Callsign + Tactical Callsign — single line, both ≤9 chars
+    {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'Callsign / Tactical';
+      const ctl = document.createElement('div'); ctl.className = 'field-control'; ctl.style.cssText = 'display:flex;gap:0.4rem';
+      const csInp  = document.createElement('input');
+      csInp.type = 'text'; csInp.className = 'form-control form-control-sm'; csInp.maxLength = 9;
+      csInp.value = b.callsign || ''; csInp.placeholder = 'CALLSIGN';
+      const tacInp = document.createElement('input');
+      tacInp.type = 'text'; tacInp.className = 'form-control form-control-sm'; tacInp.maxLength = 9;
+      tacInp.value = b.tacticalCallsign || ''; tacInp.placeholder = 'Tactical (blank = off)';
+      csInp.addEventListener ('change', () => { markDirty(csInp);  sendCmd(`beacon callsign ${csInp.value.toUpperCase()}`); });
+      tacInp.addEventListener('change', () => { markDirty(tacInp); sendCmd(`beacon tactical ${tacInp.value}`); });
+      ctl.appendChild(csInp); ctl.appendChild(tacInp);
+      row.appendChild(lbl); row.appendChild(ctl);
+      body.appendChild(row);
+    }
+
+    // Symbol picker — table/overlay select + symbol select + device-style preview
+    {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'Symbol';
+      const ctl = document.createElement('div'); ctl.className = 'field-control';
+      ctl.style.cssText = 'display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap';
+
+      // ── Table / Overlay selector ──────────────────────────────────────────
+      const ovlSel = document.createElement('select');
+      ovlSel.className = 'form-select form-select-sm';
+      ovlSel.style.cssText = 'width:auto;flex-shrink:0';
+      ovlSel.title = 'Table: / = Primary, \\ = Alternate, letter/digit = Alternate with overlay';
+      [
+        { v:'/',  l:'/ Primary' },
+        { v:'\\', l:'\\ Alternate' },
+        ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c => ({ v:c, l:`${c} Overlay` })),
+        ...'0123456789'.split('').map(c => ({ v:c, l:`${c} Overlay` })),
+      ].forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.v; opt.textContent = o.l;
+        ovlSel.appendChild(opt);
+      });
+      ovlSel.value = b.overlay || '/';
+
+      // ── Symbol selector ───────────────────────────────────────────────────
+      const symSel = document.createElement('select');
+      symSel.className = 'form-select form-select-sm';
+      symSel.style.cssText = 'flex:1;min-width:11rem;max-width:22rem';
+
+      // ── Device-style preview box ──────────────────────────────────────────
+      // Matches the monospace character the OLED/TFT renders on-screen.
+      const preview = document.createElement('div');
+      preview.style.cssText = [
+        'display:flex','flex-direction:column','align-items:center',
+        'justify-content:center','min-width:3.8rem','padding:2px 6px',
+        'background:#000','border:1px solid #444','border-radius:4px',
+        'font-family:Consolas,monospace','line-height:1.1','flex-shrink:0',
+      ].join(';');
+      const previewCode  = document.createElement('div');
+      previewCode.style.cssText  = 'font-size:1.1rem;color:#0f0;letter-spacing:0.1em';
+      const previewEmoji = document.createElement('div');
+      previewEmoji.style.cssText = 'font-size:1.4rem;line-height:1.3';
+      const previewDesc  = document.createElement('div');
+      previewDesc.style.cssText  = 'font-size:0.6rem;color:#8b949e;max-width:5rem;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      preview.appendChild(previewCode);
+      preview.appendChild(previewEmoji);
+      preview.appendChild(previewDesc);
+
+      function getTable() {
+        return (ovlSel.value === '/') ? APRS_SYM_PRIMARY : APRS_SYM_ALTERNATE;
       }
-    })));
+
+      function rebuildSymbolOptions(keepValue) {
+        const tbl = getTable();
+        symSel.innerHTML = '';
+        Object.entries(tbl).forEach(([c, { l, e }]) => {
+          const opt = document.createElement('option');
+          opt.value = c;
+          opt.textContent = `${e}  ${c}  ${l}`;
+          symSel.appendChild(opt);
+        });
+        if (keepValue && [...symSel.options].some(o => o.value === keepValue)) {
+          symSel.value = keepValue;
+        }
+      }
+
+      function updatePreview() {
+        const tbl  = getTable();
+        const sym  = symSel.value || '>';
+        const ovl  = ovlSel.value || '/';
+        const info = tbl[sym] || { l: '?', e: '?' };
+        previewCode.textContent  = ovl + sym;        // e.g., "/>", "\k", "A>"
+        previewEmoji.textContent = info.e;
+        previewDesc.textContent  = info.l;
+        previewDesc.title        = info.l;
+      }
+
+      rebuildSymbolOptions(b.symbol || '>');
+      updatePreview();
+
+      ovlSel.addEventListener('change', () => {
+        markDirty(ovlSel);
+        const prevSym = symSel.value;
+        rebuildSymbolOptions(prevSym);
+        updatePreview();
+        sendCmd(`beacon overlay ${ovlSel.value}`);
+      });
+      symSel.addEventListener('change', () => {
+        markDirty(symSel);
+        updatePreview();
+        sendCmd(`beacon symbol ${symSel.value}`);
+      });
+
+      ctl.appendChild(ovlSel);
+      ctl.appendChild(symSel);
+      ctl.appendChild(preview);
+      row.appendChild(lbl);
+      row.appendChild(ctl);
+      body.appendChild(row);
+    }
+
+    // Mic-E — dropdown (empty = disabled, '0'–'7' = standard codes)
+    body.appendChild(mkSelect('Mic-E encoding', b.micE,
+      [{ v: '',  l: '— off —' },
+       { v: '0', l: '0 · Off / Custom' },
+       { v: '1', l: '1 · En Route' },
+       { v: '2', l: '2 · In Service' },
+       { v: '3', l: '3 · Returning' },
+       { v: '4', l: '4 · Committed' },
+       { v: '5', l: '5 · Special' },
+       { v: '6', l: '6 · Priority' },
+       { v: '7', l: '7 · Emergency!' }],
+      v => sendCmd(`beacon micE ${v}`)));
+
+    body.appendChild(mkText('Comment (≤43 chars)', b.comment, v => sendCmd(`beacon comment ${v}`), { maxlength: 43 }));
+    body.appendChild(mkText('Status (≤43 chars)',  b.status,  v => sendCmd(`beacon status ${v}`),  { maxlength: 43 }));
+    {
+      const row = mkBool('SmartBeacon active', b.smartBeaconActive, v => sendCmd(`beacon smart ${boolStr(v)}`));
+      const sel = document.createElement('select');
+      sel.className = 'form-select form-select-sm'; sel.style.width = 'auto';
+      SMARTSET_LABELS.forEach((l, j) => {
+        const o = document.createElement('option'); o.value = j; o.textContent = l;
+        if (j == b.smartBeaconSetting) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => { markDirty(sel); sendCmd(`beacon smartset ${sel.value}`); });
+      row.appendChild(sel);
+      body.appendChild(row);
+    }
+
+    body.appendChild(mkGroupTitle('Beacon Timing & Path'));
+    body.appendChild(mkSelect('Beacon TX path', other.beaconPath ?? other.path ?? 'WIDE1-1',
+      [{v:'WIDE1-1', l:'WIDE1-1  (1 hop)'}, {v:'WIDE1-1,WIDE2-1', l:'WIDE1-1,WIDE2-1  (2 hops)'}],
+      v => sendCmd(`beaconpath ${v}`)));
+    body.appendChild(mkNumber('Non-smart rate (min)',     other.nonSmartBeaconRate,                   v => sendCmd(`nonsmartrate ${v}`)));
+    body.appendChild(mkNumber('Comment every N beacons', other.sendCommentAfterXBeacons,             v => sendCmd(`commentafter ${v}`)));
   });
 
   // ── SmartBeacon Custom ───────────────────
   mkSection(cont, 'smartcustom', '🏃 SmartBeacon Custom Profile', body => {
-    body.appendChild(mkNumber('Slow rate (sec)',       sc.slowRate,        v => sendCmd(`smartcustom slowrate ${v}`)));
-    body.appendChild(mkNumber('Slow speed (km/h)',     sc.slowSpeed,       v => sendCmd(`smartcustom slowspeed ${v}`)));
-    body.appendChild(mkNumber('Fast rate (sec)',        sc.fastRate,        v => sendCmd(`smartcustom fastrate ${v}`)));
-    body.appendChild(mkNumber('Fast speed (km/h)',      sc.fastSpeed,       v => sendCmd(`smartcustom fastspeed ${v}`)));
+    // Helper: two equal-width number inputs on one row
+    function mkPair(l1, v1, cb1, l2, v2, cb2) {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      function grp(label, value, cb) {
+        const g = document.createElement('div');
+        g.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:0.2rem';
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:0.75rem;color:#8b949e';
+        lbl.textContent = label;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.className = 'form-control form-control-sm';
+        inp.value = value ?? '';
+        inp.addEventListener('change', () => { markDirty(inp); cb(inp.value); });
+        g.appendChild(lbl); g.appendChild(inp);
+        return g;
+      }
+      row.appendChild(grp(l1, v1, cb1));
+      row.appendChild(grp(l2, v2, cb2));
+      return row;
+    }
+    body.appendChild(mkPair(
+      'Slow rate (sec)',   sc.slowRate,       v => sendCmd(`smartcustom slowrate ${v}`),
+      'Slow speed (km/h)', sc.slowSpeed,      v => sendCmd(`smartcustom slowspeed ${v}`)));
+    body.appendChild(mkPair(
+      'Fast rate (sec)',   sc.fastRate,       v => sendCmd(`smartcustom fastrate ${v}`),
+      'Fast speed (km/h)', sc.fastSpeed,      v => sendCmd(`smartcustom fastspeed ${v}`)));
     body.appendChild(mkNumber('Min TX distance (m)',    sc.minTxDist,       v => sendCmd(`smartcustom mintxdist ${v}`)));
     body.appendChild(mkNumber('Min delta (sec)',        sc.minDeltaBeacon,  v => sendCmd(`smartcustom mindelta ${v}`)));
-    body.appendChild(mkNumber('Turn min deg',           sc.turnMinDeg,      v => sendCmd(`smartcustom turnmindeg ${v}`)));
-    body.appendChild(mkNumber('Turn slope',             sc.turnSlope,       v => sendCmd(`smartcustom turnslope ${v}`)));
+    body.appendChild(mkPair(
+      'Turn min deg',      sc.turnMinDeg,     v => sendCmd(`smartcustom turnmindeg ${v}`),
+      'Turn slope',        sc.turnSlope,      v => sendCmd(`smartcustom turnslope ${v}`)));
+  });
+
+  // ── LoRa ─────────────────────────────────
+  mkSection(cont, 'lora', '📻 LoRa', body => {
+    if (!loras.length) { body.textContent = 'No LoRa config.'; return; }
+    const l = loras[0];
+    body.appendChild(mkNumber('Frequency (Hz)', l.frequency, v => sendCmd(`lora freq ${v}`)));
+    body.appendChild(mkSelect('Spreading Factor', l.spreadingFactor,
+      [7,8,9,10,11,12].map(n => ({ v: n, l: `SF${n}` })),
+      v => sendCmd(`lora sf ${v}`)));
+    body.appendChild(mkSelect('Bandwidth', l.signalBandwidth,
+      [{ v: 500000, l: '500 kHz' }, { v: 250000, l: '250 kHz' },
+       { v: 125000, l: '125 kHz' }, { v:  62500, l: '62.5 kHz' },
+       { v:  31250, l: '31.25 kHz' }],
+      v => sendCmd(`lora bw ${v}`)));
+    body.appendChild(mkSelect('Coding Rate', l.codingRate4,
+      [5,6,7,8].map(n => ({ v: n, l: `4/${n}` })),
+      v => sendCmd(`lora cr ${v}`)));
+    body.appendChild(mkNumber('TX power (dBm)', l.power, v => sendCmd(`lora power ${v}`), { min:0, max:22 }));
   });
 
   // ── Display ──────────────────────────────
   mkSection(cont, 'display', '🖥️ Display', body => {
-    body.appendChild(mkBool('Eco mode',      disp.ecoMode,   v => sendCmd(`display eco ${boolStr(v)}`)));
-    body.appendChild(mkBool('Rotate 180°',   disp.turn180,   v => sendCmd(`display turn180 ${boolStr(v)}`)));
-    body.appendChild(mkBool('Show symbol',   disp.showSymbol,v => sendCmd(`display symbol ${boolStr(v)}`)));
-    body.appendChild(mkNumber('Timeout (sec)', disp.timeout, v => sendCmd(`display timeout ${v}`)));
+    {
+      const row = mkBool('Eco mode', disp.ecoMode, v => sendCmd(`display eco ${boolStr(v)}`));
+      const lbl = document.createElement('span'); lbl.className = 'text-muted small'; lbl.textContent = 'Timeout (s)';
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.className = 'form-control form-control-sm';
+      inp.style.width = '4.5rem'; inp.value = disp.timeout ?? 4;
+      inp.addEventListener('change', () => { markDirty(inp); sendCmd(`display timeout ${inp.value}`); });
+      row.appendChild(lbl); row.appendChild(inp);
+      body.appendChild(row);
+    }
+    body.appendChild(mkBool('Rotate 180°',   disp.turn180,    v => sendCmd(`display turn180 ${boolStr(v)}`)));
+    body.appendChild(mkBool('LED indicator', disp.ledEnabled, v => sendCmd(`display led ${boolStr(v)}`)));
   });
 
   // ── Bluetooth ────────────────────────────
   mkSection(cont, 'bluetooth', '🔵 Bluetooth', body => {
-    body.appendChild(mkBool('Bluetooth active', bt.active,    v => sendCmd(`bt ${boolStr(v)}`)));
-    body.appendChild(mkText('Device name',      bt.deviceName,v => sendCmd(`bt name ${v}`)));
-    body.appendChild(mkBool('Use BLE',          bt.useBLE,    v => sendCmd(`bt ble ${boolStr(v)}`)));
-    body.appendChild(mkBool('KISS framing',     bt.useKISS,   v => sendCmd(`bt kiss ${boolStr(v)}`)));
+    const row = mkBool('Bluetooth active', bt.active, v => sendCmd(`bt ${boolStr(v)}`));
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'form-control form-control-sm';
+    inp.style.flex = '1'; inp.value = bt.deviceName ?? '';
+    inp.addEventListener('change', () => { markDirty(inp); sendCmd(`bt name ${inp.value}`); });
+    row.appendChild(inp);
+    body.appendChild(row);
   });
 
-  // ── Notifications ────────────────────────
-  mkSection(cont, 'notif', '🔔 Notifications', body => {
-    body.appendChild(mkGroupTitle('LEDs'));
-    body.appendChild(mkBool('LED on TX',          notif.ledTx,         v => sendCmd(`notif tx ${boolStr(v)}`)));
-    body.appendChild(mkBool('LED on message RX',  notif.ledMessage,    v => sendCmd(`notif msg ${boolStr(v)}`)));
-    body.appendChild(mkBool('Flashlight LED',     notif.ledFlashlight, v => sendCmd(`notif flashled ${boolStr(v)}`)));
-    body.appendChild(mkBool('Buzzer enabled',     notif.buzzerActive,  v => sendCmd(`notif buzzer ${boolStr(v)}`)));
+  // ── Battery & Altitude ───────────────────
+  mkSection(cont, 'battery', '🔋 Battery & Altitude', body => {
 
-    body.appendChild(mkGroupTitle('Beeps'));
-    body.appendChild(mkBool('Beep on boot',        notif.bootUpBeep,      v => sendCmd(`notif beep boot ${boolStr(v)}`)));
-    body.appendChild(mkBool('Beep on TX',          notif.txBeep,          v => sendCmd(`notif beep tx ${boolStr(v)}`)));
-    body.appendChild(mkBool('Beep on message RX',  notif.messageRxBeep,   v => sendCmd(`notif beep rx ${boolStr(v)}`)));
-    body.appendChild(mkBool('Beep on new station', notif.stationBeep,     v => sendCmd(`notif beep station ${boolStr(v)}`)));
-    body.appendChild(mkBool('Beep on low battery', notif.lowBatteryBeep,  v => sendCmd(`notif beep low ${boolStr(v)}`)));
-    body.appendChild(mkBool('Beep on shutdown',    notif.shutDownBeep,    v => sendCmd(`notif beep shutdown ${boolStr(v)}`)));
-  });
+    // ── Live battery reading ──────────────────────────────────────────────────
+    {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:0.6rem;margin-bottom:0.6rem';
 
-  // ── Battery ──────────────────────────────
-  mkSection(cont, 'battery', '🔋 Battery', body => {
+      // Device-style display box (matches the on-screen representation)
+      const display = document.createElement('div');
+      display.style.cssText = [
+        'font-family:Consolas,monospace','font-size:1rem',
+        'background:#000','color:#0f0','border:1px solid #444',
+        'border-radius:4px','padding:3px 10px','min-width:10rem',
+        'text-align:center','flex-shrink:0',
+      ].join(';');
+      display.textContent = 'B: — V  —%';
+
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm btn-outline-secondary';
+      btn.textContent = '⟳ Read';
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        display.textContent = 'reading…';
+        try {
+          const resp = await sendCmd('bat read');
+          // Firmware outputs: bat.voltage=3.85 bat.percent=87
+          const mv = resp.match(/bat\.voltage=([\d.]+)/);
+          const mp = resp.match(/bat\.percent=(\d+)/);
+          if (mv && mp) {
+            display.textContent = `B: ${mv[1]}V  ${mp[1]}%`;
+          } else {
+            display.textContent = 'B: n/a';
+          }
+        } catch (e) {
+          display.textContent = 'B: error';
+        }
+        btn.disabled = false;
+      });
+
+      row.appendChild(display);
+      row.appendChild(btn);
+      body.appendChild(row);
+    }
+
+    body.appendChild(mkBool('Include altitude in beacons', other.sendAltitude, v => sendCmd(`sendalt ${boolStr(v)}`)));
+    body.appendChild(mkGroupTitle('Battery Voltage'));
     body.appendChild(mkBool('Send voltage in comment', bat.sendVoltage,       v => sendCmd(`bat sendv ${boolStr(v)}`)));
-    body.appendChild(mkBool('Voltage as telemetry',    bat.voltageAsTelemetry,v => sendCmd(`bat astelem ${boolStr(v)}`)));
-    body.appendChild(mkBool('Send voltage always',     bat.sendVoltageAlways, v => sendCmd(`bat alwaysv ${boolStr(v)}`)));
-    body.appendChild(mkBool('Monitor voltage',         bat.monitorVoltage,    v => sendCmd(`bat monitor ${boolStr(v)}`)));
-    body.appendChild(mkNumber('Sleep voltage (V)',      bat.sleepVoltage,      v => sendCmd(`bat sleepv ${v}`), { step: '0.01' }));
-  });
-
-  // ── Telemetry ────────────────────────────
-  mkSection(cont, 'telemetry', '📊 Telemetry', body => {
-    body.appendChild(mkBool('Telemetry enabled',      telem.active,          v => sendCmd(`telem ${boolStr(v)}`)));
-    body.appendChild(mkBool('Send telemetry packets', telem.sendTelemetry,   v => sendCmd(`telem send ${boolStr(v)}`)));
-    body.appendChild(mkNumber('Temp correction (°C)', telem.temperatureCorrection, v => sendCmd(`telem tempcorr ${v}`), { step: '0.1' }));
+    body.appendChild(mkBool('Send voltage on every beacon', bat.sendVoltageAlways, v => sendCmd(`bat alwaysv ${boolStr(v)}`)));
+    body.appendChild(mkNumber('Low-voltage shutdown (V)', bat.sleepVoltage,   v => sendCmd(`bat sleepv ${v}`), { step: '0.01', min: 2.5, max: 4.0 }));
   });
 
   // ── PTT ──────────────────────────────────
   mkSection(cont, 'ptt', '🎙️ PTT Trigger', body => {
-    body.appendChild(mkBool('PTT active',        ptt.active,   v => sendCmd(`ptt ${boolStr(v)}`)));
-    body.appendChild(mkNumber('GPIO pin',         ptt.io_pin,   v => sendCmd(`ptt pin ${v}`)));
-    body.appendChild(mkBool('Reverse polarity',  ptt.reverse,  v => sendCmd(`ptt reverse ${boolStr(v)}`)));
-    body.appendChild(mkNumber('Pre-delay (ms)',   ptt.preDelay, v => sendCmd(`ptt predelay ${v}`)));
-    body.appendChild(mkNumber('Post-delay (ms)', ptt.postDelay,v => sendCmd(`ptt postdelay ${v}`)));
+    // PTT Enable + GPIO pin on same row
+    {
+      const row = mkBool('PTT Enable', ptt.active, v => sendCmd(`ptt ${boolStr(v)}`));
+      const lbl = document.createElement('span'); lbl.className = 'text-muted small'; lbl.textContent = 'GPIO pin';
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.className = 'form-control form-control-sm';
+      inp.style.width = '4.5rem'; inp.value = ptt.io_pin ?? '';
+      inp.addEventListener('change', () => { markDirty(inp); sendCmd(`ptt pin ${inp.value}`); });
+      row.appendChild(lbl); row.appendChild(inp);
+      body.appendChild(row);
+    }
+    body.appendChild(mkBool('Active High', ptt.reverse, v => sendCmd(`ptt reverse ${boolStr(v)}`)));
+    // Pre-delay + Post-delay on same row, equal widths
+    {
+      const row = document.createElement('div'); row.className = 'field-row';
+      function delayGrp(label, value, cb) {
+        const g = document.createElement('div');
+        g.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:0.2rem';
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:0.75rem;color:#8b949e'; lbl.textContent = label;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.className = 'form-control form-control-sm';
+        inp.value = value ?? '';
+        inp.addEventListener('change', () => { markDirty(inp); cb(inp.value); });
+        g.appendChild(lbl); g.appendChild(inp);
+        return g;
+      }
+      row.appendChild(delayGrp('Pre-delay (ms)',  ptt.preDelay,  v => sendCmd(`ptt predelay ${v}`)));
+      row.appendChild(delayGrp('Post-delay (ms)', ptt.postDelay, v => sendCmd(`ptt postdelay ${v}`)));
+      body.appendChild(row);
+    }
   });
 
-  // ── WiFi & Winlink ───────────────────────
-  mkSection(cont, 'wifi', '📶 WiFi & Winlink', body => {
-    body.appendChild(mkGroupTitle('WiFi AP'));
-    body.appendChild(mkBool('AP active (persistent)',  wifi.active,     v => sendCmd(`wifi ${boolStr(v)}`)));
-    body.appendChild(mkBool('30-sec boot window',      wifi.bootWindow, v => sendCmd(`wifi window ${boolStr(v)}`)));
-    body.appendChild(mkPassword('AP password',         wifi.password,   v => sendCmd(`wifi password ${v}`)));
+  // ── Device Role ──────────────────────────
+  const roleObj  = { deviceRole: config.deviceRole ?? 0, gpsSource: config.gpsSource ?? 0 };
+  const fp       = config.fixedPosition || {};
+  const wifiSTA  = config.wifiSTA       || {};
+  const aprsIS   = config.aprsIS        || {};
+  const tcpKISS  = config.tcpKISS       || {};
 
-    body.appendChild(mkGroupTitle('Winlink'));
-    body.appendChild(mkPassword('Winlink password', wlink.password, v => sendCmd(`winlink password ${v}`)));
+  mkSection(cont, 'role', '🌐 Device Role', body => {
+    body.appendChild(mkGroupTitle('Role & GPS Source'));
+    body.appendChild(mkSelect('Device role', roleObj.deviceRole,
+      [{ v:0, l:'0 — Tracker' }, { v:1, l:'1 — iGate' }, { v:2, l:'2 — Digipeater (dedicated)' }],
+      v => sendCmd(`role set ${['tracker','igate','digipeater'][+v] || 'tracker'}`)));
+    body.appendChild(mkSelect('GPS source', roleObj.gpsSource,
+      [{ v:0, l:'0 — Internal GPS (SmartBeacon)' },
+       { v:1, l:'1 — Fixed position (lat/lon/elev from config)' },
+       { v:2, l:'2 — None  (TNC / relay only, no beaconing)' }],
+      v => sendCmd(`role gps ${['internal','fixed','none'][+v] || 'internal'}`)));
+
+    body.appendChild(mkGroupTitle('Digipeat Mode  (independent of role — any role can also digipeat)'));
+    body.appendChild(mkSelect('Digi mode', config.digiMode ?? 0,
+      [{ v:0, l:'Off — no digipeating' },
+       { v:1, l:'WIDE1 only — fill-in (responds to WIDE1-1, stamps callsign)' },
+       { v:2, l:'WIDE1+WIDE2 — infrastructure (WIDE1-1 and WIDE2-n)' }],
+      v => sendCmd(`digi ${['off','wide1','wide1+wide2'][+v] || 'off'}`)));
+
+    body.appendChild(mkGroupTitle('Fixed Position'));
+
+    // ── Live GPS read widget ──────────────────────────────────────────────────
+    // Useful for iGate setup: get a live fix, then apply it as the fixed coords.
+    {
+      const gpsRow = document.createElement('div');
+      gpsRow.style.cssText = 'display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;flex-wrap:wrap';
+
+      const gpsDisplay = document.createElement('div');
+      gpsDisplay.style.cssText = [
+        'font-family:Consolas,monospace','font-size:0.82rem',
+        'background:#000','color:#0f0','border:1px solid #444',
+        'border-radius:4px','padding:3px 10px','flex:1','min-width:16rem',
+      ].join(';');
+      gpsDisplay.textContent = 'Lat: —          Lon: —          Alt: —m  Sats: —';
+
+      // Store last good reading so Apply can use it
+      let _gpsReading = null;
+
+      const readBtn = document.createElement('button');
+      readBtn.className = 'btn btn-sm btn-outline-secondary';
+      readBtn.textContent = '⟳ Device GPS';
+      readBtn.style.flexShrink = '0';
+      readBtn.title = 'Read current GPS fix from the device (requires GPS_INTERNAL source with a fix)';
+
+      const browserBtn = document.createElement('button');
+      browserBtn.className = 'btn btn-sm btn-outline-info';
+      browserBtn.textContent = '📍 This device';
+      browserBtn.style.flexShrink = '0';
+      browserBtn.title = 'Use this browser device\'s GPS/location to populate fixed position';
+      if (!navigator.geolocation) {
+        browserBtn.disabled = true;
+        browserBtn.title = 'Geolocation not available in this browser';
+      }
+
+      const applyBtn = document.createElement('button');
+      applyBtn.className = 'btn btn-sm btn-outline-success';
+      applyBtn.textContent = '→ Apply to Fixed';
+      applyBtn.style.flexShrink = '0';
+      applyBtn.disabled = true;
+      applyBtn.title = 'Send the reading above to the device as fixed position';
+
+      // Helper: apply a reading to the device and update UI fields
+      async function applyReading(reading) {
+        applyBtn.disabled = true;
+        await sendCmd(`fixed latitude ${reading.lat}`);
+        await sendCmd(`fixed longitude ${reading.lon}`);
+        await sendCmd(`fixed elevation ${reading.alt}`);
+        body.querySelectorAll('input[type=number]').forEach(inp => {
+          if (inp._fixedField === 'lat') { inp.value = reading.lat; markDirty(inp); }
+          if (inp._fixedField === 'lon') { inp.value = reading.lon; markDirty(inp); }
+          if (inp._fixedField === 'alt') { inp.value = reading.alt; markDirty(inp); }
+        });
+        gpsDisplay.textContent += '  ✓ Applied';
+      }
+
+      // ── Read from device GPS ──────────────────────────────────────────────
+      readBtn.addEventListener('click', async () => {
+        readBtn.disabled = true;
+        gpsDisplay.textContent = 'reading…';
+        gpsDisplay.style.color = '#0f0';
+        applyBtn.disabled = true;
+        _gpsReading = null;
+        try {
+          const resp = await sendCmd('gps read');
+          const mlat  = resp.match(/gps\.lat=([-\d.]+)/);
+          const mlon  = resp.match(/gps\.lon=([-\d.]+)/);
+          const malt  = resp.match(/gps\.alt=([-\d.]+)/);
+          const msats = resp.match(/gps\.sats=(\d+)/);
+          const mok   = resp.match(/gps\.valid=(\d)/);
+          if (mlat && mlon && mok) {
+            const valid = mok[1] === '1';
+            gpsDisplay.textContent = valid
+              ? `Lat: ${mlat[1]}  Lon: ${mlon[1]}  Alt: ${malt?.[1] ?? '?'}m  Sats: ${msats?.[1] ?? '?'}`
+              : 'No fix — GPS source may be None, or wait for a fix';
+            gpsDisplay.style.color = valid ? '#0f0' : '#f90';
+            if (valid) { _gpsReading = { lat: mlat[1], lon: mlon[1], alt: malt?.[1] ?? '0' }; applyBtn.disabled = false; }
+          } else {
+            gpsDisplay.textContent = 'No response';
+            gpsDisplay.style.color = '#f66';
+          }
+        } catch (e) {
+          gpsDisplay.textContent = 'Error: ' + e.message;
+          gpsDisplay.style.color = '#f66';
+        }
+        readBtn.disabled = false;
+      });
+
+      // ── Use browser / phone GPS ───────────────────────────────────────────
+      browserBtn.addEventListener('click', () => {
+        browserBtn.disabled = true;
+        gpsDisplay.textContent = 'requesting browser location…';
+        gpsDisplay.style.color = '#0f0';
+        applyBtn.disabled = true;
+        _gpsReading = null;
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            const lat = pos.coords.latitude.toFixed(6);
+            const lon = pos.coords.longitude.toFixed(6);
+            const alt = (pos.coords.altitude != null ? pos.coords.altitude : 0).toFixed(1);
+            const acc = pos.coords.accuracy != null ? ` ±${Math.round(pos.coords.accuracy)}m` : '';
+            gpsDisplay.textContent = `Lat: ${lat}  Lon: ${lon}  Alt: ${alt}m${acc}  (browser)`;
+            gpsDisplay.style.color = '#0cf';   // cyan to distinguish from device GPS
+            _gpsReading = { lat, lon, alt };
+            applyBtn.disabled = false;
+            browserBtn.disabled = false;
+          },
+          err => {
+            gpsDisplay.textContent = 'Location denied or unavailable: ' + err.message;
+            gpsDisplay.style.color = '#f66';
+            browserBtn.disabled = false;
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
+
+      applyBtn.addEventListener('click', () => { if (_gpsReading) applyReading(_gpsReading); });
+
+      gpsRow.appendChild(gpsDisplay);
+      gpsRow.appendChild(readBtn);
+      gpsRow.appendChild(browserBtn);
+      gpsRow.appendChild(applyBtn);
+      body.appendChild(gpsRow);
+    }
+
+    // Fixed position — Lat / Lon / Alt on one row, equal widths
+    {
+      const row = document.createElement('div'); row.className = 'field-row';
+      function fixedGrp(label, value, step, cb, fixedField) {
+        const g = document.createElement('div');
+        g.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:0.2rem';
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:0.75rem;color:#8b949e'; lbl.textContent = label;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.className = 'form-control form-control-sm';
+        inp.step = step; inp.value = value ?? '';
+        inp._fixedField = fixedField;
+        inp.addEventListener('change', () => { markDirty(inp); cb(inp.value); });
+        g.appendChild(lbl); g.appendChild(inp);
+        return g;
+      }
+      row.appendChild(fixedGrp('Latitude (°)',   fp.latitude,  '0.000001', v => sendCmd(`fixed latitude ${v}`),  'lat'));
+      row.appendChild(fixedGrp('Longitude (°)',  fp.longitude, '0.000001', v => sendCmd(`fixed longitude ${v}`), 'lon'));
+      row.appendChild(fixedGrp('Elevation (m)',  fp.elevation, '0.1',      v => sendCmd(`fixed elevation ${v}`), 'alt'));
+      body.appendChild(row);
+    }
+
   });
 
-  // ── Other ────────────────────────────────
-  mkSection(cont, 'other', '⚙️ Other', body => {
-    body.appendChild(mkGroupTitle('Modes'));
-    body.appendChild(mkBool('Digipeater at boot',      other.digipeating,          v => sendCmd(`digipeater ${boolStr(v)}`)));
-    body.appendChild(mkBool('Simplified mode',         other.simplifiedTrackerMode,v => sendCmd(`simplified ${boolStr(v)}`)));
-    body.appendChild(mkBool('Disable GPS (TNC-only)',  other.disableGPS,           v => sendCmd(`disablegps ${boolStr(v)}`)));
-    body.appendChild(mkBool('Include altitude',        other.sendAltitude,         v => sendCmd(`sendalt ${boolStr(v)}`)));
+  // ── WiFi ─────────────────────────────────
+  mkSection(cont, 'wifi', '📶 WiFi', body => {
+    body.appendChild(mkGroupTitle('Access Point'));
+    body.appendChild(mkInfo('AP starts when callsign is NOCALL-7 or the USR button is held at boot.'));
+    body.appendChild(mkPassword('AP password', wifi.password, v => sendCmd(`wifi password ${v}`)));
 
-    body.appendChild(mkGroupTitle('Intervals & Paths'));
-    body.appendChild(mkText('APRS path',                  other.path,                  v => sendCmd(`path ${v}`)));
-    body.appendChild(mkText('Email',                      other.email,                 v => sendCmd(`email ${v}`)));
-    body.appendChild(mkNumber('Non-smart beacon rate (sec)', other.nonSmartBeaconRate, v => sendCmd(`nonsmartrate ${v}`)));
-    body.appendChild(mkNumber('Remember station (sec)',   other.rememberStationTime,   v => sendCmd(`rememberstation ${v}`)));
-    body.appendChild(mkNumber('Standing update (sec)',    other.standingUpdateTime,    v => sendCmd(`standingupdate ${v}`)));
-    body.appendChild(mkNumber('Comment every N beacons', other.sendCommentAfterXBeacons, v => sendCmd(`commentafter ${v}`)));
+    body.appendChild(mkGroupTitle('Station (for iGate)'));
+    body.appendChild(mkBool('WiFi STA enabled', wifiSTA.enabled, v => sendCmd(`wifista ${boolStr(v)}`)));
+    // SSID + Password on same line
+    {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'SSID / Password';
+      const ctl = document.createElement('div'); ctl.className = 'field-control'; ctl.style.cssText = 'display:flex;gap:0.4rem';
+      const ssidInp = document.createElement('input');
+      ssidInp.type = 'text'; ssidInp.className = 'form-control form-control-sm';
+      ssidInp.value = wifiSTA.ssid || ''; ssidInp.placeholder = 'SSID';
+      const passInp = document.createElement('input');
+      passInp.type = 'password'; passInp.className = 'form-control form-control-sm';
+      passInp.value = wifiSTA.password || ''; passInp.placeholder = 'Password';
+      ssidInp.addEventListener('change', () => { markDirty(ssidInp); sendCmd(`wifista ssid ${ssidInp.value}`); });
+      passInp.addEventListener('change', () => { markDirty(passInp); sendCmd(`wifista password ${passInp.value}`); });
+      ctl.appendChild(ssidInp); ctl.appendChild(passInp);
+      row.appendChild(lbl); row.appendChild(ctl);
+      body.appendChild(row);
+    }
+
+    body.appendChild(mkGroupTitle('APRS-IS'));
+    // Server + Port on same line
+    {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'Server / Port';
+      const ctl = document.createElement('div'); ctl.className = 'field-control'; ctl.style.cssText = 'display:flex;gap:0.4rem';
+      const srvInp = document.createElement('input');
+      srvInp.type = 'text'; srvInp.className = 'form-control form-control-sm';
+      srvInp.value = aprsIS.server || ''; srvInp.placeholder = 'rotate.aprs.net';
+      const portInp = document.createElement('input');
+      portInp.type = 'number'; portInp.className = 'form-control form-control-sm';
+      portInp.style.width = '5.5rem'; portInp.value = aprsIS.port || 14580;
+      portInp.min = 1; portInp.max = 65535;
+      srvInp.addEventListener('change', () => { markDirty(srvInp); sendCmd(`aprsiss server ${srvInp.value}`); });
+      portInp.addEventListener('change', () => { markDirty(portInp); sendCmd(`aprsiss port ${portInp.value}`); });
+      ctl.appendChild(srvInp); ctl.appendChild(portInp);
+      row.appendChild(lbl); row.appendChild(ctl);
+      body.appendChild(row);
+    }
+    body.appendChild(mkText('Passcode (override)', aprsIS.passcode, v => sendCmd(`aprsiss passcode ${v}`),
+      { placeholder: 'auto (derived from callsign)' }));
+    body.appendChild(mkText('Filter',   aprsIS.filter,   v => sendCmd(`aprsiss filter ${v}`)));
+
+    body.appendChild(mkGroupTitle('TCP KISS Server'));
+    body.appendChild(mkNumber('Port', tcpKISS.port, v => sendCmd(`tcpkiss port ${v}`), { min:1, max:65535 }));
+    body.appendChild(mkInfo('TCP KISS server starts automatically when WiFi STA is connected. USB serial is always KISS TNC — type \'setup\' or \'log\' to switch modes.'));
   });
+
 }
 
 // ─────────────────────────────────────────────
@@ -817,7 +1557,9 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   clearDirty();
 });
 
-document.getElementById('btn-exit').addEventListener('click', () => sendCmd('exit'));
+document.getElementById('btn-mode-kiss').addEventListener('click',  () => switchToMode('kiss'));
+document.getElementById('btn-mode-setup').addEventListener('click', () => switchToMode('setup'));
+document.getElementById('btn-mode-log').addEventListener('click',   () => switchToMode('log'));
 
 document.getElementById('btn-discard').addEventListener('click', () => {
   if (confirm('Discard all unsaved changes and reboot the device?')) sendCmd('discard');
@@ -829,7 +1571,14 @@ document.getElementById('btn-reboot').addEventListener('click', () => {
 
 document.getElementById('sel-log-level').addEventListener('change', function () {
   if (!this.value) return;
-  sendCmd('log ' + this.value);
+  const cmd = 'log ' + this.value;
+  if (serialMode === 'log') {
+    // LOG mode has no \n> prompt
+    logSent(cmd);
+    serialWrite(cmd + '\r\n');
+  } else {
+    sendCmd(cmd);
+  }
   this.value = '';
 });
 
@@ -891,7 +1640,13 @@ async function sendManualCmd() {
   const cmd = consoleInput.value.trim();
   if (!cmd) return;
   consoleInput.value = '';
-  await sendCmd(cmd);
+  if (serialMode === 'log') {
+    // LOG mode has no \n> prompt — write directly
+    logSent(cmd);
+    await serialWrite(cmd + '\r\n');
+  } else {
+    await sendCmd(cmd);
+  }
 }
 </script>
 </body>

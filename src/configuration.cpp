@@ -62,75 +62,38 @@ bool Configuration::writeFile() {
     {   // Adafruit nRF52 BSP is built without exceptions; equivalent unwound block.
     #endif
 
-        data["wifiAP"]["active"]                    = wifiAP.active;
-        data["wifiAP"]["bootWindow"]                = wifiAP.bootWindow;
         data["wifiAP"]["password"]                  = wifiAP.password;
 
-        for (int i = 0; i < beacons.size(); i++) {
-            beacons[i].callsign.trim();
-            beacons[i].callsign.toUpperCase();
-            data["beacons"][i]["callsign"]              = beacons[i].callsign;
-            data["beacons"][i]["symbol"]                = beacons[i].symbol;
-            data["beacons"][i]["overlay"]               = beacons[i].overlay;
-            data["beacons"][i]["micE"]                  = beacons[i].micE;
-            data["beacons"][i]["comment"]               = beacons[i].comment;
-            data["beacons"][i]["smartBeaconActive"]     = beacons[i].smartBeaconActive;
-            data["beacons"][i]["smartBeaconSetting"]    = beacons[i].smartBeaconSetting;
-            data["beacons"][i]["gpsEcoMode"]            = beacons[i].gpsEcoMode;
-            data["beacons"][i]["profileLabel"]          = beacons[i].profileLabel;
-            data["beacons"][i]["status"]                = beacons[i].status;
-            data["beacons"][i]["tacticalCallsign"]      = beacons[i].tacticalCallsign;
-        }
+        beacons[0].callsign.trim();
+        beacons[0].callsign.toUpperCase();
+        data["beacons"][0]["callsign"]           = beacons[0].callsign;
+        data["beacons"][0]["symbol"]             = beacons[0].symbol;
+        data["beacons"][0]["overlay"]            = beacons[0].overlay;
+        data["beacons"][0]["micE"]               = beacons[0].micE;
+        data["beacons"][0]["comment"]            = beacons[0].comment;
+        data["beacons"][0]["smartBeaconActive"]  = beacons[0].smartBeaconActive;
+        data["beacons"][0]["smartBeaconSetting"] = beacons[0].smartBeaconSetting;
+        data["beacons"][0]["profileLabel"]       = beacons[0].profileLabel;
+        data["beacons"][0]["status"]             = beacons[0].status;
+        data["beacons"][0]["tacticalCallsign"]   = beacons[0].tacticalCallsign;
 
         data["display"]["ecoMode"]                  = display.ecoMode;
         data["display"]["timeout"]                  = display.timeout;
         data["display"]["turn180"]                  = display.turn180;
-        data["display"]["showSymbol"]               = display.showSymbol;
+        data["display"]["ledEnabled"]               = display.ledEnabled;
 
         data["bluetooth"]["active"]                 = bluetooth.active;
         data["bluetooth"]["deviceName"]             = bluetooth.deviceName;
-        #ifdef HAS_BT_CLASSIC
-            data["bluetooth"]["useBLE"]             = bluetooth.useBLE;
-        #else
-            data["bluetooth"]["useBLE"]             = true; // fixed as BLE
-        #endif
-        data["bluetooth"]["useKISS"]                = bluetooth.useKISS;
 
-        for (int i = 0; i < loraTypes.size(); i++) {
-            data["lora"][i]["frequency"]                = loraTypes[i].frequency;
-            data["lora"][i]["spreadingFactor"]          = loraTypes[i].spreadingFactor;
-            data["lora"][i]["signalBandwidth"]          = loraTypes[i].signalBandwidth;
-            data["lora"][i]["codingRate4"]              = loraTypes[i].codingRate4;
-            data["lora"][i]["power"]                    = loraTypes[i].power;
-        }
+        data["lora"][0]["frequency"]       = loraTypes[0].frequency;
+        data["lora"][0]["spreadingFactor"] = loraTypes[0].spreadingFactor;
+        data["lora"][0]["signalBandwidth"] = loraTypes[0].signalBandwidth;
+        data["lora"][0]["codingRate4"]     = loraTypes[0].codingRate4;
+        data["lora"][0]["power"]           = loraTypes[0].power;
 
         data["battery"]["sendVoltage"]              = battery.sendVoltage;
-        data["battery"]["voltageAsTelemetry"]       = battery.voltageAsTelemetry;
         data["battery"]["sendVoltageAlways"]        = battery.sendVoltageAlways;
-        data["battery"]["monitorVoltage"]           = battery.monitorVoltage;
         data["battery"]["sleepVoltage"]             = battery.sleepVoltage;
-
-        data["telemetry"]["active"]                 = telemetry.active;
-        data["telemetry"]["sendTelemetry"]          = telemetry.sendTelemetry;
-        data["telemetry"]["temperatureCorrection"]  = telemetry.temperatureCorrection;
-
-        data["winlink"]["password"]                 = winlink.password;
-
-        data["notification"]["ledTx"]               = notification.ledTx;
-        data["notification"]["ledTxPin"]            = notification.ledTxPin;
-        data["notification"]["ledMessage"]          = notification.ledMessage;
-        data["notification"]["ledMessagePin"]       = notification.ledMessagePin;
-        data["notification"]["buzzerActive"]        = notification.buzzerActive;
-        data["notification"]["buzzerPinTone"]       = notification.buzzerPinTone;
-        data["notification"]["buzzerPinVcc"]        = notification.buzzerPinVcc;
-        data["notification"]["bootUpBeep"]          = notification.bootUpBeep;
-        data["notification"]["txBeep"]              = notification.txBeep;
-        data["notification"]["messageRxBeep"]       = notification.messageRxBeep;
-        data["notification"]["stationBeep"]         = notification.stationBeep;
-        data["notification"]["lowBatteryBeep"]      = notification.lowBatteryBeep;
-        data["notification"]["shutDownBeep"]        = notification.shutDownBeep;
-        data["notification"]["ledFlashlight"]       = notification.ledFlashlight;
-        data["notification"]["ledFlashlightPin"]    = notification.ledFlashlightPin;
 
         data["pttTrigger"]["active"]                = ptt.active;
         data["pttTrigger"]["reverse"]               = ptt.reverse;
@@ -138,16 +101,11 @@ bool Configuration::writeFile() {
         data["pttTrigger"]["postDelay"]             = ptt.postDelay;
         data["pttTrigger"]["io_pin"]                = ptt.io_pin;
 
-        data["other"]["simplifiedTrackerMode"]      = simplifiedTrackerMode;
         data["other"]["sendCommentAfterXBeacons"]   = sendCommentAfterXBeacons;
-        data["other"]["path"]                       = path;
+        data["other"]["beaconPath"]                 = beaconPath;
         data["other"]["nonSmartBeaconRate"]         = nonSmartBeaconRate;
-        data["other"]["rememberStationTime"]        = rememberStationTime;
-        data["other"]["standingUpdateTime"]         = standingUpdateTime;
         data["other"]["sendAltitude"]               = sendAltitude;
-        data["other"]["disableGPS"]                 = disableGPS;
-        data["other"]["email"]                      = email;
-        data["other"]["digipeating"]                = digipeating;
+        data["other"]["digiMode"]                   = (int)digiMode;
 
         data["customSmartBeacon"]["slowRate"]       = customSmartBeacon.slowRate;
         data["customSmartBeacon"]["slowSpeed"]      = customSmartBeacon.slowSpeed;
@@ -174,7 +132,6 @@ bool Configuration::writeFile() {
         data["aprsIS"]["passcode"]                  = aprsIS.passcode;
         data["aprsIS"]["filter"]                    = aprsIS.filter;
 
-        data["tcpKISS"]["enabled"]                  = tcpKISS.enabled;
         data["tcpKISS"]["port"]                     = tcpKISS.port;
 
         serializeJson(data, configFile);
@@ -233,11 +190,7 @@ bool Configuration::readFile() {
         beacons.clear();
         loraTypes.clear();
 
-        if (data["wifiAP"]["active"].isNull() ||
-            data["wifiAP"]["bootWindow"].isNull() ||
-            data["wifiAP"]["password"].isNull()) needsRewrite = true;
-        wifiAP.active               = data["wifiAP"]["active"] | true;
-        wifiAP.bootWindow           = data["wifiAP"]["bootWindow"] | false;
+        if (data["wifiAP"]["password"].isNull()) needsRewrite = true;
         wifiAP.password             = data["wifiAP"]["password"] | "1234567890";
 
         JsonArray BeaconsArray = data["beacons"];
@@ -253,7 +206,6 @@ bool Configuration::readFile() {
             bcn.status                  = BeaconsArray[i]["status"] | "";
             bcn.smartBeaconActive       = BeaconsArray[i]["smartBeaconActive"] | true;
             bcn.smartBeaconSetting      = BeaconsArray[i]["smartBeaconSetting"] | 0;
-            bcn.gpsEcoMode              = BeaconsArray[i]["gpsEcoMode"] | false;
             bcn.profileLabel            = BeaconsArray[i]["profileLabel"] | "";
             bcn.tacticalCallsign        = BeaconsArray[i]["tacticalCallsign"] | "";
             beacons.push_back(bcn);
@@ -262,25 +214,16 @@ bool Configuration::readFile() {
         if (data["display"]["ecoMode"].isNull() ||
             data["display"]["timeout"].isNull() ||
             data["display"]["turn180"].isNull() ||
-            data["display"]["showSymbol"].isNull()) needsRewrite = true;
+            data["display"]["ledEnabled"].isNull()) needsRewrite = true;
         display.ecoMode                 = data["display"]["ecoMode"] | false;
         display.timeout                 = data["display"]["timeout"] | 4;
         display.turn180                 = data["display"]["turn180"] | false;
-        display.showSymbol              = data["display"]["showSymbol"] | true;
+        display.ledEnabled              = data["display"]["ledEnabled"] | true;
 
         if (data["bluetooth"]["active"].isNull() ||
-            data["bluetooth"]["deviceName"].isNull() ||
-            data["bluetooth"]["useBLE"].isNull() ||
-            data["bluetooth"]["useKISS"].isNull()) needsRewrite = true;
+            data["bluetooth"]["deviceName"].isNull()) needsRewrite = true;
         bluetooth.active                = data["bluetooth"]["active"] | false;
         bluetooth.deviceName            = data["bluetooth"]["deviceName"] | "LoRaTracker";
-        #ifdef HAS_BT_CLASSIC
-            bluetooth.useBLE            = data["bluetooth"]["useBLE"] | false;
-            bluetooth.useKISS           = data["bluetooth"]["useKISS"] | false;
-        #else
-            bluetooth.useBLE            = true;    // fixed as BLE
-            bluetooth.useKISS           = data["bluetooth"]["useKISS"] | true;    // true=KISS,  false=TNC2
-        #endif
 
         JsonArray LoraTypesArray = data["lora"];
         for (size_t j = 0; j < LoraTypesArray.size(); j++) {
@@ -294,57 +237,18 @@ bool Configuration::readFile() {
             loraTypes.push_back(loraType);
         }
 
+        // Enforce single-profile: only ever use index 0
+        if (beacons.size() > 1) beacons.resize(1);
+        if (beacons.empty())    { Beacon b; b.callsign="NOCALL-7"; b.symbol=">"; b.overlay="/"; b.smartBeaconActive=true; b.smartBeaconSetting=2; beacons.push_back(b); needsRewrite=true; }
+        if (loraTypes.size() > 1) loraTypes.resize(1);
+        if (loraTypes.empty())    { LoraType l; l.frequency=433775000; l.spreadingFactor=12; l.signalBandwidth=125000; l.codingRate4=5; l.power=20; loraTypes.push_back(l); needsRewrite=true; }
+
         if (data["battery"]["sendVoltage"].isNull() ||
-            data["battery"]["voltageAsTelemetry"].isNull() ||
             data["battery"]["sendVoltageAlways"].isNull() ||
-            data["battery"]["monitorVoltage"].isNull() ||
             data["battery"]["sleepVoltage"].isNull()) needsRewrite = true;
         battery.sendVoltage             = data["battery"]["sendVoltage"] | false;
-        battery.voltageAsTelemetry      = data["battery"]["voltageAsTelemetry"] | false;
         battery.sendVoltageAlways       = data["battery"]["sendVoltageAlways"] | false;
-        battery.monitorVoltage          = data["battery"]["monitorVoltage"] | false;
         battery.sleepVoltage            = data["battery"]["sleepVoltage"] | 2.9;
-
-        if (data["telemetry"]["active"].isNull() ||
-            data["telemetry"]["sendTelemetry"].isNull() ||
-            data["telemetry"]["temperatureCorrection"].isNull()) needsRewrite = true;
-        telemetry.active                = data["telemetry"]["active"] | false;
-        telemetry.sendTelemetry         = data["telemetry"]["sendTelemetry"] | false;
-        telemetry.temperatureCorrection = data["telemetry"]["temperatureCorrection"] | 0.0;
-
-        if (data["winlink"]["password"].isNull()) needsRewrite = true;
-        winlink.password                = data["winlink"]["password"] | "NOPASS";
-
-        if (data["notification"]["ledTx"].isNull() ||
-            data["notification"]["ledTxPin"].isNull() ||
-            data["notification"]["ledMessage"].isNull() ||
-            data["notification"]["ledMessagePin"].isNull() ||
-            data["notification"]["buzzerActive"].isNull() ||
-            data["notification"]["buzzerPinTone"].isNull() ||
-            data["notification"]["buzzerPinVcc"].isNull() ||
-            data["notification"]["bootUpBeep"].isNull() ||
-            data["notification"]["txBeep"].isNull() ||
-            data["notification"]["messageRxBeep"].isNull() ||
-            data["notification"]["stationBeep"].isNull() ||
-            data["notification"]["lowBatteryBeep"].isNull() ||
-            data["notification"]["shutDownBeep"].isNull() ||
-            data["notification"]["ledFlashlight"].isNull() ||
-            data["notification"]["ledFlashlightPin"].isNull()) needsRewrite = true;
-        notification.ledTx              = data["notification"]["ledTx"] | false;
-        notification.ledTxPin           = data["notification"]["ledTxPin"]| 13;
-        notification.ledMessage         = data["notification"]["ledMessage"] | false;
-        notification.ledMessagePin      = data["notification"]["ledMessagePin"] | 2;
-        notification.buzzerActive       = data["notification"]["buzzerActive"] | false;
-        notification.buzzerPinTone      = data["notification"]["buzzerPinTone"] | 33;
-        notification.buzzerPinVcc       = data["notification"]["buzzerPinVcc"] | 25;
-        notification.bootUpBeep         = data["notification"]["bootUpBeep"] | false;
-        notification.txBeep             = data["notification"]["txBeep"] | false;
-        notification.messageRxBeep      = data["notification"]["messageRxBeep"] | false;
-        notification.stationBeep        = data["notification"]["stationBeep"] | false;
-        notification.lowBatteryBeep     = data["notification"]["lowBatteryBeep"] | false;
-        notification.shutDownBeep       = data["notification"]["shutDownBeep"] | false;
-        notification.ledFlashlight      = data["notification"]["ledFlashlight"] | false;
-        notification.ledFlashlightPin   = data["notification"]["ledFlashlightPin"] | 14;
 
         if (data["pttTrigger"]["active"].isNull() ||
             data["pttTrigger"]["reverse"].isNull() ||
@@ -357,26 +261,25 @@ bool Configuration::readFile() {
         ptt.postDelay                   = data["pttTrigger"]["postDelay"] | 0;
         ptt.io_pin                      = data["pttTrigger"]["io_pin"] | 4;
 
-        if (data["other"]["simplifiedTrackerMode"].isNull() ||
-            data["other"]["sendCommentAfterXBeacons"].isNull() ||
-            data["other"]["path"].isNull() ||
+        if (data["other"]["sendCommentAfterXBeacons"].isNull() ||
             data["other"]["nonSmartBeaconRate"].isNull() ||
-            data["other"]["rememberStationTime"].isNull() ||
-            data["other"]["standingUpdateTime"].isNull() ||
-            data["other"]["sendAltitude"].isNull() ||
-            data["other"]["disableGPS"].isNull() ||
-            data["other"]["email"].isNull() ||
-            data["other"]["digipeating"].isNull()) needsRewrite = true;
-        simplifiedTrackerMode           = data["other"]["simplifiedTrackerMode"] | false;
+            data["other"]["sendAltitude"].isNull()) needsRewrite = true;
         sendCommentAfterXBeacons        = data["other"]["sendCommentAfterXBeacons"] | 10;
-        path                            = data["other"]["path"] | "WIDE1-1";
+        // Backward compat: accept old "path" key; new key is "beaconPath"
+        if      (!data["other"]["beaconPath"].isNull()) beaconPath = data["other"]["beaconPath"].as<String>();
+        else if (!data["other"]["path"].isNull())       beaconPath = data["other"]["path"].as<String>();
+        else                                          { beaconPath = "WIDE1-1"; needsRewrite = true; }
         nonSmartBeaconRate              = data["other"]["nonSmartBeaconRate"] | 15;
-        rememberStationTime             = data["other"]["rememberStationTime"] | 30;
-        standingUpdateTime              = data["other"]["standingUpdateTime"] | 15;
         sendAltitude                    = data["other"]["sendAltitude"] | true;
-        disableGPS                      = data["other"]["disableGPS"] | false;
-        email                           = data["other"]["email"] | "";
-        digipeating                     = data["other"]["digipeating"] | false;
+        // Backward compat: accept old bool "digipeating"; new field is "digiMode" (int)
+        if (!data["other"]["digiMode"].isNull()) {
+            digiMode = (DigiMode)(data["other"]["digiMode"] | 0);
+        } else if (!data["other"]["digipeating"].isNull()) {
+            digiMode = (data["other"]["digipeating"] | false) ? DIGI_WIDE1 : DIGI_OFF;
+            needsRewrite = true;
+        } else {
+            digiMode = DIGI_OFF; needsRewrite = true;
+        }
 
         if (data["customSmartBeacon"]["slowRate"].isNull() ||
             data["customSmartBeacon"]["slowSpeed"].isNull() ||
@@ -422,11 +325,9 @@ bool Configuration::readFile() {
         aprsIS.server                   = data["aprsIS"]["server"] | "rotate.aprs.net";
         aprsIS.port                     = data["aprsIS"]["port"] | 14580;
         aprsIS.passcode                 = data["aprsIS"]["passcode"] | "";
-        aprsIS.filter                   = data["aprsIS"]["filter"] | "r/0/0/0";
+        aprsIS.filter                   = data["aprsIS"]["filter"] | "m/20";
 
-        if (data["tcpKISS"]["enabled"].isNull() ||
-            data["tcpKISS"]["port"].isNull()) needsRewrite = true;
-        tcpKISS.enabled                 = data["tcpKISS"]["enabled"] | false;
+        if (data["tcpKISS"]["port"].isNull()) needsRewrite = true;
         tcpKISS.port                    = data["tcpKISS"]["port"] | 8001;
 
         configFile.close();
@@ -450,118 +351,44 @@ bool Configuration::readFile() {
 }
 
 void Configuration::setDefaultValues() {
-    wifiAP.active                   = true;
-    wifiAP.bootWindow               = false;
     wifiAP.password                 = "1234567890";
 
-    for (int i = 0; i < 3; i++) {
-        Beacon beacon;
-        beacon.callsign             = "NOCALL-7";
-        beacon.symbol               = "[";
-        beacon.overlay              = "/";
-        beacon.micE                 = "";
-        beacon.comment              = "";
-        beacon.smartBeaconActive    = true;
-        beacon.smartBeaconSetting   = 0;
-        beacon.gpsEcoMode           = false;
-        beacon.profileLabel         = "";
-        beacon.status               = "";
-        beacon.tacticalCallsign     = "";
-        beacons.push_back(beacon);
-    }
+    // ONE beacon
+    Beacon beacon;
+    beacon.callsign             = "NOCALL-7";
+    beacon.symbol               = ">";
+    beacon.overlay              = "/";
+    beacon.micE                 = "";
+    beacon.comment              = "";
+    beacon.smartBeaconActive    = true;
+    beacon.smartBeaconSetting   = 2;
+    beacon.profileLabel         = "";
+    beacon.status               = "";
+    beacon.tacticalCallsign     = "";
+    beacons.clear();
+    beacons.push_back(beacon);
 
     display.ecoMode                 = false;
     display.timeout                 = 4;
     display.turn180                 = false;
-    display.showSymbol              = true;
+    display.ledEnabled              = true;
 
     bluetooth.active                = false;
     bluetooth.deviceName            = "LoRaTracker";
-    #ifdef HAS_BT_CLASSIC
-        bluetooth.useBLE            = false;
-        bluetooth.useKISS           = false;
-    #else
-        bluetooth.useBLE            = true;    // fixed as BLE
-        bluetooth.useKISS           = true;
-    #endif
 
-    for (int j = 0; j < 4; j++) {
-        LoraType loraType;
-        switch (j) {
-            case 0:
-                loraType.frequency           = 433775000;
-                loraType.spreadingFactor     = 12;
-                loraType.codingRate4         = 5;
-                break;
-            case 1:
-                loraType.frequency           = 434855000;
-                loraType.spreadingFactor     = 9;
-                loraType.codingRate4         = 7;
-                break;
-            case 2:
-                loraType.frequency           = 439912500;
-                loraType.spreadingFactor     = 12;
-                loraType.codingRate4         = 5;
-                break;
-            case 3:
-                loraType.frequency           = 915000000;
-                loraType.spreadingFactor     = 12;
-                loraType.codingRate4         = 5;
-                break;
-        }
-        loraType.signalBandwidth    = 125000;
-        loraType.power              = 20;
-        loraTypes.push_back(loraType);
-    }
+    // ONE LoRa type (433 MHz APRS EU default)
+    LoraType loraType;
+    loraType.frequency          = 433775000;
+    loraType.spreadingFactor    = 12;
+    loraType.signalBandwidth    = 125000;
+    loraType.codingRate4        = 5;
+    loraType.power              = 20;
+    loraTypes.clear();
+    loraTypes.push_back(loraType);
 
     battery.sendVoltage             = false;
-    battery.voltageAsTelemetry      = false;
     battery.sendVoltageAlways       = false;
-    battery.monitorVoltage          = false;
     battery.sleepVoltage            = 2.9;
-
-    telemetry.active                 = false;
-    telemetry.sendTelemetry          = false;
-    telemetry.temperatureCorrection  = 0.0;
-
-    winlink.password                = "NOPASS";
-
-    // Per-board defaults for the notification subsystem pins. Each variant's
-    // board_pinout.h can override any of these to a safe pad (or -1 for
-    // "no pin") if the generic defaults overlap critical hardware. The
-    // -1 sentinel makes pin writes a no-op on Adafruit's BSP since it falls
-    // outside NUM_DIGITAL_PINS.
-    #ifndef LED_TX_PIN_DEFAULT
-        #define LED_TX_PIN_DEFAULT 13
-    #endif
-    #ifndef LED_MESSAGE_PIN_DEFAULT
-        #define LED_MESSAGE_PIN_DEFAULT 2
-    #endif
-    #ifndef BUZZER_TONE_PIN_DEFAULT
-        #define BUZZER_TONE_PIN_DEFAULT 33
-    #endif
-    #ifndef BUZZER_VCC_PIN_DEFAULT
-        #define BUZZER_VCC_PIN_DEFAULT 25
-    #endif
-    #ifndef LED_FLASHLIGHT_PIN_DEFAULT
-        #define LED_FLASHLIGHT_PIN_DEFAULT 14
-    #endif
-
-    notification.ledTx              = false;
-    notification.ledTxPin           = LED_TX_PIN_DEFAULT;
-    notification.ledMessage         = false;
-    notification.ledMessagePin      = LED_MESSAGE_PIN_DEFAULT;
-    notification.buzzerActive       = false;
-    notification.buzzerPinTone      = BUZZER_TONE_PIN_DEFAULT;
-    notification.buzzerPinVcc       = BUZZER_VCC_PIN_DEFAULT;
-    notification.bootUpBeep         = false;
-    notification.txBeep             = false;
-    notification.messageRxBeep      = false;
-    notification.stationBeep        = false;
-    notification.lowBatteryBeep     = false;
-    notification.shutDownBeep       = false;
-    notification.ledFlashlight      = false;
-    notification.ledFlashlightPin   = LED_FLASHLIGHT_PIN_DEFAULT;
 
     ptt.active                      = false;
     ptt.reverse                     = false;
@@ -569,16 +396,11 @@ void Configuration::setDefaultValues() {
     ptt.postDelay                   = 0;
     ptt.io_pin                      = 4;
 
-    simplifiedTrackerMode           = false;
     sendCommentAfterXBeacons        = 10;
-    path                            = "WIDE1-1";
+    beaconPath                      = "WIDE1-1";
     nonSmartBeaconRate              = 15;
-    rememberStationTime             = 30;
-    standingUpdateTime              = 15;
     sendAltitude                    = true;
-    disableGPS                      = false;
-    email                           = "";
-    digipeating                     = false;
+    digiMode                        = DIGI_OFF;
 
     customSmartBeacon               = { 120, 5, 60, 40, 100, 12, 12, 60 };
     SMARTBEACON_Utils::setCustomValues(customSmartBeacon);
@@ -597,9 +419,8 @@ void Configuration::setDefaultValues() {
     aprsIS.server                   = "rotate.aprs.net";
     aprsIS.port                     = 14580;
     aprsIS.passcode                 = "";
-    aprsIS.filter                   = "r/0/0/0";
+    aprsIS.filter                   = "m/20";
 
-    tcpKISS.enabled                 = false;
     tcpKISS.port                    = 8001;
 
     Serial.println("New Data Created... All is Written!");

@@ -33,6 +33,13 @@ namespace GPS_Utils {
     void    checkStartUpFrames();
     String  getCardinalDirection(float course);
 
+    // Returns the current lat/lon/elev from whichever GPS source is active.
+    bool    getCurrentLocation(double &lat, double &lng, float &elev);
+
+    // Returns a parseable one-liner for serial_config.html 'gps read' command.
+    // "gps.lat=47.123456 gps.lon=-122.345678 gps.alt=150.0 gps.sats=8 gps.valid=1"
+    String  getStatusString();
+
 }
 
 #endif

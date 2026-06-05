@@ -25,7 +25,19 @@
 namespace WIFI_Utils {
 
     void startAutoAP();
-    void checkIfWiFiAP();
+
+    // Check boot triggers and enter AP config mode if needed.
+    // buttonHeld: true if the USR button was held when setup() ran.
+    // Blocks until the last client has been gone for 2 minutes, then reboots.
+    // Returns immediately (no AP started) if neither trigger is active.
+    void checkIfWiFiAP(bool buttonHeld);
+
+    // Connect to STA (infrastructure) network using Config.wifiSTA credentials.
+    // Blocks up to 20 s; logs result. Returns true on successful association.
+    bool connectSTA();
+
+    // True when the station interface is associated and has an IP.
+    bool isSTAConnected();
 
 }
 

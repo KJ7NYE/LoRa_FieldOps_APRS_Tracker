@@ -1,152 +1,40 @@
 {
-	"beacons": [
-		{
-			"callsign": "N7JBR",
-			"gpsEcoMode": false,
-			"symbol": "s",
-			"overlay": "/",
-			"micE": "",
-			"comment": "World Jetboat Races 2026",
-			"status": "",
-			"smartBeaconActive": true,
-			"smartBeaconSetting": 2,
-			"profileLabel": "",
-			"tacticalCallsign": ""
-		},
-		{
-			"callsign": "KJ7NYE",
-			"gpsEcoMode": false,
-			"symbol": "",
-			"overlay": "/",
-			"micE": "",
-			"comment": "",
-			"status": "",
-			"smartBeaconActive": true,
-			"smartBeaconSetting": 2,
-			"profileLabel": "",
-			"tacticalCallsign": ""
-		},
-		{
-			"callsign": "NOCALL-7",
-			"gpsEcoMode": false,
-			"symbol": "b",
-			"overlay": "/",
-			"micE": "",
-			"comment": "",
-			"status": "",
-			"smartBeaconActive": true,
-			"smartBeaconSetting": 1,
-			"profileLabel": "",
-			"tacticalCallsign": ""
-		}
-	],
-	"display": {
-		"showSymbol": true,
-		"ecoMode": false,
-		"timeout": 4,
-		"turn180" : false
-    },
-	"battery": {
-		"sendVoltage": false,
-		"voltageAsTelemetry": false,
-		"sendVoltageAlways": false,
-		"monitorVoltage": false,
-		"sleepVoltage": 2.9
-	},
-	"other": {
-		"simplifiedTrackerMode": false,
-		"sendCommentAfterXBeacons": 4,
-		"path": "WIDE2-2",
-		"nonSmartBeaconRate": 15,
-		"rememberStationTime": 30,
-		"standingUpdateTime": 15,
-		"sendAltitude": true,
-		"disableGPS": false,
-		"email": "",
-		"digipeating": false
-	},
-	"winlink": {
-		"password": "ABCDEF"
-	},
-	"telemetry": {
-		"active": false,
-		"sendTelemetry": false,
-		"temperatureCorrection": 0.0		
-	},
-	"notification": {
-		"ledTx": false,
-		"ledTxPin": 13,
-		"ledMessage": false,
-		"ledMessagePin": 2,
-		"ledFlashlight": false,
-		"ledFlashlightPin": 14,
-		"buzzerActive": false,
-		"buzzerPinTone": 33,
-		"buzzerPinVcc": 25,
-		"bootUpBeep": false,
-		"txBeep": false,
-		"messageRxBeep": false,
-		"stationBeep": false,
-		"lowBatteryBeep": false,
-		"shutDownBeep": false
-	},
-	"lora": [
-		{
-			"frequency": 433775000,
-			"spreadingFactor": 8,
-			"signalBandwidth": 62500,
-			"codingRate4": 5,
-			"power": 20
-		},
-		{
-			"frequency": 434855000,
-			"spreadingFactor": 9,
-			"signalBandwidth": 125000,
-			"codingRate4": 7,
-			"power": 20
-		},
-		{
-			"frequency": 439912500,
-			"spreadingFactor": 12,
-			"signalBandwidth": 125000,
-			"codingRate4": 5,
-			"power": 20
-		},
-		{
-			"frequency": 915000000,
-			"spreadingFactor": 12,
-			"signalBandwidth": 125000,
-			"codingRate4": 5,
-			"power": 20
-		}
-	],
-	"bluetooth": {
-		"active": false,
-		"deviceName": "LoRaTracker",
-		"useBLE": false,
-		"useKISS": false
-	},
-	"pttTrigger": {
-		"active": false,
-		"io_pin": 4,
-		"preDelay": 0,
-		"postDelay": 0,
-		"reverse": false
-	},
-	"wifiAP": {
-		"active": false,
-		"bootWindow": false,
-		"password": "1234567890"
-	},
-	"customSmartBeacon": {
-		"slowRate": 120,
-		"slowSpeed": 5,
-		"fastRate": 60,
-		"fastSpeed": 40,
-		"minTxDist": 100,
-		"minDeltaBeacon": 12,
-		"turnMinDeg": 12,
-		"turnSlope": 60
-	}
-
+  "beacons": [{
+    "callsign": "NOCALL-7",
+    "symbol": ">",
+    "overlay": "/",
+    "micE": "",
+    "comment": "LoRa APRS",
+    "status": "",
+    "smartBeaconActive": true,
+    "smartBeaconSetting": 2,
+    "profileLabel": "",
+    "tacticalCallsign": ""
+  }],
+  "lora": [{
+    "frequency": 433775000,
+    "spreadingFactor": 12,
+    "signalBandwidth": 125000,
+    "codingRate4": 5,
+    "power": 20
+  }],
+  "display": { "ecoMode": false, "timeout": 4, "turn180": false, "ledEnabled": true },
+  "battery": { "sendVoltage": false, "sendVoltageAlways": false, "sleepVoltage": 2.9 },
+  "other": {
+    "sendCommentAfterXBeacons": 10,
+    "beaconPath": "WIDE1-1",
+    "nonSmartBeaconRate": 15,
+    "sendAltitude": true,
+    "digiMode": 0
+  },
+  "bluetooth": { "active": false, "deviceName": "LoRaAPRS" },
+  "wifiAP": { "password": "1234567890" },
+  "wifiSTA": { "enabled": false, "ssid": "", "password": "" },
+  "aprsIS": { "server": "rotate.aprs.net", "port": 14580, "passcode": "", "filter": "m/20" },
+  "tcpKISS": { "port": 8001 },
+  "fixedPosition": { "latitude": 0.0, "longitude": 0.0, "elevation": 0.0 },
+  "deviceRole": 0,
+  "gpsSource": 0,
+  "customSmartBeacon": { "slowRate": 120, "slowSpeed": 5, "fastRate": 60, "fastSpeed": 40, "minTxDist": 100, "minDeltaBeacon": 12, "turnMinDeg": 12, "turnSlope": 60 },
+  "pttTrigger": { "active": false, "io_pin": -1, "preDelay": 0, "postDelay": 0, "reverse": false }
 }
