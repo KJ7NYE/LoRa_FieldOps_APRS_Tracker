@@ -60,7 +60,7 @@ USB serial operates in three modes, switchable at runtime without reconnecting:
 Type `setup` or `log` over serial to switch; any mode returns to KISS on disconnect or reboot.
 
 ### Configuration
-- **Web UI** — served over WiFi AP (hold USR button at boot, or callsign = NOCALL-7); full configuration via browser
+- **Web UI** — served over WiFi AP (hold USR button ≥8 s while running, or callsign = NOCALL-7 on first boot); full configuration via browser
 - **Serial config tool** (`serial_config.html`) — standalone HTML page using the Web Serial API; works in Chrome/Edge 89+; no server required
 - **Serial CLI** — `setup` → interactive command line with `help`, `show`, `save`, `reboot`
 - **JSON config file** — `tracker_conf.json` on LittleFS/SPIFFS; importable/exportable via serial config tool
@@ -74,8 +74,10 @@ Type `setup` or `log` over serial to switch; any mode returns to KISS on disconn
 
 ### Button (USR)
 - **Short press (50 ms – 3 s)** — send position beacon immediately
-- **Long press (≥3 s)** — send status beacon
-- **Hold at boot** — force AP config mode (WiFi boards)
+- **Long press (3 s – 8 s)** — send status beacon
+- **Extra-long hold (≥8 s, while running)** — enter AP config mode (WiFi boards)
+
+> **Note for Heltec V3 and LoRanger V1:** the USR button is wired to GPIO0 (the ESP32 BOOT pin). Holding it during power-up or reset forces the chip into ROM download mode instead of running firmware. AP mode must therefore be triggered at runtime, not at boot.
 
 ---
 

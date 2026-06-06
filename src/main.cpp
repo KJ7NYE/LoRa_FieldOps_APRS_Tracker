@@ -130,20 +130,13 @@ void setup() {
     LoRa_Utils::setup();
 
     #ifdef HAS_WIFI
-        // Read USR button at boot (active-LOW, INPUT_PULLUP).
-        // Hold the button while powering on to force AP config mode.
-        bool apButtonHeld = false;
-        #ifdef BUTTON_PIN
-            pinMode(BUTTON_PIN, INPUT_PULLUP);
-            delay(10);   // settle
-            apButtonHeld = (digitalRead(BUTTON_PIN) == LOW);
-            if (apButtonHeld)
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Main",
-                           "USR button held at boot — AP config mode requested");
-        #endif
+        // AP mode is triggered at runtime (8 s hold) or automatically on first boot
+        // (NOCALL callsign). Boot-time button detection was removed because GPIO0
+        // (the USR button on Heltec V3 / LoRanger V1) doubles as the ESP32 BOOT pin:
+        // holding it low during reset enters ROM download mode before firmware runs.
         bootStatus("WiFi AP check");
-        WIFI_Utils::checkIfWiFiAP(apButtonHeld);
-        if (Config.deviceRole != ROLE_IGATE) {
+        WIFI_Utils::checkIfWiFiAP(false);
+        if (Config.deviceRole != ROLE_IGATE && !Config.wifiSTA.enabled) {
             WiFi.mode(WIFI_OFF);
         }
     #endif
@@ -190,8 +183,9 @@ void loop() {
     SERIAL_Setup::loop();
 
     // ── USR button ──────────────────────────────────────────────────────
-    // Short press (≥50 ms, <3 s): send position beacon immediately.
-    // Long press  (≥3 s):         send status beacon (beacons[0].status text).
+    // Short press (≥50 ms, <3 s):  send position beacon immediately.
+    // Long press  (≥3 s, <8 s):    send status beacon (beacons[0].status text).
+    // Extra-long  (≥8 s, HAS_WIFI): enter AP config mode (blocking until reboot).
     #ifdef BUTTON_PIN
     {
         bool btnDown = (digitalRead(BUTTON_PIN) == LOW);
@@ -202,6 +196,11 @@ void loop() {
             uint32_t held = millis() - btnPressTime;
             btnActive = false;
             displayActivity();   // any button release wakes the display
+            #ifdef HAS_WIFI
+            if (held >= 8000) {
+                WIFI_Utils::checkIfWiFiAP(true);   // blocking; reboots after idle timeout
+            } else
+            #endif
             if (held >= 3000) {
                 STATION_Utils::sendStatusBeacon();
             } else if (held >= 50) {
@@ -225,6 +224,8 @@ void loop() {
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) {
             APRS_IS_Utils::processLoRaPacket(packet);
+        }
+        if (WIFI_Utils::isSTAConnected()) {
             TCP_KISS_Utils::sendToClients(packet);
         }
         #endif
