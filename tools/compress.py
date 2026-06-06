@@ -30,19 +30,31 @@ files = [
   'data_embed/favicon.png',
 ]
 
-string_to_find_str = "String"
-string_to_find_ver = "versionDate"
-
 CPP_SRC = 'src/main.cpp' if os.path.exists('src/main.cpp') else 'src/LoRa_APRS_Tracker.cpp'
 
-with open(CPP_SRC, encoding='utf-8') as cpp_file:
-  for line in cpp_file:
-    if string_to_find_str in line and string_to_find_ver in line:
-      start = line.find('"') + 1
-      end = line.find('"', start)
-      if start > 0 and end > start:
-        versionDate = line[start:end]
-        break
+# Read version date from include/version.h (#define FIRMWARE_VERSION_DATE "...").
+# Fall back to scanning main.cpp for the old inline-string pattern so the script
+# still works against older checkouts that lack version.h.
+versionDate = "unknown"
+VERSION_H = 'include/version.h'
+if os.path.exists(VERSION_H):
+  with open(VERSION_H, encoding='utf-8') as vh:
+    for line in vh:
+      if 'FIRMWARE_VERSION_DATE' in line and '"' in line:
+        start = line.find('"') + 1
+        end   = line.find('"', start)
+        if start > 0 and end > start:
+          versionDate = line[start:end]
+          break
+else:
+  with open(CPP_SRC, encoding='utf-8') as cpp_file:
+    for line in cpp_file:
+      if 'String' in line and 'versionDate' in line and '"' in line:
+        start = line.find('"') + 1
+        end   = line.find('"', start)
+        if start > 0 and end > start:
+          versionDate = line[start:end]
+          break
 
 # Deterministic "build date": newest mtime across all inputs that can affect
 # the embedded web UI. Since we only regenerate a .gz when its inputs actually
