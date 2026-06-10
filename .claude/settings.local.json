@@ -10,7 +10,16 @@
       "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-Object -Last 50)",
       "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-Object -Last 30)",
       "PowerShell(Invoke-WebRequest -Uri \"https://raw.githubusercontent.com/microsoft/uf2/master/utils/uf2conv.py\" -OutFile \"c:\\\\GitHub\\\\LoRanger_APRS_Tracker\\\\tools\\\\uf2conv.py\" -UseBasicParsing; \\(Get-Item \"c:\\\\GitHub\\\\LoRanger_APRS_Tracker\\\\tools\\\\uf2conv.py\"\\).Length; Get-Content \"c:\\\\GitHub\\\\LoRanger_APRS_Tracker\\\\tools\\\\uf2conv.py\" -Head 5)",
-      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-String -Pattern \"uf2|RAM:|Flash:|SUCCESS|FAILED|error:\" | Select-Object -Last 6)"
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_t114 2>&1 | Select-String -Pattern \"uf2|RAM:|Flash:|SUCCESS|FAILED|error:\" | Select-Object -Last 6)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\jongl\\\\Documents\\\\GitHub\\\\LoRa_FieldOps_APRS_Tracker_ESP\" -Force)",
+      "Bash(Select-Object -Property Name, Mode)",
+      "Bash(pio run *)",
+      "Bash(Select-String -Pattern \"SUCCESS|FAILED|ERROR|error:\")",
+      "Bash(Select-Object -Last 30)",
+      "Bash(git stash *)"
     ]
   }
 }

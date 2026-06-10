@@ -340,17 +340,22 @@ void displaySetup() {
             digitalWrite(OLED_RST, LOW);
             delay(20);
             digitalWrite(OLED_RST, HIGH);
+            delay(10);  // SSD1306 needs ~1 ms after RST goes HIGH; 10 ms is safe margin
         #endif
         Wire.begin(OLED_SDA, OLED_SCL);
         #ifdef ssd1306
             if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) {
-                // Buffer allocation failed (very rare on ESP32 — usually means OOM).
-                // Log and continue; display calls will be no-ops on the zeroed buffer.
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "SSD1306", "init failed — display disabled");
+                delay(200);  // VEXT may still be settling after soft reset; retry once
+                if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) {
+                    logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "SSD1306", "init failed — display disabled");
+                }
             }
         #else
             if (!display.begin(0x3c, false)) {
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "SH1106", "init failed — display disabled");
+                delay(200);
+                if (!display.begin(0x3c, false)) {
+                    logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "SH1106", "init failed — display disabled");
+                }
             }
         #endif
         // Maximum brightness: dim(false) sends SETCONTRAST + value in one I2C

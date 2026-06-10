@@ -400,7 +400,7 @@ void Configuration::setDefaultValues() {
     sendAltitude                    = true;
     digiMode                        = DIGI_OFF;
 
-    customSmartBeacon               = { 120, 5, 60, 40, 100, 12, 12, 60 };
+    customSmartBeacon               = SmartBeaconValues{ 120, 5, 60, 40, 100, 12 };
     SMARTBEACON_Utils::setCustomValues(customSmartBeacon);
 
     wifiSTA.enabled                 = false;

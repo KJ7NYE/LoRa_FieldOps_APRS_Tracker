@@ -33,8 +33,13 @@ namespace WIFI_Utils {
     void checkIfWiFiAP(bool buttonHeld);
 
     // Connect to STA (infrastructure) network using Config.wifiSTA credentials.
-    // Blocks up to 20 s; logs result. Returns true on successful association.
+    // Blocks up to 10 s; logs result. Returns true on successful association.
+    // Use only at boot where a one-time blocking wait is acceptable.
     bool connectSTA();
+
+    // Non-blocking: kick off WiFi association and return immediately.
+    // Caller must poll isSTAConnected() each loop to detect success or timeout.
+    void beginSTAConnect();
 
     // True when the station interface is associated and has an IP.
     bool isSTAConnected();

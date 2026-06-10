@@ -41,17 +41,22 @@ namespace WIFI_Utils {
         return WiFi.status() == WL_CONNECTED;
     }
 
+    void beginSTAConnect() {
+        if (Config.wifiSTA.ssid.length() == 0) return;
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Connecting to '%s' (async)...", Config.wifiSTA.ssid.c_str());
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(Config.wifiSTA.ssid.c_str(), Config.wifiSTA.password.c_str());
+    }
+
     bool connectSTA() {
         if (Config.wifiSTA.ssid.length() == 0) {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi", "STA SSID not configured");
             return false;
         }
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Connecting to '%s' ...", Config.wifiSTA.ssid.c_str());
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(Config.wifiSTA.ssid.c_str(), Config.wifiSTA.password.c_str());
+        beginSTAConnect();
 
         uint32_t t0 = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000UL) {
+        while (WiFi.status() != WL_CONNECTED && millis() - t0 < 10000UL) {
             delay(500);
         }
         if (WiFi.status() == WL_CONNECTED) {

@@ -31,7 +31,12 @@ namespace APRS_IS_Utils {
     void    processLoRaPacket(const String& packet);
 
     // Check connection health; reconnect if dropped. Call from loop.
+    // Only call when WiFi is connected — does not guard against WiFi-absent TCP attempts.
     void    checkConnection();
+
+    // Reset the reconnect cooldown timer so the next checkConnection() call
+    // attempts to connect immediately (e.g., right after WiFi (re)associates).
+    void    resetConnectTimer();
 
     // Returns true once after each successful connect() — used to trigger an
     // immediate self-beacon.  Clears the flag on first call that returns true.

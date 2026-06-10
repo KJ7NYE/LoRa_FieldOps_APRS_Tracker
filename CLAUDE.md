@@ -101,3 +101,5 @@ Subsystems share state via `extern` globals (no dependency injection). This is c
 - **nRF52 C++ standard**: nRF52 build requires C++17 (`-std=gnu++17`). Avoid C++17 features not available in the ESP32 C++11 build unless guarded.
 - **Display disabled on LoRanger_V1**: `HAS_DISPLAY` is not defined; all display code must be guarded. Adding display calls without the guard will cause a boot hang on that target.
 - **Single beacon profile**: Never reference `beacons[1]` or higher in new features.
+- **Syncronized configuration pathways**: keep index.html, serial_config.html, and mobile apps syncronized for UX, options, and functionality with any configuration changes to the firmware or updates to one of the configuration methods.
+- maintain senior developer level of code, with clear comments, function and variable names.
