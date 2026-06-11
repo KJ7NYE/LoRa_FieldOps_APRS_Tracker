@@ -335,6 +335,15 @@ void displaySetup() {
             sprite.createSprite(160, 80);
         #endif
     #else
+        // VEXT_CTRL was asserted in POWER_Utils::setup() with no delay before
+        // displaySetup() is called. SSD1315-variant panels (common on 2024-batch
+        // Heltec V3 units) need ~500 ms for VCC and the internal charge pump to
+        // stabilize before I2C init commands will be accepted. Without this delay
+        // begin() ACKs (I2C controller is up early) but SETCONTRAST and charge-pump
+        // enable commands are silently dropped, leaving the screen dark.
+        // Upstream richonguzman/LoRa_APRS_Tracker uses delay(500) at the top of
+        // displaySetup() for the same reason.
+        delay(500);
         #ifdef OLED_DISPLAY_HAS_RST_PIN
             pinMode(OLED_RST, OUTPUT);
             digitalWrite(OLED_RST, LOW);
@@ -358,11 +367,11 @@ void displaySetup() {
                 }
             }
         #endif
-        // Maximum brightness: dim(false) sends SETCONTRAST + value in one I2C
-        // transaction (correct); two separate ssd1306_command() calls are NOT
-        // equivalent — the second byte is interpreted as a new command, not data.
-        // screenBrightness is a TFT-PWM value (1 = dim); do NOT use it here.
-        display.dim(false);
+        // Set maximum OLED contrast. 0xCF (81% max for SWITCHCAPVCC) is insufficient
+        // for 2024-batch Heltec V3 panels (SSD1315-variant) — they produce no visible
+        // light below this threshold. 0xFF crosses the illumination threshold.
+        display.ssd1306_command(SSD1306_SETCONTRAST);
+        display.ssd1306_command(0xFF);
         // Apply user invert preference (black-on-white vs white-on-black).
         display.invertDisplay(Config.display.invertDisplay);
         if (Config.display.turn180) display.setRotation(2);
