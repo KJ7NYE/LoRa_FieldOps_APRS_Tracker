@@ -1,0 +1,163 @@
+name: Build and Publish Firmware Flasher
+
+# Runs on every GitHub Release publish.
+# Builds all 5 project targets, uploads per-target binaries as release assets,
+# then regenerates the GitHub Pages flasher manifests.
+
+on:
+    release:
+        types: [published]
+
+jobs:
+    # ── Build each target and upload its binary to the release ─────────────
+    build:
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                target:
+                    # ESP32 targets — produce web_factory.bin for Web Serial flashing
+                    - name: heltec_v3_433_aprs
+                      chip: esp32s3
+                      flash_size: 8MB
+                      flash_mode: dio
+                      spiffs_offset: "0x310000"
+
+                    - name: tbeam_433_aprs
+                      chip: esp32
+                      flash_size: 4MB
+                      flash_mode: dio
+                      spiffs_offset: "0x310000"
+
+                    - name: lilygo_t3_433_aprs
+                      chip: esp32
+                      flash_size: 4MB
+                      flash_mode: dio
+                      spiffs_offset: "0x310000"
+
+                    - name: LoRanger_V1
+                      chip: esp32s3
+                      flash_size: 8MB
+                      flash_mode: qio
+                      spiffs_offset: "0x310000"
+
+                    # nRF52 target — produces firmware.uf2 (no Web Serial)
+                    - name: heltec_t114
+                      chip: nrf52
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.9"
+
+            - name: Install build tools
+              run: pip install esptool platformio
+
+            - name: Build firmware
+              run: pio run -e ${{ matrix.target.name }}
+
+            # Filesystem image is ESP32-only (nRF52 embeds config in firmware via embed_config.py)
+            - name: Build filesystem image
+              if: matrix.target.chip != 'nrf52'
+              run: pio run --target buildfs -e ${{ matrix.target.name }}
+
+            # ── ESP32: assemble merged factory binary ──────────────────────
+            - name: Assemble ESP32 factory binary
+              if: matrix.target.chip != 'nrf52'
+              run: |
+                  set -e
+                  mkdir -p installer/firmware
+
+                  cp .pio/build/${{ matrix.target.name }}/firmware.bin    installer/firmware/
+                  cp .pio/build/${{ matrix.target.name }}/bootloader.bin  installer/firmware/
+                  cp .pio/build/${{ matrix.target.name }}/partitions.bin  installer/firmware/
+                  cp .pio/build/${{ matrix.target.name }}/spiffs.bin      installer/firmware/
+                  cp ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
+                     installer/firmware/
+
+                  CHIP="${{ matrix.target.chip }}"
+                  FLASH_MODE="${{ matrix.target.flash_mode }}"
+                  FLASH_SIZE="${{ matrix.target.flash_size }}"
+                  SPIFFS="${{ matrix.target.spiffs_offset }}"
+                  OUT="${{ matrix.target.name }}_web_factory.bin"
+
+                  if [ "$CHIP" = "esp32" ]; then
+                    esptool.py --chip esp32 merge_bin -o "$OUT" \
+                      --flash_mode "$FLASH_MODE" --flash_freq 40m --flash_size "$FLASH_SIZE" \
+                      0x1000   installer/firmware/bootloader.bin \
+                      0x8000   installer/firmware/partitions.bin \
+                      0xe000   installer/firmware/boot_app0.bin \
+                      0x10000  installer/firmware/firmware.bin \
+                      "$SPIFFS" installer/firmware/spiffs.bin
+                  elif [ "$CHIP" = "esp32s3" ]; then
+                    # ESP32-S3 bootloader starts at 0x0000, not 0x1000
+                    esptool.py --chip esp32s3 merge_bin -o "$OUT" \
+                      --flash_mode "$FLASH_MODE" --flash_size "$FLASH_SIZE" \
+                      0x0000   installer/firmware/bootloader.bin \
+                      0x8000   installer/firmware/partitions.bin \
+                      0xe000   installer/firmware/boot_app0.bin \
+                      0x10000  installer/firmware/firmware.bin \
+                      "$SPIFFS" installer/firmware/spiffs.bin
+                  fi
+
+            # Upload the merged binary as a named, flat release asset so
+            # gen_manifests.py can reference it by a predictable URL.
+            - name: Upload ESP32 factory binary to release
+              if: matrix.target.chip != 'nrf52'
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: ${{ matrix.target.name }}_web_factory.bin
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            # ── nRF52: copy UF2 for release upload ────────────────────────
+            - name: Prepare nRF52 UF2
+              if: matrix.target.chip == 'nrf52'
+              run: cp .pio/build/${{ matrix.target.name }}/firmware.uf2 \
+                      ${{ matrix.target.name }}_firmware.uf2
+
+            - name: Upload nRF52 UF2 to release
+              if: matrix.target.chip == 'nrf52'
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: ${{ matrix.target.name }}_firmware.uf2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # ── Regenerate GitHub Pages manifests ──────────────────────────────────
+    # Runs after all matrix builds regardless of individual failures so the
+    # flasher page is always updated with whatever assets were successfully built.
+    update-flasher:
+        needs: build
+        if: always()
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write  # needed to push to gh-pages branch
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.9"
+
+            - name: Generate flasher manifests
+              run: |
+                  python tools/gen_manifests.py \
+                    --tag "${{ github.ref_name }}" \
+                    --repo "${{ github.repository }}" \
+                    --output flasher/manifests
+
+            # Deploy the entire flasher/ directory to the gh-pages branch.
+            # On first run this creates the branch; subsequent runs update it.
+            # The flasher URL becomes: https://<owner>.github.io/<repo>/
+            - name: Deploy to GitHub Pages
+              uses: peaceiris/actions-gh-pages@v4
+              with:
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  publish_dir:  ./flasher
+                  # Keep existing files between deploys (e.g. manifests from prior releases)
+                  keep_files: false
+                  commit_message: "flasher: update manifests for ${{ github.ref_name }}"

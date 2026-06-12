@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoRa FieldOps — Firmware Flasher</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
+  <!-- ESP Web Tools: drives Web Serial flashing for ESP32 targets -->
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js"></script>
+  <style>
+    body { background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+
+    .flasher-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+    }
+
+    .chip-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .chip-ESP32    { background: #1a3a5c; color: #58a6ff; }
+    .chip-ESP32-S3 { background: #1a3a5c; color: #58a6ff; }
+    .chip-nRF52840 { background: #2d1f3d; color: #bc8cff; }
+
+    .uf2-steps { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
+    .uf2-steps li { padding: 4px 0; font-size: 0.88rem; }
+
+    #flash-panel { min-height: 80px; }
+
+    esp-web-install-button::part(button) {
+      background: #238636;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 20px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    esp-web-install-button::part(button):hover { background: #2ea043; }
+
+    .status-msg { font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────────────────────────── -->
+<header class="bg-body-secondary border-bottom shadow-sm">
+  <div class="d-flex align-items-center gap-2 px-4 py-2 flex-wrap">
+    <span class="fw-semibold" style="font-size:1rem">⚡ LoRa FieldOps — Firmware Flasher</span>
+    <span id="version-badge" class="badge bg-secondary ms-1" style="font-size:0.7rem; display:none"></span>
+    <div class="ms-auto d-flex gap-2">
+      <a href="https://github.com/jeepnjonny/LoRa_FieldOps_APRS_Tracker_ESP/releases"
+         target="_blank" class="btn btn-sm btn-outline-secondary">Release Notes</a>
+      <a href="https://github.com/jeepnjonny/LoRa_FieldOps_APRS_Tracker_ESP"
+         target="_blank" class="btn btn-sm btn-outline-secondary">GitHub</a>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────── -->
+<main class="container py-5" style="max-width:680px">
+
+  <!-- Requirements notice -->
+  <div class="alert alert-info border-0 mb-4" style="background:#0c2d48; border-left:3px solid #58a6ff !important; border-radius:6px; font-size:0.85rem">
+    <strong>Requirements:</strong> Chrome or Edge browser with Web Serial support.
+    ESP32 targets flash over USB; nRF52 (Heltec T114) uses UF2 drag-and-drop instead.
+    Firefox and mobile browsers are not supported for Web Serial.
+  </div>
+
+  <!-- Target selector -->
+  <div class="flasher-card p-4 mb-4">
+    <label class="form-label fw-semibold mb-2" for="target-select">Select your hardware</label>
+    <div id="loading-msg" class="text-muted status-msg mb-3">Loading available firmware…</div>
+    <div id="select-row" style="display:none">
+      <select id="target-select" class="form-select mb-3" style="background:#0d1117; border-color:#30363d; color:#c9d1d9">
+        <option value="">— choose a target —</option>
+      </select>
+      <div id="target-description" class="text-muted status-msg mb-3" style="display:none"></div>
+    </div>
+    <div id="error-msg" class="text-danger status-msg" style="display:none"></div>
+  </div>
+
+  <!-- Flash / download panel -->
+  <div id="flash-panel" class="flasher-card p-4" style="display:none">
+
+    <!-- ESP32: Web Serial flash -->
+    <div id="esp-panel" style="display:none">
+      <p class="mb-3" style="font-size:0.9rem">
+        Connect your device via USB, then click <strong>Install</strong> to flash.
+        The board will reset into firmware when complete.
+      </p>
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <esp-web-install-button id="install-btn"></esp-web-install-button>
+        <span class="text-muted status-msg">Chrome / Edge only · USB cable required</span>
+      </div>
+    </div>
+
+    <!-- nRF52: UF2 drag-and-drop -->
+    <div id="nrf-panel" style="display:none">
+      <div class="alert alert-warning border-0 mb-3"
+           style="background:#2d1f0a; border-left:3px solid #d29922 !important; border-radius:6px; font-size:0.85rem">
+        <strong>Web Serial cannot flash nRF52 boards.</strong>
+        Use the UF2 bootloader drag-and-drop method below.
+      </div>
+
+      <p class="fw-semibold mb-2" style="font-size:0.9rem">How to flash the Heltec T114</p>
+      <ol class="uf2-steps p-3 ps-4 mb-3">
+        <li><strong>Double-tap RESET</strong> quickly — the board enters UF2 bootloader mode.
+            A USB drive named <code>T114BOOT</code> (or similar) appears on your computer.</li>
+        <li>Click <strong>Download UF2</strong> below to save the firmware file.</li>
+        <li><strong>Drag</strong> the downloaded <code>.uf2</code> file onto the USB drive.</li>
+        <li>The drive disappears and the board reboots automatically into the new firmware.</li>
+      </ol>
+
+      <a id="uf2-download-btn" href="#" class="btn btn-warning" download>
+        ⬇ Download UF2
+      </a>
+      <div class="text-muted status-msg mt-2" style="font-size:0.78rem">
+        File saves to your Downloads folder — drag it onto the bootloader USB drive.
+      </div>
+    </div>
+
+  </div><!-- /flash-panel -->
+
+  <!-- Manifest info footer -->
+  <div id="manifest-footer" class="text-muted mt-4" style="font-size:0.75rem; display:none">
+    Firmware version: <span id="footer-version">—</span> ·
+    Published: <span id="footer-date">—</span> ·
+    <a id="footer-release-link" href="#" target="_blank" class="text-muted">Release notes</a>
+  </div>
+
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  const MANIFESTS_URL = './manifests/targets.json';
+
+  const elLoading     = document.getElementById('loading-msg');
+  const elSelectRow   = document.getElementById('select-row');
+  const elSelect      = document.getElementById('target-select');
+  const elDesc        = document.getElementById('target-description');
+  const elError       = document.getElementById('error-msg');
+  const elFlashPanel  = document.getElementById('flash-panel');
+  const elEspPanel    = document.getElementById('esp-panel');
+  const elNrfPanel    = document.getElementById('nrf-panel');
+  const elInstallBtn  = document.getElementById('install-btn');
+  const elUf2Btn      = document.getElementById('uf2-download-btn');
+  const elVersionBadge = document.getElementById('version-badge');
+  const elFooter       = document.getElementById('manifest-footer');
+  const elFooterVer    = document.getElementById('footer-version');
+  const elFooterDate   = document.getElementById('footer-date');
+  const elFooterLink   = document.getElementById('footer-release-link');
+
+  let targetsData = null;
+
+  // ── Load targets.json ──────────────────────────────────────────────────
+  fetch(MANIFESTS_URL)
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status} loading targets.json`);
+      return r.json();
+    })
+    .then(data => {
+      targetsData = data;
+      populateSelect(data);
+    })
+    .catch(err => {
+      elLoading.style.display = 'none';
+      elError.textContent = `Failed to load firmware list: ${err.message}. `
+        + 'A release must be published before the flasher is populated.';
+      elError.style.display = '';
+    });
+
+  function populateSelect(data) {
+    elLoading.style.display = 'none';
+
+    // Version badge
+    if (data.version) {
+      elVersionBadge.textContent = data.version;
+      elVersionBadge.style.display = '';
+    }
+
+    // Footer
+    if (data.version || data.published) {
+      elFooterVer.textContent  = data.version  || '—';
+      elFooterDate.textContent = data.published || '—';
+      if (data.repo) {
+        elFooterLink.href = `https://github.com/${data.repo}/releases/tag/${data.version}`;
+      }
+      elFooter.style.display = '';
+    }
+
+    // Populate dropdown
+    data.targets.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      const chipLabel = t.chip ? ` (${t.chip})` : '';
+      opt.textContent = `${t.label}${chipLabel}`;
+      elSelect.appendChild(opt);
+    });
+
+    elSelectRow.style.display = '';
+  }
+
+  // ── Target selection change ────────────────────────────────────────────
+  elSelect.addEventListener('change', () => {
+    const id = elSelect.value;
+    elFlashPanel.style.display  = 'none';
+    elEspPanel.style.display    = 'none';
+    elNrfPanel.style.display    = 'none';
+    elDesc.style.display        = 'none';
+
+    if (!id || !targetsData) return;
+
+    const target = targetsData.targets.find(t => t.id === id);
+    if (!target) return;
+
+    // Description
+    if (target.description) {
+      elDesc.textContent   = target.description;
+      elDesc.style.display = '';
+    }
+
+    elFlashPanel.style.display = '';
+
+    if (target.uf2_url) {
+      // nRF52 — UF2 download
+      elUf2Btn.href = target.uf2_url;
+      elUf2Btn.download = `${target.id}_firmware.uf2`;
+      elNrfPanel.style.display = '';
+    } else if (target.manifest) {
+      // ESP32 — Web Serial via ESP Web Tools
+      const manifestUrl = `./manifests/${target.manifest}`;
+      elInstallBtn.setAttribute('manifest', manifestUrl);
+      elEspPanel.style.display = '';
+    }
+  });
+
+})();
+</script>
+
+</body>
+</html>
