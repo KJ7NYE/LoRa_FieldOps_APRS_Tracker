@@ -150,14 +150,37 @@ jobs:
                     --repo "${{ github.repository }}" \
                     --output flasher/manifests
 
-            # Deploy the entire flasher/ directory to the gh-pages branch.
-            # On first run this creates the branch; subsequent runs update it.
+            # Push flasher/ contents to the gh-pages branch using plain git.
+            # Avoids peaceiris/actions-gh-pages which pins to Node.js 20 actions.
             # The flasher URL becomes: https://<owner>.github.io/<repo>/
             - name: Deploy to GitHub Pages
-              uses: peaceiris/actions-gh-pages@v4
-              with:
-                  github_token: ${{ secrets.GITHUB_TOKEN }}
-                  publish_dir:  ./flasher
-                  # Keep existing files between deploys (e.g. manifests from prior releases)
-                  keep_files: false
-                  commit_message: "flasher: update manifests for ${{ github.ref_name }}"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  # Stash generated flasher contents before touching the git index
+                  cp -r flasher /tmp/flasher-deploy
+
+                  git config user.name  "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+                  # Fetch gh-pages if it exists; otherwise start an orphan branch
+                  if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+                    git fetch origin gh-pages
+                    git checkout gh-pages
+                    git pull --ff-only origin gh-pages
+                  else
+                    git checkout --orphan gh-pages
+                    git rm -rf . --quiet || true
+                  fi
+
+                  # Replace all content with the current flasher build
+                  find . -maxdepth 1 ! -name '.git' -exec rm -rf {} + 2>/dev/null || true
+                  cp -r /tmp/flasher-deploy/. .
+
+                  git add -A
+                  # Skip commit if nothing changed (idempotent)
+                  git diff --cached --quiet || \
+                    git commit -m "flasher: update manifests for ${{ github.ref_name }}"
+                  git push \
+                    "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" \
+                    gh-pages
