@@ -9,6 +9,7 @@
 #include <queue>
 #include "configuration.h"
 #include "station_utils.h"
+#include "dedup_utils.h"
 #include "gps_utils.h"
 #include "lora_utils.h"
 #include "battery_utils.h"
@@ -81,39 +82,12 @@ namespace STATION_Utils {
 
 
     // ── Hash-based dedup buffer ───────────────────────────────────────────────
+    // 50-slot ring, 60 s TTL — see include/dedup_utils.h for implementation.
 
-    static constexpr int   HASH_SIZE    = 25;
-    static constexpr uint32_t HASH_TTL  = 30000;  // 30 seconds
-
-    struct HashEntry {
-        uint32_t hash;
-        uint32_t seenAt;
-    };
-
-    static HashEntry hashBuf[HASH_SIZE];
-    static int       hashHead = 0;
-
-    // Simple djb2-style hash over a String.
-    static uint32_t djb2(const String& s) {
-        uint32_t h = 5381;
-        for (unsigned i = 0; i < s.length(); i++) {
-            h = ((h << 5) + h) + (uint8_t)s[i];
-        }
-        return h;
-    }
+    static PacketDedup digiDedup;
 
     bool isInHashBuffer(const String& callsign, const String& payload) {
-        uint32_t h = djb2(callsign + payload);
-        uint32_t now = millis();
-        for (int i = 0; i < HASH_SIZE; i++) {
-            if (hashBuf[i].hash == h && (now - hashBuf[i].seenAt) < HASH_TTL) {
-                return true;
-            }
-        }
-        // Not found — record it.
-        hashBuf[hashHead] = { h, now };
-        hashHead = (hashHead + 1) % HASH_SIZE;
-        return false;
+        return !digiDedup.isNew(callsign, payload);
     }
 
 

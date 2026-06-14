@@ -1,6 +1,6 @@
-# LoRanger APRS Tracker — Changelog
+# LoRa FieldOps APRS Tracker — Changelog
 
-Running log of changes in this fork ([KJ7NYE/LoRanger_APRS_Tracker](https://github.com/KJ7NYE/LoRanger_APRS_Tracker))
+Running log of changes in this fork ([KJ7NYE/LoRa_FieldOps_APRS_Tracker](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker))
 on top of upstream [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/LoRa_APRS_Tracker).
 
 Fork divergence point: upstream commit [`bfd531a`](https://github.com/richonguzman/LoRa_APRS_Tracker/commit/bfd531a) — *"winlink challenge fisher-yates update"* (2026-04-23).

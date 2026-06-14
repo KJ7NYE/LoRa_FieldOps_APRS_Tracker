@@ -89,8 +89,8 @@ Type `setup` or `log` over serial to switch; any mode returns to KISS on disconn
 
 ### Quick start
 ```bash
-git clone https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker_ESP
-cd LoRa_FieldOps_APRS_Tracker_ESP
+git clone https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker
+cd LoRa_FieldOps_APRS_Tracker
 
 # Build all supported targets
 pio run
@@ -323,7 +323,7 @@ Operation on amateur radio frequencies requires a valid amateur radio licence. I
 *73 de KJ7NYE*
 
 > **Fork notice.** This is a fork of [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/LoRa_APRS_Tracker),
-> maintained at [KJ7NYE/LoRanger_APRS_Tracker](https://github.com/KJ7NYE/LoRanger_APRS_Tracker). The upstream
+> maintained at [KJ7NYE/LoRa_FieldOps_APRS_Tracker](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker). The upstream
 > project is the canonical CA2RXU LoRa APRS Tracker firmware — full credit to Ricardo Guzman (CA2RXU) and the
 > upstream contributors. Relevant excerpts from the upstream README are preserved below.
 >
@@ -361,7 +361,7 @@ and to make the firmware better suited for licensed-amateur tactical event suppo
 > change the receivers or change this tracker's settings to match.
 
 For per-commit specifics — file paths, exact values, divergence point from upstream — see
-[CHANGELOG.md](https://github.com/KJ7NYE/LoRanger_APRS_Tracker/blob/main/CHANGELOG.md).
+[CHANGELOG.md](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/CHANGELOG.md).
 
 ---
 
@@ -403,7 +403,7 @@ For upstream version history, see the [upstream repository](https://github.com/r
 ## License
 
 GPL-3.0, inherited from the upstream project. All modifications in this fork are released under the same
-license. See [LICENSE](https://github.com/KJ7NYE/LoRanger_APRS_Tracker/blob/main/LICENSE) for the full terms.
+license. See [LICENSE](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/LICENSE) for the full terms.
 
 ## This code was based on the work of:
 

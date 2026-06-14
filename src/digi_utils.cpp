@@ -21,16 +21,6 @@ extern logging::Logger  logger;
 
 namespace DIGI_Utils {
 
-    // Strip * only from WIDE alias tokens produced by other firmware that marks
-    // the alias itself (e.g. "WIDE2-1*") rather than inserting a callsign.
-    // Callsign asterisks (e.g. "FILL*") must be preserved for correct path tracing.
-    static String cleanPathAsterisks(String path) {
-        path.replace("WIDE1-1*", "WIDE1-1");
-        path.replace("WIDE2-1*", "WIDE2-1");
-        path.replace("WIDE2-2*", "WIDE2-2");
-        return path;
-    }
-
     static DigiMode digiMode() { return Config.digiMode; }
 
     static String buildPacket(const String& path, const String& packet) {
@@ -45,7 +35,7 @@ namespace DIGI_Utils {
             if (tempPath.indexOf("WIDE1-1*") != -1) return "";  // alias already used
             tempPath.replace("WIDE1-1", myCall + "*");
         } else if (tempPath.indexOf("WIDE2-") != -1 && mode == DIGI_WIDE1_WIDE2) {
-            tempPath = cleanPathAsterisks(path);
+            if (tempPath.indexOf("WIDE2-1*") != -1 || tempPath.indexOf("WIDE2-2*") != -1) return "";  // alias already consumed
             if (tempPath.indexOf("WIDE2-1") != -1) {
                 tempPath.replace("WIDE2-1", myCall + "*");
             } else if (tempPath.indexOf("WIDE2-2") != -1) {
@@ -96,8 +86,8 @@ namespace DIGI_Utils {
         String sender = packet.substring(0, packet.indexOf(">"));
         if (sender == myCall) return;
 
-        // Dedup: skip if we've repeated this same payload within the last 30 s.
-        // Uses the shared hash buffer in station_utils (25 slots, djb2, 30 s TTL).
+        // Dedup: skip if we've repeated this same payload within the TTL window.
+        // Uses the shared PacketDedup instance in station_utils (50 slots, 60 s TTL).
         int colonIdx = packet.indexOf(":");
         String payload = (colonIdx >= 0) ? packet.substring(colonIdx + 1) : packet;
         if (STATION_Utils::isInHashBuffer(sender, payload)) return;

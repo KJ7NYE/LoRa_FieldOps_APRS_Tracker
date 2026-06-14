@@ -11,6 +11,7 @@
 #include <WiFiClient.h>
 #include <APRSPacketLib.h>
 #include "aprs_is_utils.h"
+#include "dedup_utils.h"
 #include "configuration.h"
 #include "lora_utils.h"
 #include "display.h"
@@ -30,30 +31,13 @@ static bool         _needsBeacon    = false;      // set true after each success
 // ── iGate upload dedup ────────────────────────────────────────────────────
 // Prevents uploading both the direct copy and digipeated copies of the same
 // frame (same originating callsign + payload, different digi path).
-// 10-slot ring buffer, djb2 hash, 30-second TTL.
-// Intentionally separate from the digi dedup in station_utils so the two
-// subsystems don't interfere with each other.
-static constexpr int      IG_SLOTS = 10;
-static constexpr uint32_t IG_TTL   = 30000;
-struct IgSlot { uint32_t hash; uint32_t seenAt; };
-static IgSlot   igBuf[IG_SLOTS];
-static int      igHead = 0;
-
-static uint32_t igDjb2(const String& s) {
-    uint32_t h = 5381;
-    for (unsigned i = 0; i < s.length(); i++) h = ((h << 5) + h) + (uint8_t)s[i];
-    return h;
-}
+// Intentionally a separate PacketDedup instance from the digi dedup in
+// station_utils so the two subsystems don't suppress each other.
+// 50-slot ring, 60 s TTL — see include/dedup_utils.h.
+static PacketDedup igDedup;
 
 static bool igIsNew(const String& sender, const String& payload) {
-    uint32_t h   = igDjb2(sender + payload);
-    uint32_t now = millis();
-    for (int i = 0; i < IG_SLOTS; i++) {
-        if (igBuf[i].hash == h && (now - igBuf[i].seenAt) < IG_TTL) return false;
-    }
-    igBuf[igHead] = { h, now };
-    igHead = (igHead + 1) % IG_SLOTS;
-    return true;
+    return igDedup.isNew(sender, payload);
 }
 
 // Compute the standard APRS-IS passcode (Friedman algorithm) from a callsign.
