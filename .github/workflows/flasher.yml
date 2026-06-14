@@ -1,16 +1,24 @@
 name: Build and Publish Firmware Flasher
 
-# Runs on every GitHub Release publish.
-# Builds all 5 project targets, uploads per-target binaries as release assets,
-# then regenerates the GitHub Pages flasher manifests.
+# Triggers:
+#   - Automatically on every GitHub Release publish (builds firmware + deploys flasher)
+#   - Manually via Actions → "Run workflow" (deploy-only: skips build, uses existing release assets)
 
 on:
     release:
         types: [published]
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Release tag to deploy (e.g. v1.2.3)'
+                required: true
+                type: string
 
 jobs:
     # ── Build each target and upload its binary to the release ─────────────
+    # Skipped on manual dispatch — release assets already exist on the chosen tag.
     build:
+        if: github.event_name == 'release'
         runs-on: ubuntu-latest
         strategy:
             fail-fast: false
@@ -127,8 +135,8 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     # ── Regenerate manifests and deploy to apps.k7swi.org ─────────────────
-    # Runs after all matrix builds regardless of individual failures so the
-    # flasher page is always updated with whatever assets were successfully built.
+    # On release publish: runs after the build matrix (always, even on partial failure).
+    # On manual dispatch: skips build entirely; uses the tag supplied in the input.
     #
     # Required GitHub Actions secrets:
     #   DEPLOY_HOST     — hostname or IP of the server (e.g. apps.k7swi.org)
@@ -138,8 +146,8 @@ jobs:
     #   DEPLOY_PATH     — absolute path on the server for the flasher root
     #                     (e.g. /var/www/html/LoRa_Tracker)
     update-flasher:
-        needs: build
-        if: always()
+        needs: [build]
+        if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
         runs-on: ubuntu-latest
 
         steps:
@@ -149,10 +157,20 @@ jobs:
               with:
                   python-version: "3.9"
 
+            - name: Resolve deploy tag
+              id: tag
+              run: |
+                  # workflow_dispatch supplies the tag via input; release publish uses ref_name
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    echo "value=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+                  fi
+
             - name: Generate flasher manifests
               run: |
                   python tools/gen_manifests.py \
-                    --tag "${{ github.ref_name }}" \
+                    --tag "${{ steps.tag.outputs.value }}" \
                     --repo "${{ github.repository }}" \
                     --output flasher/manifests
 
