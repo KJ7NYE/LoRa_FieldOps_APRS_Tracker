@@ -208,7 +208,23 @@ namespace GPS_Utils {
     }
 
     void calculateDistanceTraveled() {
-        currentHeading = gps.course.deg();
+        // EMA (α=0.3) smooths GPS course jitter (~±10°) without lagging real turns.
+        // Time constant ~2.3 s at 1 Hz; a 30° real turn reaches 90% in ~4 updates.
+        static float smoothedHeading = -1.0f;
+        if (gps.course.isValid() && gps.course.age() <= 2000) {
+            float raw = (float)gps.course.deg();
+            if (smoothedHeading < 0.0f) {
+                smoothedHeading = raw;
+            } else {
+                float delta = raw - smoothedHeading;
+                if (delta >  180.0f) delta -= 360.0f;
+                if (delta < -180.0f) delta += 360.0f;
+                smoothedHeading += 0.3f * delta;
+                if (smoothedHeading <   0.0f) smoothedHeading += 360.0f;
+                if (smoothedHeading >= 360.0f) smoothedHeading -= 360.0f;
+            }
+            currentHeading = smoothedHeading;
+        }
         if (lastTx >= txInterval) {
             sendUpdate = true;
         }
@@ -217,7 +233,10 @@ namespace GPS_Utils {
     void calculateHeadingDelta(int speed) {
         double headingDelta = abs(previousHeading - currentHeading);
         if (headingDelta > 180.0) headingDelta = 360.0 - headingDelta;
-        if (speed > 1 && lastTx > 10000) {
+        // Minimum turn interval: half the profile's fast rate, floored at 10 s.
+        // Prevents jitter oscillation from triggering beacons faster than the profile intends.
+        uint32_t turnMinTime = max(10000UL, (uint32_t)currentSmartBeaconValues.fastRate * 500UL);
+        if (speed > 1 && lastTx > turnMinTime) {
             int TurnMinAngle = currentSmartBeaconValues.turnMinDeg + (currentSmartBeaconValues.turnSlope / speed);
             if (headingDelta > TurnMinAngle) {
                 sendUpdate = true;

@@ -61,7 +61,7 @@ TinyGPSPlus gps;
 
 bool     bluetoothConnected = false;
 uint32_t lastDisplayUpdate  = 0;
-uint32_t lastBeaconCheck    = 0;  // SmartBeacon interval ticker
+uint32_t lastBeaconCheck    = 0;  // unused — kept to avoid linker errors if externed; use lastTxTime
 
 // GPS / beacon state — shared via extern across TUs.
 // gpsIsActive is defined in gps_utils.cpp (starts false, set true in GPS_Utils::setup).
@@ -288,8 +288,8 @@ void loop() {
         SMARTBEACON_Utils::checkSettings(Config.beacons[0].smartBeaconSetting);
         SMARTBEACON_Utils::checkState();
 
-        if (smartBeaconActive) {
-            if (locUpdated) GPS_Utils::calculateDistanceTraveled();
+        if (smartBeaconActive && locUpdated) {
+            GPS_Utils::calculateDistanceTraveled();
             GPS_Utils::calculateHeadingDelta(speed);
         }
         SMARTBEACON_Utils::checkFixedBeaconTime();
@@ -300,8 +300,7 @@ void loop() {
         if (timeUpdated) SMARTBEACON_Utils::checkInterval(speed);
     } else {
         // Fixed position or GPS sleeping — fire beacon on fixed interval
-        if (now - lastBeaconCheck >= (uint32_t)Config.nonSmartBeaconRate * 60000UL) {
-            lastBeaconCheck = now;
+        if (now - lastTxTime >= (uint32_t)Config.nonSmartBeaconRate * 60000UL) {
             STATION_Utils::sendBeacon();
         }
     }

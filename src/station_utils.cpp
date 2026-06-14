@@ -222,6 +222,7 @@ namespace STATION_Utils {
         if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
         #endif
         lastTxTime = millis();
+        sendUpdate = false;   // prevent a pending auto-beacon from firing immediately after
     }
 
 }  // namespace STATION_Utils
