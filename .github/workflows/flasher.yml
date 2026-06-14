@@ -126,15 +126,21 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # ── Regenerate GitHub Pages manifests ──────────────────────────────────
+    # ── Regenerate manifests and deploy to apps.k7swi.org ─────────────────
     # Runs after all matrix builds regardless of individual failures so the
     # flasher page is always updated with whatever assets were successfully built.
+    #
+    # Required GitHub Actions secrets:
+    #   DEPLOY_HOST     — hostname or IP of the server (e.g. apps.k7swi.org)
+    #   DEPLOY_USER     — SSH login user on the server
+    #   DEPLOY_SSH_KEY  — private SSH key (PEM/OpenSSH); matching pubkey must be
+    #                     in ~/.ssh/authorized_keys on the server
+    #   DEPLOY_PATH     — absolute path on the server for the flasher root
+    #                     (e.g. /var/www/html/LoRa_Tracker)
     update-flasher:
         needs: build
         if: always()
         runs-on: ubuntu-latest
-        permissions:
-            contents: write  # needed to push to gh-pages branch
 
         steps:
             - uses: actions/checkout@v4
@@ -150,37 +156,19 @@ jobs:
                     --repo "${{ github.repository }}" \
                     --output flasher/manifests
 
-            # Push flasher/ contents to the gh-pages branch using plain git.
-            # Avoids peaceiris/actions-gh-pages which pins to Node.js 20 actions.
-            # The flasher URL becomes: https://<owner>.github.io/<repo>/
-            - name: Deploy to GitHub Pages
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Install SSH key
               run: |
-                  # Stash generated flasher contents before touching the git index
-                  cp -r flasher /tmp/flasher-deploy
+                  install -m 700 -d ~/.ssh
+                  echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+                  chmod 600 ~/.ssh/deploy_key
+                  # Trust the server's host key on first connect
+                  ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
 
-                  git config user.name  "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-
-                  # Fetch gh-pages if it exists; otherwise start an orphan branch
-                  if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
-                    git fetch origin gh-pages
-                    git checkout gh-pages
-                    git pull --ff-only origin gh-pages
-                  else
-                    git checkout --orphan gh-pages
-                    git rm -rf . --quiet || true
-                  fi
-
-                  # Replace all content with the current flasher build
-                  find . -maxdepth 1 ! -name '.git' -exec rm -rf {} + 2>/dev/null || true
-                  cp -r /tmp/flasher-deploy/. .
-
-                  git add -A
-                  # Skip commit if nothing changed (idempotent)
-                  git diff --cached --quiet || \
-                    git commit -m "flasher: update manifests for ${{ github.ref_name }}"
-                  git push \
-                    "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" \
-                    gh-pages
+            - name: Deploy flasher to server via rsync
+              run: |
+                  rsync -az --delete \
+                    -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+                    flasher/ \
+                    "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+              # flasher/ is synced into DEPLOY_PATH so the URL becomes:
+              #   https://apps.k7swi.org/LoRa_Tracker/index.html
