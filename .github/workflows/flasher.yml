@@ -9,6 +9,9 @@ on:
     release:
         types: [published]
 
+permissions:
+    contents: write   # required to upload assets to GitHub Releases
+
 jobs:
     build:
         runs-on: ubuntu-latest
