@@ -10,14 +10,25 @@ Derived from [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/Lo
 
 ## Install / Flash Firmware
 
-| Board | Method | Download |
-|---|---|---|
-| **Heltec T114** (nRF52840) | BLE OTA — use [Nordic nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile) app → DFU tab | [`heltec_t114_dfu.zip`](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest) |
-| **Heltec T114** (nRF52840) | USB drag-and-drop — double-tap RESET → drag `.uf2` onto the USB drive | [`heltec_t114_firmware.uf2`](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest) |
-| **All ESP32 boards** | Web Serial flasher (Chrome/Edge) — one-click via USB cable | [apps.k7swi.org/LoRa\_Tracker](https://apps.k7swi.org/LoRa_Tracker/) |
-| **All ESP32 boards** | WiFi OTA — connect to device AP → `192.168.4.1` → Device → Update Firmware | Build or download `firmware.bin` from [Releases](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest) |
+### ESP32 boards (Heltec V3, T-Beam, T3, LoRanger V1)
 
-> **nRF52 BLE OTA note:** The DFU zip requires the [Nordic nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile) app (iOS or Android). Open the app, connect to your T114, tap the DFU icon, and select `heltec_t114_dfu.zip`. Alternatively, type `otadfu` in the serial CLI to enter DFU mode before opening nRF Connect.
+Two release assets are published per ESP32 board:
+
+| File | When to use | Tool required |
+|---|---|---|
+| `<board>_firmware.bin` | **Normal OTA update** — device already running, WiFi reachable | None — upload via device web UI at `192.168.4.1 → Device → Update Firmware` |
+| `<board>_web_factory.bin` | **First-time flash or recovery** — new device, bricked device, or partition table changed | USB cable + Chrome/Edge → [apps.k7swi.org/LoRa\_Tracker](https://apps.k7swi.org/LoRa_Tracker/) |
+
+> **Why two files?** The factory binary is a merged image (bootloader + partition table + firmware + filesystem) that writes the entire flash from scratch. The OTA binary is the bare application only — it fits in the OTA partition and is what the device web UI expects. Uploading the factory binary via OTA will fail with "Not Enough Space."
+
+> **When you must use the factory binary (USB required):** first flash on a new device; recovery after a bad flash; any time the partition table changes (e.g. upgrading from a pre-OTA firmware release to one with OTA support).
+
+### Heltec T114 (nRF52840)
+
+| Method | Steps | Download |
+|---|---|---|
+| **BLE OTA** | Type `otadfu` in serial CLI → open [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile) (iOS/Android) → scan → connect to DFU target → DFU tab → select zip | [`heltec_t114_dfu.zip`](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest) |
+| **USB drag-and-drop** | Double-tap RESET → drag `.uf2` onto the USB drive that appears | [`heltec_t114_firmware.uf2`](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest) |
 
 ---
 

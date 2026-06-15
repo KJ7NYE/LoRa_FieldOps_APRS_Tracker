@@ -116,8 +116,14 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   TAG=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+                  # Factory binary: merged image for first-time flash via web serial flasher (USB required).
                   gh release upload "$TAG" \
                     "${{ matrix.target.name }}_web_factory.bin" --clobber
+                  # OTA binary: bare app binary for WiFi OTA update via the device web UI (192.168.4.1).
+                  cp .pio/build/${{ matrix.target.name }}/firmware.bin \
+                     ${{ matrix.target.name }}_firmware.bin
+                  gh release upload "$TAG" \
+                    "${{ matrix.target.name }}_firmware.bin" --clobber
 
             # ── nRF52: UF2 drag-and-drop + BLE DFU zip ────────────────────
             - name: Prepare nRF52 UF2
