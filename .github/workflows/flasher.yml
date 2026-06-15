@@ -106,11 +106,11 @@ jobs:
 
             - name: Upload ESP32 factory binary to release
               if: matrix.target.chip != 'nrf52'
-              uses: softprops/action-gh-release@v2
-              with:
-                  files: ${{ matrix.target.name }}_web_factory.bin
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release upload "${{ github.ref_name }}" \
+                    "${{ matrix.target.name }}_web_factory.bin" --clobber
 
             # ── nRF52: UF2 drag-and-drop + BLE DFU zip ────────────────────
             - name: Prepare nRF52 UF2
@@ -132,10 +132,10 @@ jobs:
 
             - name: Upload nRF52 firmware artifacts to release
               if: matrix.target.chip == 'nrf52'
-              uses: softprops/action-gh-release@v2
-              with:
-                  files: |
-                      ${{ matrix.target.name }}_firmware.uf2
-                      ${{ matrix.target.name }}_dfu.zip
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release upload "${{ github.ref_name }}" \
+                    "${{ matrix.target.name }}_firmware.uf2" --clobber
+                  gh release upload "${{ github.ref_name }}" \
+                    "${{ matrix.target.name }}_dfu.zip" --clobber
