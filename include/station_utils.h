@@ -21,9 +21,19 @@ namespace STATION_Utils {
 
     void processOutputPacketBuffer();
 
-    // Track the most recently heard callsign for the status display.
-    void updateLastHeard(const String& callsign);
+    // Update the heard-station log from a full raw AX.25 packet string.
+    // Derives callsign and isDirect (no '*' in path) automatically.
+    // Also keeps getLastHeardSummary() updated for the display.
+    void updateLastHeard(const String& rawPacket);
     String getLastHeardSummary();  // returns the single most-recently-heard callsign
+
+    // Query-response accessors (used by query_utils.cpp)
+    // Returns space-separated callsigns heard directly (no digi hop), newest first.
+    String getDirectHeardList(uint8_t maxEntries = 10);
+    // Returns all recently heard callsigns, newest first.
+    String getAllHeardList(uint8_t maxEntries = 10);
+    // Returns elapsed minutes if callsign is in the heard log, -1 if not found.
+    int minutesSinceHeard(const String& callsign);
 
     // Packet dedup (digi/iGate): true if this exact callsign+payload was seen
     // within the last ~30 seconds. Records the packet on first sight.

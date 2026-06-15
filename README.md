@@ -43,6 +43,7 @@ Any role can also digipeat simultaneously. The digipeater includes a 30-second h
 - **WIDE1-1 / WIDE1-1,WIDE2-1** path selection
 - **Digipeater deduplication** — 25-slot djb2 hash ring, 30 s TTL prevents duplicate relays
 - **6-character Maidenhead grid square** — displayed on TFT (format: `AA00aa`)
+- **APRS station capability queries** — responds to directed and undirected queries from any APRS tool; see [APRS Station Queries](#aprs-station-queries)
 
 ### Connectivity
 - **USB serial KISS TNC** — default mode at 115200 baud; compatible with APRSDroid, Xastir, Direwolf
@@ -275,6 +276,41 @@ SmartBeacon adjusts the beacon interval dynamically:
 - **Stopped** (speed < 1 km/h) → beacons at slowRate regardless of distance; prevents the tracker from going silent when parked
 
 Heading changes above `turnMinDeg` threshold trigger an immediate beacon regardless of time elapsed.
+
+---
+
+## APRS Station Queries
+
+All device roles (Tracker, iGate, Digipeater) respond to APRS station capability queries as defined in APRS 1.01 §13. Queries are case-insensitive and may be sent from any APRS tool — APRSDroid, Xastir, APRS.fi, a handheld radio, etc.
+
+Duplicate queries from the same station are suppressed for 60 seconds. If the incoming message includes a sequence number (`{NNN}`), an ACK is sent before the response.
+
+### Directed queries
+
+Send as an APRS message addressed to the device's callsign:
+
+| Query | Response |
+|---|---|
+| `?APRSD` | List of stations heard directly (no digi hop), space-separated |
+| `?APRSH <CALL>` | Whether `<CALL>` has been heard recently and how long ago |
+| `?APRSL` | All recently heard stations, newest first |
+| `?APRSP` | Current position beacon (same as pressing the beacon button) |
+| `?APRSS` | Current status text from config |
+| `?APRST` or `?PING?` | Ping reply with device callsign |
+| `?APRSV` or `?VER` | Firmware version string |
+
+### Undirected queries
+
+Send as an APRS message addressed to `APRS` or `IGATE`:
+
+| Query | Addressee | Response |
+|---|---|---|
+| `?APRS?` | `APRS` | Position beacon from all listening stations |
+| `?IGATE?` | `IGATE` | iGate-online confirmation *(iGate mode only)* |
+
+### Anti-loop guard
+
+Message packets addressed to the device's own callsign are never digipeated. This prevents IS→RF→IS loops when a query or response re-enters the network via the APRS-IS downlink.
 
 ---
 

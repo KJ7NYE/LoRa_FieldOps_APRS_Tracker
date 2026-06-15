@@ -65,19 +65,97 @@ namespace STATION_Utils {
     }
 
 
-    // ── Last-heard (display) ──────────────────────────────────────────────────
-    // Single most-recently-heard callsign for line3 of the status display.
-    // No buffer, no expiry — always shows whoever was heard last.
+    // ── Heard-station log ────────────────────────────────────────────────────────
+    // 20-slot ring buffer used by APRS query responses (?APRSD, ?APRSH, ?APRSL).
+    // Also keeps a single most-recent callsign for the status display.
 
-    static String lastHeardCallsign = "";
+    struct HeardEntry {
+        String   callsign;
+        uint32_t timestamp;  // millis() when heard
+        bool     isDirect;   // true if no '*' in path (heard without a digi hop)
+    };
 
-    void updateLastHeard(const String& callsign) {
-        if (callsign.length() == 0) return;
-        lastHeardCallsign = callsign;
+    static constexpr uint8_t HEARD_SLOTS = 20;
+    static HeardEntry heardLog[HEARD_SLOTS];
+    static uint8_t    heardHead  = 0;
+    static uint8_t    heardCount = 0;
+    static String     lastHeardCallsign = "";
+
+    // Accepts the full raw AX.25 packet string: "SENDER>DEST,PATH:payload"
+    void updateLastHeard(const String& rawPacket) {
+        int arrowIdx = rawPacket.indexOf('>');
+        if (arrowIdx <= 0) return;
+
+        String sender = rawPacket.substring(0, arrowIdx);
+        if (sender.length() == 0) return;
+        lastHeardCallsign = sender;
+
+        // Extract path segment (between first ',' and ':') to check for digi hops.
+        // A '*' suffix on any path element means the packet was repeated by a digi.
+        int firstComma = rawPacket.indexOf(',', arrowIdx);
+        int firstColon = rawPacket.indexOf(':', arrowIdx);
+        bool isDirect = true;
+        if (firstComma > 0 && firstColon > firstComma) {
+            String path = rawPacket.substring(firstComma + 1, firstColon);
+            isDirect = (path.indexOf('*') < 0);
+        }
+
+        // Update existing entry for this callsign if already in the log.
+        for (uint8_t i = 0; i < heardCount; i++) {
+            uint8_t idx = (heardHead + HEARD_SLOTS - 1 - i) % HEARD_SLOTS;
+            if (heardLog[idx].callsign == sender) {
+                heardLog[idx].timestamp = millis();
+                heardLog[idx].isDirect  = isDirect;
+                return;
+            }
+        }
+
+        // New callsign — write to ring head.
+        heardLog[heardHead] = { sender, millis(), isDirect };
+        heardHead = (heardHead + 1) % HEARD_SLOTS;
+        if (heardCount < HEARD_SLOTS) heardCount++;
     }
 
     String getLastHeardSummary() {
         return lastHeardCallsign;
+    }
+
+    String getDirectHeardList(uint8_t maxEntries) {
+        String out;
+        uint8_t added = 0;
+        for (uint8_t i = 0; i < heardCount && added < maxEntries; i++) {
+            // Walk backwards from head (newest first)
+            uint8_t idx = (heardHead + HEARD_SLOTS - 1 - i) % HEARD_SLOTS;
+            if (heardLog[idx].isDirect) {
+                if (out.length() > 0) out += ' ';
+                out += heardLog[idx].callsign;
+                added++;
+            }
+        }
+        return out;
+    }
+
+    String getAllHeardList(uint8_t maxEntries) {
+        String out;
+        uint8_t added = 0;
+        for (uint8_t i = 0; i < heardCount && added < maxEntries; i++) {
+            uint8_t idx = (heardHead + HEARD_SLOTS - 1 - i) % HEARD_SLOTS;
+            if (out.length() > 0) out += ' ';
+            out += heardLog[idx].callsign;
+            added++;
+        }
+        return out;
+    }
+
+    int minutesSinceHeard(const String& callsign) {
+        for (uint8_t i = 0; i < heardCount; i++) {
+            uint8_t idx = (heardHead + HEARD_SLOTS - 1 - i) % HEARD_SLOTS;
+            if (heardLog[idx].callsign == callsign) {
+                uint32_t elapsed = millis() - heardLog[idx].timestamp;
+                return (int)(elapsed / 60000UL);
+            }
+        }
+        return -1;
     }
 
 

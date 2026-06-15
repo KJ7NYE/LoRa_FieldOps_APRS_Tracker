@@ -1,0 +1,21 @@
+#pragma once
+#ifndef QUERY_UTILS_H_
+#define QUERY_UTILS_H_
+
+#include <Arduino.h>
+
+namespace QUERY_Utils {
+
+    // Inspect a received raw AX.25 packet string and respond to APRS station
+    // capability queries directed at our callsign or broadcast to APRS/IGATE.
+    //
+    // Handles: ?APRS? ?APRSD ?APRSH ?APRSL ?APRSP ?APRSS ?APRST ?APRSV
+    //          ?PING? ?VER ?IGATE?
+    //
+    // Responses are queued via STATION_Utils::addToOutputPacketBuffer().
+    // Duplicate queries from the same sender are suppressed for 60 s.
+    void processLoRaPacket(const String& rawPacket);
+
+}
+
+#endif

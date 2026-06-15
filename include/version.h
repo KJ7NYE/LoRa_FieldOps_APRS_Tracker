@@ -1,2 +1,2 @@
 #pragma once
-#define FIRMWARE_VERSION_DATE "2026-06-13"
+#define FIRMWARE_VERSION_DATE "2026-06-15"

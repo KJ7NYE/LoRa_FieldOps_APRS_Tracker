@@ -25,6 +25,7 @@
 #include "device_role.h"
 #include "kiss_utils.h"
 #include "digi_utils.h"
+#include "query_utils.h"
 #include "version.h"
 #ifdef HAS_WIFI
 #include <WiFi.h>
@@ -249,9 +250,10 @@ void loop() {
             #endif
         }
 
-        STATION_Utils::updateLastHeard(
-            packet.substring(0, packet.indexOf(">"))
-        );
+        // Respond to directed and undirected APRS capability queries.
+        QUERY_Utils::processLoRaPacket(packet);
+
+        STATION_Utils::updateLastHeard(packet);
     }
 
     // ── BLE / BT inbound (KISS TX) ──────────────────────────────────────

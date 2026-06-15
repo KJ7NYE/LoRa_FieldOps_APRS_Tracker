@@ -9,6 +9,35 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-06-15 — Add APRS station capability query support
+
+All device roles (Tracker, iGate, Digipeater) now respond to APRS station capability queries (APRS 1.01 §13). Queries arrive as directed APRS message packets addressed to the device's own callsign, or as undirected broadcasts to the `APRS` / `IGATE` symbolic addresses. Query keywords are matched case-insensitively. Duplicate queries from the same sender are suppressed for 60 seconds. Incoming messages with a sequence number receive an ACK before the response.
+
+Supported queries:
+
+| Query | Addressee | Responded by | Notes |
+|---|---|---|---|
+| `?APRS?` | `APRS` | All roles | Triggers a position beacon |
+| `?APRSD` | Own callsign | All roles | Direct-heard station list |
+| `?APRSH <CALL>` | Own callsign | All roles | Has-heard lookup with elapsed time |
+| `?APRSL` | Own callsign | All roles | All recently heard stations |
+| `?APRSP` | Own callsign | All roles | Position beacon |
+| `?APRSS` | Own callsign | All roles | Status text from config |
+| `?APRST` / `?PING?` | Own callsign | All roles | Ping reply |
+| `?APRSV` / `?VER` | Own callsign | All roles | Firmware version string |
+| `?IGATE?` | `IGATE` | iGate only | iGate-online confirmation |
+
+Also adds a digipeater guard: message packets addressed to the device's own callsign are never relayed, preventing IS→RF→IS loops.
+
+Files changed:
+
+- New: [include/query_utils.h](include/query_utils.h), [src/query_utils.cpp](src/query_utils.cpp) — query parsing and dispatch
+- [include/station_utils.h](include/station_utils.h), [src/station_utils.cpp](src/station_utils.cpp) — `updateLastHeard()` now takes the full raw packet; 20-slot heard-station ring buffer with direct/digipeated flag; new `getDirectHeardList()`, `getAllHeardList()`, `minutesSinceHeard()` accessors
+- [src/digi_utils.cpp](src/digi_utils.cpp) — drop message packets addressed to own callsign before digipeating
+- [src/main.cpp](src/main.cpp) — wire `QUERY_Utils::processLoRaPacket()` into the RX dispatch block
+
+---
+
 ## 2026-05-03 — Add nRF52 platform layer + Heltec T114 variant (PR-1)
 
 First nRF52840 board lands in the same repo as the ESP32 fleet — Heltec T114

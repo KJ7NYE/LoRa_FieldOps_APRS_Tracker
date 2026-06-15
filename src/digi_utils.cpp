@@ -86,6 +86,15 @@ namespace DIGI_Utils {
         String sender = packet.substring(0, packet.indexOf(">"));
         if (sender == myCall) return;
 
+        // Guard: don't relay message packets addressed to us — prevents IS→RF→IS loops
+        // and ensures our own query responses are not re-digipeated by ourselves.
+        int dcIdx = packet.indexOf("::");
+        if (dcIdx > 0) {
+            String addressee = packet.substring(dcIdx + 2, dcIdx + 11);
+            addressee.trim();
+            if (addressee == myCall) return;
+        }
+
         // Dedup: skip if we've repeated this same payload within the TTL window.
         // Uses the shared PacketDedup instance in station_utils (50 slots, 60 s TTL).
         int colonIdx = packet.indexOf(":");
