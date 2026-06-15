@@ -62,7 +62,7 @@ jobs:
                   python-version: "3.9"
 
             - name: Install build tools
-              run: pip install esptool platformio nrfutil
+              run: pip install esptool platformio adafruit-nrfutil
 
             - name: Build firmware
               run: pio run -e ${{ matrix.target.name }}
@@ -129,13 +129,16 @@ jobs:
             - name: Generate nRF52 BLE DFU package
               if: matrix.target.chip == 'nrf52'
               run: |
-                  # Produces a Nordic DFU .zip loadable by nRF Connect app (iOS/Android).
-                  # --sd-req 0x00B6 = SoftDevice s140 v6.1.1 (matches boards/heltec_t114.json)
-                  nrfutil pkg generate \
-                    --hw-version 52 \
+                  # adafruit-nrfutil is required for the Adafruit nRF52 bootloader — Nordic's
+                  # nrfutil generates a different init packet format that the Adafruit bootloader
+                  # rejects, causing the board to fall back to USB/UF2 mode after DFU transfer.
+                  # --dev-type 0x0052 = nRF52 family (mirrors PlatformIO's own DFU builder).
+                  # --sd-req 0x00B6 = SoftDevice s140 v6.1.1 (matches boards/heltec_t114.json).
+                  # --application-version omitted: PlatformIO omits it too, avoids downgrade errors.
+                  adafruit-nrfutil dfu genpkg \
+                    --dev-type 0x0052 \
                     --sd-req 0x00B6 \
                     --application .pio/build/${{ matrix.target.name }}/firmware.hex \
-                    --application-version 1 \
                     ${{ matrix.target.name }}_dfu.zip
 
             - name: Upload nRF52 firmware artifacts to release
