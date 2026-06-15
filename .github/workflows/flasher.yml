@@ -27,13 +27,13 @@ jobs:
                       chip: esp32
                       flash_size: 4MB
                       flash_mode: dio
-                      spiffs_offset: "0x3D0000"   # partitions_4mb_ota.csv
+                      spiffs_offset: "0x310000"   # huge_app.csv (firmware too large for dual OTA slots)
 
                     - name: lilygo_t3_433_aprs
                       chip: esp32
                       flash_size: 4MB
                       flash_mode: dio
-                      spiffs_offset: "0x3D0000"   # partitions_4mb_ota.csv
+                      spiffs_offset: "0x310000"   # huge_app.csv (firmware too large for dual OTA slots)
 
                     - name: LoRanger_V1
                       chip: esp32s3

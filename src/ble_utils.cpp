@@ -67,8 +67,7 @@ static String binarySubstring(const String& s, int start, int end) {
  * ══════════════════════════════════════════════════════════════════════════ */
 #ifdef ARDUINO_ARCH_NRF52
 
-#include <bluefruit.h>
-#include <BLEDfu.h>
+#include <bluefruit.h>   // already includes services/BLEDfu.h
 
 static BLEDfu            bleDfu;
 static BLEService        aprsService(BLE_SERVICE_UUID);
