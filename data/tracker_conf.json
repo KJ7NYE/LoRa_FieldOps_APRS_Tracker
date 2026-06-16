@@ -37,5 +37,6 @@
   "deviceRole": 0,
   "gpsSource": 0,
   "customSmartBeacon": { "slowRate": 120, "slowSpeed": 5, "fastRate": 60, "fastSpeed": 40, "turnMinDeg": 12, "turnSlope": 60 },
-  "pttTrigger": { "active": false, "io_pin": -1, "preDelay": 0, "postDelay": 0, "reverse": false }
+  "pttTrigger": { "active": false, "io_pin": -1, "preDelay": 0, "postDelay": 0, "reverse": false },
+  "phg": { "enabled": false, "power": 7, "height": 2, "gain": 3, "directivity": 0, "beaconRate": 10 }
 }

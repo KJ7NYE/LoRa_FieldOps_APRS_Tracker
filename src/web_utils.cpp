@@ -259,6 +259,14 @@ namespace WEB_Utils {
             Config.ptt.postDelay                = getParamIntSafe("ptt.postDelay", Config.ptt.postDelay);
         }
 
+        //  PHG (Power-Height-Gain) — uncompressed beacon on separate timer
+        Config.phg.enabled     = request->hasParam("phg.enabled", true);
+        Config.phg.power       = (uint8_t)getParamIntSafe("phg.power",       Config.phg.power);
+        Config.phg.height      = (uint8_t)getParamIntSafe("phg.height",      Config.phg.height);
+        Config.phg.gain        = (uint8_t)getParamIntSafe("phg.gain",        Config.phg.gain);
+        Config.phg.directivity = (uint8_t)getParamIntSafe("phg.directivity", Config.phg.directivity);
+        Config.phg.beaconRate  = (uint8_t)getParamIntSafe("phg.beaconRate",  Config.phg.beaconRate);
+
         bool saveSuccess = Config.writeFile();
 
         if (saveSuccess) {

@@ -52,6 +52,9 @@ namespace APRSPacketLib {
 
     String  encodeGPSIntoBase91(float latitude, float longitude, float course, float speed, const String& symbol, bool sendAltitude = false, int altitude = 0, bool sendStandingUpdate = false, int ambiguityLevel = 0);
     String  generateBase91GPSBeaconPacket(const String& callsign, const String& tocall, const String& path, const String& overlay, const String& gpsData);
+    // Generates an uncompressed (human-readable DDmm.mmN/DDDmm.mmW) position beacon.
+    // Required for PHG extension — APRS spec does not permit PHG in compressed packets.
+    String  generateUncompressedGPSBeaconPacket(const String& callsign, const String& tocall, const String& path, const String& overlay, const String& symbol, float latitude, float longitude, const String& comment);
     String  generateObjectPacket(const String& callsign, const String& tocall, const String& path, const String& objectName, const String& timestamp, const String& overlay, const String& gpsData);
 
     float   decodeBase91EncodedLatitude(const String& encodedLatitude);

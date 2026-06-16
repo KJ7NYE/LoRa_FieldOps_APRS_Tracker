@@ -134,6 +134,13 @@ bool Configuration::writeFile() {
 
         data["tcpKISS"]["port"]                     = tcpKISS.port;
 
+        data["phg"]["enabled"]                      = phg.enabled;
+        data["phg"]["power"]                        = phg.power;
+        data["phg"]["height"]                       = phg.height;
+        data["phg"]["gain"]                         = phg.gain;
+        data["phg"]["directivity"]                  = phg.directivity;
+        data["phg"]["beaconRate"]                   = phg.beaconRate;
+
         serializeJson(data, configFile);
         configFile.close();
         return true;
@@ -330,6 +337,19 @@ bool Configuration::readFile() {
         if (data["tcpKISS"]["port"].isNull()) needsRewrite = true;
         tcpKISS.port                    = data["tcpKISS"]["port"] | 8001;
 
+        if (data["phg"]["enabled"].isNull()     ||
+            data["phg"]["power"].isNull()        ||
+            data["phg"]["height"].isNull()       ||
+            data["phg"]["gain"].isNull()         ||
+            data["phg"]["directivity"].isNull()  ||
+            data["phg"]["beaconRate"].isNull()) needsRewrite = true;
+        phg.enabled     = data["phg"]["enabled"]     | false;
+        phg.power       = data["phg"]["power"]       | 7;
+        phg.height      = data["phg"]["height"]      | 2;
+        phg.gain        = data["phg"]["gain"]        | 3;
+        phg.directivity = data["phg"]["directivity"] | 0;
+        phg.beaconRate  = data["phg"]["beaconRate"]  | 10;
+
         configFile.close();
 
         if (needsRewrite) {
@@ -424,6 +444,13 @@ void Configuration::setDefaultValues() {
     aprsIS.filter                   = "m/20";
 
     tcpKISS.port                    = 8001;
+
+    phg.enabled     = false;
+    phg.power       = 7;
+    phg.height      = 2;
+    phg.gain        = 3;
+    phg.directivity = 0;
+    phg.beaconRate  = 10;
 
     Serial.println("New Data Created... All is Written!");
 }

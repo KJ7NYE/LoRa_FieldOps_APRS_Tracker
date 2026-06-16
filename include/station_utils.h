@@ -15,6 +15,11 @@ namespace STATION_Utils {
     // Falls back to sendBeacon() if beacons[0].status is empty.
     void sendStatusBeacon();
 
+    // Send an uncompressed position beacon with PHG extension.
+    // PHG (Power-Height-Gain) advertises fixed-station RF capabilities.
+    // Must use uncompressed format per APRS spec — sent on its own timer.
+    void sendPHGBeacon();
+
     // Queue a packet for LoRa TX (used by digi and iGate downlink).
     // Packets are dequeued and sent by processOutputPacketBuffer().
     void addToOutputPacketBuffer(const String& packet);

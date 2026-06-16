@@ -137,6 +137,16 @@ public:
     float   elevation;
 };
 
+class PHGConfig {
+public:
+    bool    enabled;
+    uint8_t power;       // APRS PHG power code 0-9 (0=0W,1=1W,2=4W,...,9=81W)
+    uint8_t height;      // APRS PHG HAAT code 0-9 (0=10ft,1=20ft,2=40ft,...,9=5120ft)
+    uint8_t gain;        // Antenna gain in dBd 0-9
+    uint8_t directivity; // 0=Omni,1=NE,2=E,3=SE,4=S,5=SW,6=W,7=NW,8=N,9=Hi-Gain Omni
+    uint8_t beaconRate;  // Minutes between PHG beacons (independent of normal beacon rate)
+};
+
 
 class Configuration {
 public:
@@ -153,6 +163,7 @@ public:
     APRSISS                 aprsIS;
     TCPKISS                 tcpKISS;
     FixedPosition           fixedPosition;
+    PHGConfig               phg;
 
     DeviceRole              deviceRole;
     GPSSource               gpsSource;

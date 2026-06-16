@@ -1017,6 +1017,7 @@ function renderConfig() {
   const bt      = config.bluetooth         || {};
   const bat     = config.battery           || {};
   const ptt     = config.pttTrigger        || {};
+  const phgCfg  = config.phg              || {};
   const wifi    = config.wifiAP            || {};
   const other   = config.other             || {};
 
@@ -1348,6 +1349,51 @@ function renderConfig() {
       }
       row.appendChild(delayGrp('Pre-delay (ms)',  ptt.preDelay,  v => sendCmd(`ptt predelay ${v}`)));
       row.appendChild(delayGrp('Post-delay (ms)', ptt.postDelay, v => sendCmd(`ptt postdelay ${v}`)));
+      body.appendChild(row);
+    }
+  });
+
+  // ── PHG Station Info ─────────────────────
+  mkSection(cont, 'phg', '📡 PHG Station Info', body => {
+    body.appendChild(mkGroupTitle('Power-Height-Gain  (iGate / Digi fixed station)'));
+    const phgNote = document.createElement('p');
+    phgNote.className = 'text-muted small mb-2';
+    phgNote.textContent = 'PHG advertises fixed-station RF capabilities. Sent as a separate uncompressed beacon on its own timer. APRS spec requires uncompressed format — normal beacons are unaffected.';
+    body.appendChild(phgNote);
+
+    body.appendChild(mkBool('Enable PHG beacon', phgCfg.enabled ?? false, v => sendCmd(`phg ${v ? 'on' : 'off'}`)));
+
+    body.appendChild(mkSelect('TX Power', phgCfg.power ?? 7,
+      [{v:0,l:'0 W (0)'},{v:1,l:'1 W (1)'},{v:2,l:'4 W (2)'},{v:3,l:'9 W (3)'},{v:4,l:'16 W (4)'},
+       {v:5,l:'25 W (5)'},{v:6,l:'36 W (6)'},{v:7,l:'49 W (7)'},{v:8,l:'64 W (8)'},{v:9,l:'81 W (9)'}],
+      v => sendCmd(`phg power ${v}`)));
+
+    body.appendChild(mkSelect('HAAT (Height above avg terrain)', phgCfg.height ?? 2,
+      [{v:0,l:'10 ft (0)'},{v:1,l:'20 ft (1)'},{v:2,l:'40 ft (2)'},{v:3,l:'80 ft (3)'},{v:4,l:'160 ft (4)'},
+       {v:5,l:'320 ft (5)'},{v:6,l:'640 ft (6)'},{v:7,l:'1280 ft (7)'},{v:8,l:'2560 ft (8)'},{v:9,l:'5120 ft (9)'}],
+      v => sendCmd(`phg height ${v}`)));
+
+    body.appendChild(mkSelect('Antenna gain (dBd)', phgCfg.gain ?? 3,
+      [{v:0,l:'0 dBd'},{v:1,l:'1 dBd'},{v:2,l:'2 dBd'},{v:3,l:'3 dBd'},{v:4,l:'4 dBd'},
+       {v:5,l:'5 dBd'},{v:6,l:'6 dBd'},{v:7,l:'7 dBd'},{v:8,l:'8 dBd'},{v:9,l:'9 dBd'}],
+      v => sendCmd(`phg gain ${v}`)));
+
+    body.appendChild(mkSelect('Directivity', phgCfg.directivity ?? 0,
+      [{v:0,l:'Omni (0)'},{v:1,l:'NE (1)'},{v:2,l:'E (2)'},{v:3,l:'SE (3)'},{v:4,l:'S (4)'},
+       {v:5,l:'SW (5)'},{v:6,l:'W (6)'},{v:7,l:'NW (7)'},{v:8,l:'N (8)'},{v:9,l:'High-Gain Omni (9)'}],
+      v => sendCmd(`phg dir ${v}`)));
+
+    // PHG beacon rate number input
+    {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'PHG beacon rate (min)';
+      const ctl = document.createElement('div'); ctl.className = 'field-control';
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.className = 'form-control form-control-sm'; inp.style.width = '5rem';
+      inp.min = '1'; inp.max = '1440'; inp.value = phgCfg.beaconRate ?? 10;
+      inp.addEventListener('change', () => { markDirty(inp); sendCmd(`phg rate ${inp.value}`); });
+      ctl.appendChild(inp); row.appendChild(lbl); row.appendChild(ctl);
       body.appendChild(row);
     }
   });

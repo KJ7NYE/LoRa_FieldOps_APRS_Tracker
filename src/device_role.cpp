@@ -42,6 +42,7 @@ extern logging::Logger logger;
 namespace DeviceRoleUtils {
 
     static bool roleInitialized = false;
+    static uint32_t phgLastTx = 0;   // millis() of last PHG beacon TX (0 = never sent)
     #ifdef HAS_WIFI
     static bool networkServicesStarted = false;
     #endif
@@ -183,6 +184,17 @@ namespace DeviceRoleUtils {
             if (beaconInterval < 60000UL) beaconInterval = 60000UL;  // floor at 1 min
             if (millis() - lastTxTime >= beaconInterval) {
                 STATION_Utils::sendBeacon();
+            }
+        }
+
+        // PHG beacon fires on its own timer, independent of regular beacon cadence.
+        // Available for any role; most useful for fixed iGate / digipeater stations.
+        if (Config.phg.enabled) {
+            uint32_t phgInterval = (uint32_t)Config.phg.beaconRate * 60000UL;
+            if (phgInterval < 60000UL) phgInterval = 60000UL;  // floor at 1 min
+            if (phgLastTx == 0 || millis() - phgLastTx >= phgInterval) {
+                STATION_Utils::sendPHGBeacon();
+                phgLastTx = millis();
             }
         }
 

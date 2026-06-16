@@ -290,6 +290,23 @@ namespace SERIAL_Setup {
             kv("preDelay ", p.preDelay);
             kv("postDelay", p.postDelay);
         }
+        if (section == "" || section == "phg") {
+            const PHGConfig& pg = Config.phg;
+            hdr("phg");
+            kv("enabled    ", pg.enabled);
+            kv("power      ", pg.power);
+            kv("height     ", pg.height);
+            kv("gain       ", pg.gain);
+            kv("directivity", pg.directivity);
+            kv("beaconRate ", pg.beaconRate);
+            if (pg.enabled) {
+                char phgStr[8];
+                snprintf(phgStr, sizeof(phgStr), "PHG%c%c%c%c",
+                    '0' + (pg.power & 0x0F), '0' + (pg.height & 0x0F),
+                    '0' + (pg.gain  & 0x0F), '0' + (pg.directivity & 0x0F));
+                kv("string     ", phgStr);
+            }
+        }
         if (section == "" || section == "wifi") {
             hdr("wifi");
             kv("password  ", maskSecret(Config.wifiAP.password));
@@ -513,6 +530,32 @@ namespace SERIAL_Setup {
         else if (sub == "predelay")  { p.preDelay  = tk[2].toInt(); ok("ptt.predelay = " + String(p.preDelay)); }
         else if (sub == "postdelay") { p.postDelay = tk[2].toInt(); ok("ptt.postdelay = " + String(p.postDelay)); }
         else err("unknown ptt subcommand: " + sub);
+    }
+
+    static void cmdPhg(String* tk, int n) {
+        if (n < 2) { err("phg <show|on|off|power|height|gain|dir|rate> ..."); return; }
+        const String& sub = tk[1];
+        PHGConfig& pg = Config.phg;
+        if (sub == "show") {
+            char phgStr[8];
+            snprintf(phgStr, sizeof(phgStr), "PHG%c%c%c%c",
+                '0' + (pg.power & 0x0F), '0' + (pg.height & 0x0F),
+                '0' + (pg.gain  & 0x0F), '0' + (pg.directivity & 0x0F));
+            Serial.println("phg.enabled=" + String(pg.enabled ? "true" : "false") +
+                " power=" + pg.power + " height=" + pg.height +
+                " gain=" + pg.gain + " dir=" + pg.directivity +
+                " rate=" + pg.beaconRate + "min  string=" + phgStr);
+            return;
+        }
+        if (sub == "on" || sub == "off") { applyBool(tk[1], pg.enabled, "phg.enabled"); return; }
+        if (n < 3) { err("phg " + sub + " <value>"); return; }
+        int v = tk[2].toInt();
+        if      (sub == "power")  { pg.power       = constrain(v, 0, 9); ok("phg.power = " + String(pg.power)); }
+        else if (sub == "height") { pg.height      = constrain(v, 0, 9); ok("phg.height = " + String(pg.height)); }
+        else if (sub == "gain")   { pg.gain        = constrain(v, 0, 9); ok("phg.gain = " + String(pg.gain)); }
+        else if (sub == "dir")    { pg.directivity = constrain(v, 0, 9); ok("phg.dir = " + String(pg.directivity)); }
+        else if (sub == "rate")   { pg.beaconRate  = max(1, v);           ok("phg.rate = " + String(pg.beaconRate) + " min"); }
+        else err("unknown phg subcommand: " + sub);
     }
 
     static void cmdWifi(String* tk, int n, const String& line) {
@@ -857,6 +900,7 @@ namespace SERIAL_Setup {
         else if (cmd == "bt")                       cmdBt(tk, n, line);
         else if (cmd == "bat")                      cmdBat(tk, n);
         else if (cmd == "ptt")                      cmdPtt(tk, n);
+        else if (cmd == "phg")                      cmdPhg(tk, n);
         else if (cmd == "wifi")                     cmdWifi(tk, n, line);
         else if (cmd == "digi") {
             if (n < 2) { err("digi <off|wide1|wide1+wide2>"); return; }

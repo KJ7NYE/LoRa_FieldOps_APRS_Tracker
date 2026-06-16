@@ -307,4 +307,49 @@ namespace STATION_Utils {
         sendUpdate = false;   // prevent a pending auto-beacon from firing immediately after
     }
 
+    void sendPHGBeacon() {
+        double beaconLat = 0, beaconLng = 0;
+        float  beaconElev = 0;
+        if (!GPS_Utils::getCurrentLocation(beaconLat, beaconLng, beaconElev)) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "PHG", "No position — skipping PHG beacon");
+            return;
+        }
+
+        const Beacon& b = Config.beacons[0];
+        const PHGConfig& p = Config.phg;
+
+        // Build PHGphgd extension string — must be at start of comment field.
+        // Uncompressed format only: APRS spec disallows PHG in compressed packets.
+        char phgBuf[8];
+        snprintf(phgBuf, sizeof(phgBuf), "PHG%c%c%c%c",
+            '0' + (p.power       & 0x0F),
+            '0' + (p.height      & 0x0F),
+            '0' + (p.gain        & 0x0F),
+            '0' + (p.directivity & 0x0F));
+        String comment = String(phgBuf);
+        if (b.comment.length() > 0) {
+            comment += b.comment;
+        }
+
+        String packet = APRSPacketLib::generateUncompressedGPSBeaconPacket(
+            b.callsign, "APLRT1", Config.beaconPath,
+            b.overlay, b.symbol,
+            (float)beaconLat, (float)beaconLng,
+            comment);
+
+        {
+            int selfColon = packet.indexOf(":");
+            String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;
+            isInHashBuffer(b.callsign, selfPayload);
+        }
+        LoRa_Utils::sendNewPacket(packet);
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "PHG", "TX: %s", packet.c_str());
+        #ifdef HAS_WIFI
+        if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
+        #endif
+        // Update shared lastTxTime so the regular beacon timer is pushed out;
+        // prevents a regular beacon from firing seconds after a PHG beacon.
+        lastTxTime = millis();
+    }
+
 }  // namespace STATION_Utils

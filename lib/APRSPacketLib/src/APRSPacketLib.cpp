@@ -174,7 +174,7 @@ namespace APRSPacketLib {
             }
             ax25_base91enc(helper_base91, 1, (uint32_t) (log1p(speed)/0.07696));
             encodedData += helper_base91[0];
-            encodedData += "\x47";
+            encodedData += "\x45";   // T byte: GPS fix=current, NMEA=other, origin=software (0b100100 + 33 = 69 = 'E')
         }
         return encodedData;
     }
@@ -509,6 +509,14 @@ namespace APRSPacketLib {
         return longitude;
     }
 
+    // Uncompressed position beacon: DDmm.mmN/DDDmm.mmWs format.
+    // PHG and other APRS comment extensions require this format — not compatible with Base91.
+    String generateUncompressedGPSBeaconPacket(const String& callsign, const String& tocall, const String& path, const String& overlay, const String& symbol, float latitude, float longitude, const String& comment) {
+        return generateBasePacket(callsign, tocall, path) + ":=" +
+               gpsDecimalToDegreesLatitude(latitude) + overlay +
+               gpsDecimalToDegreesLongitude(longitude) + symbol + comment;
+    }
+
     gpsLatitudeStruct gpsDecimalToDegreesMiceLatitude(float latitude) {
         gpsLatitudeStruct miceLatitudeStruct;
         String lat = gpsDecimalToDegreesLatitude(latitude);
@@ -619,7 +627,7 @@ namespace APRSPacketLib {
             aprsPacket.payload      = temp0.substring(payloadOffset);
             int encodedBytePosition = payloadOffset + 12;
             char currentChar        = temp0[encodedBytePosition];
-            if (currentChar == 'G' || currentChar == 'Q' || currentChar == '[' || currentChar == 'H' || currentChar == 'X' || currentChar == 'T') {   //  Base91 Encoding
+            if (currentChar == 'E' || currentChar == 'G' || currentChar == 'Q' || currentChar == '[' || currentChar == 'H' || currentChar == 'X' || currentChar == 'T') {   //  Base91 Encoding ('E'=correct software origin, 'G'=legacy/third-party)
                 aprsPacket.latitude     = decodeBase91EncodedLatitude(temp0.substring(payloadOffset + 1, payloadOffset + 5));
                 aprsPacket.longitude    = decodeBase91EncodedLongitude(temp0.substring(payloadOffset + 5, payloadOffset + 9));
                 aprsPacket.symbol       = temp0.substring(payloadOffset + 9, payloadOffset + 10);
