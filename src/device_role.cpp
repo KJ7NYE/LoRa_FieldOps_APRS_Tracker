@@ -22,6 +22,10 @@
 #include "station_utils.h"
 #include "logger.h"
 #include "display.h"
+
+// lastTxTime is the single source of truth for beacon spacing — updated inside
+// every sendBeacon() call regardless of which path triggered it.
+extern uint32_t lastTxTime;
 #ifdef HAS_WIFI
 #include <WiFi.h>
 #include "aprs_is_utils.h"
@@ -161,23 +165,24 @@ namespace DeviceRoleUtils {
 
         // iGate and Digipeater beacon their own position on a fixed interval
         // so they appear on APRS maps. Tracker beaconing is driven by the main loop.
+        //
+        // Use lastTxTime (updated inside every sendBeacon() call) as the single
+        // timing reference. Using a private timer here caused a double-beacon: the
+        // GPS path or a button press could fire sendBeacon() and advance lastTxTime
+        // without resetting the private counter, so this block would fire again on
+        // the very next loop iteration.
         if (Config.deviceRole == ROLE_IGATE || Config.deviceRole == ROLE_DIGIPEATER) {
-            static uint32_t lastSelfBeacon = 0;
-
-            // Beacon immediately after each APRS-IS (re)connect — also resets the
-            // periodic timer so the next scheduled beacon is a full interval later.
+            // Beacon immediately after each APRS-IS (re)connect.
             #ifdef HAS_WIFI
             if (APRS_IS_Utils::consumeBeaconTrigger()) {
                 STATION_Utils::sendBeacon();
-                lastSelfBeacon = millis();
             }
             #endif
 
             uint32_t beaconInterval = (uint32_t)Config.nonSmartBeaconRate * 60000UL;
             if (beaconInterval < 60000UL) beaconInterval = 60000UL;  // floor at 1 min
-            if (millis() - lastSelfBeacon >= beaconInterval) {
+            if (millis() - lastTxTime >= beaconInterval) {
                 STATION_Utils::sendBeacon();
-                lastSelfBeacon = millis();
             }
         }
 

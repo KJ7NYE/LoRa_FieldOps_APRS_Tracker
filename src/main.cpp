@@ -311,8 +311,11 @@ void loop() {
         }
         if (timeUpdated) SMARTBEACON_Utils::checkInterval(speed);
     } else {
-        // Fixed position or GPS sleeping — fire beacon on fixed interval
-        if (now - lastTxTime >= (uint32_t)Config.nonSmartBeaconRate * 60000UL) {
+        // Fixed position or GPS sleeping — fire beacon on fixed interval.
+        // iGate and Digipeater roles handle their own periodic beaconing in
+        // handleRoleSpecificTasks() above using the same lastTxTime reference.
+        if (Config.deviceRole == ROLE_TRACKER &&
+            now - lastTxTime >= (uint32_t)Config.nonSmartBeaconRate * 60000UL) {
             STATION_Utils::sendBeacon();
         }
     }
