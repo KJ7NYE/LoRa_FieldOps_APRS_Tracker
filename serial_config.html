@@ -2070,7 +2070,7 @@ _fGoBtn.addEventListener('click', async () => {
     const binaryString = _arrayBufToBinStr(buffer);
 
     // Step 6 — Write flash (compressed upload, factory binary at offset 0x0)
-    await loader.write_flash({
+    await loader.writeFlash({
       fileArray:      [{ data: binaryString, address: 0x0 }],
       flash_size:     'keep',
       compress:       true,
@@ -2083,7 +2083,7 @@ _fGoBtn.addEventListener('click', async () => {
 
     // Step 7 — Reset device and disconnect
     _flashSetProgress(97, 'Resetting device…');
-    await loader.hard_reset();
+    await loader.after('hard_reset');
     await _flashTransport.disconnect();
     _flashTransport = null;
 
