@@ -1889,8 +1889,11 @@ document.getElementById('btn-clear-con').addEventListener('click', () => { conso
 //  combined) at offset 0x0. nRF52 targets offer UF2 drag-and-drop instead.
 // ─────────────────────────────────────────────
 
-const FLASH_RELEASES_API = 'https://api.github.com/repos/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest';
-const ESPTOOLJS_URL      = 'https://unpkg.com/esptool-js@0.4.3/bundle.js';
+const FLASH_RELEASES_API  = 'https://api.github.com/repos/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest';
+const ESPTOOLJS_URL       = 'https://unpkg.com/esptool-js@0.4.3/bundle.js';
+// Firmware is served from GitHub Pages instead of github.com release URLs.
+// github.com redirects lack CORS headers and are blocked by browser policy.
+const FLASH_FIRMWARE_BASE = 'https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware';
 
 // Board env name → chip family (nrf52 uses UF2 path, others use esptool-js)
 const FLASH_BOARDS = {
@@ -1956,7 +1959,8 @@ _fModal.addEventListener('show.bs.modal', async () => {
       ' &nbsp;<a href="' + data.html_url + '" target="_blank" rel="noopener" style="font-size:0.8rem">' +
       'view on GitHub</a>';
     for (const asset of (data.assets || [])) {
-      _flashAssets[asset.name] = asset.browser_download_url;
+      // Use GitHub Pages URL so the browser can fetch without CORS issues.
+      _flashAssets[asset.name] = `${FLASH_FIRMWARE_BASE}/${asset.name}`;
     }
   } catch (e) {
     _fRelText.textContent = '⚠ Could not load release info: ' + e.message;
