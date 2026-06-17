@@ -172,17 +172,12 @@
 
     <div class="vr"></div>
 
-    <a id="btn-flasher"
-       href="https://apps.k7swi.org/LoRa_Tracker/"
-       target="_blank"
-       rel="noopener"
-       class="btn btn-sm btn-outline-warning ms-auto"
-       title="Open the web firmware flasher (USB cable required)">&#x26A1; Flash Firmware (USB)</a>
-    <a href="http://192.168.4.1"
-       target="_blank"
-       rel="noopener"
-       class="btn btn-sm btn-outline-info ms-1"
-       title="Open the device web UI — use Device &gt; Update Firmware for OTA (WiFi AP must be active)">&#x2601; OTA Update</a>
+    <button id="btn-flasher"
+            type="button"
+            class="btn btn-sm btn-outline-warning ms-auto"
+            data-bs-toggle="modal"
+            data-bs-target="#flashModal"
+            title="Flash firmware via USB (Web Serial + esptool-js)">&#x26A1; Flash Firmware (USB)</button>
   </div>
 </header>
 
@@ -222,6 +217,82 @@
 
 <!-- Hidden file input for import -->
 <input type="file" id="import-file-input" accept=".json,application/json" style="display:none">
+
+<!-- ===== FLASH FIRMWARE MODAL ===== -->
+<div class="modal fade" id="flashModal" tabindex="-1" aria-labelledby="flashModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title" id="flashModalLabel">&#x26A1; Flash Firmware via USB</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- Release banner -->
+        <div id="flash-release-banner" class="alert alert-secondary py-2 mb-3" style="font-size:0.85rem">
+          <span id="flash-release-text">Loading latest release&hellip;</span>
+        </div>
+
+        <!-- Board selector -->
+        <div class="mb-3">
+          <label for="flash-board-sel" class="form-label fw-semibold" style="font-size:0.9rem">Select your board:</label>
+          <select id="flash-board-sel" class="form-select">
+            <option value="">&#x2014; choose board &#x2014;</option>
+            <option value="heltec_v3_433_aprs">Heltec LoRa32 V3 (ESP32-S3)</option>
+            <option value="tbeam_433_aprs">TTGO T-Beam V1.2 (ESP32)</option>
+            <option value="lilygo_t3_433_aprs">LilyGo T3 V1.6 (ESP32)</option>
+            <option value="LoRanger_V1">KJ7NYE LoRanger V1 (ESP32-S3)</option>
+            <option value="heltec_t114">Heltec T114 / LoRanger nRF (nRF52840)</option>
+          </select>
+        </div>
+
+        <!-- Connected-port warning -->
+        <div id="flash-port-warning" class="alert alert-danger py-2 d-none" style="font-size:0.85rem">
+          <strong>Config connection is active.</strong> Disconnect from the device first before flashing,
+          so the serial port is free for esptool-js.
+        </div>
+
+        <!-- nRF52 instructions -->
+        <div id="flash-nrf-info" class="alert alert-info d-none" style="font-size:0.85rem">
+          <strong>nRF52840 &mdash; UF2 drag-and-drop flashing:</strong>
+          <ol class="mb-0 mt-2">
+            <li>Double-tap the <strong>RST</strong> button &mdash; the board appears as a USB mass-storage drive</li>
+            <li>Click <strong>Download UF2</strong> below and drag the file onto that drive</li>
+            <li>The device reboots automatically when the copy finishes</li>
+          </ol>
+        </div>
+
+        <!-- ESP32 bootloader instructions -->
+        <div id="flash-esp-info" class="alert alert-warning d-none" style="font-size:0.85rem">
+          <strong>Enter ROM bootloader mode before clicking Flash:</strong>
+          Hold <strong>BOOT</strong>, tap <strong>RST</strong>, release BOOT &mdash;
+          <em>or</em> hold BOOT while plugging in the USB cable.
+          The device must be in bootloader mode before Web Serial can connect.
+        </div>
+
+        <!-- Progress / status -->
+        <div id="flash-progress-wrap" class="d-none mt-3">
+          <div class="progress mb-2" style="height:22px">
+            <div id="flash-progress-bar"
+                 class="progress-bar progress-bar-striped progress-bar-animated"
+                 role="progressbar" style="width:0%;min-width:2rem">0%</div>
+          </div>
+          <div id="flash-status" class="font-monospace text-muted" style="font-size:0.78rem;white-space:pre-wrap"></div>
+        </div>
+
+      </div><!-- /modal-body -->
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <a id="flash-btn-uf2" class="btn btn-outline-info d-none" href="#" download>&#x2B07; Download UF2</a>
+        <button id="flash-btn-go" class="btn btn-warning d-none" type="button">&#x26A1; Flash Firmware</button>
+      </div>
+
+    </div><!-- /modal-content -->
+  </div>
+</div><!-- /flashModal -->
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 <script>
@@ -1160,28 +1231,71 @@ function renderConfig() {
        { v: '7', l: '7 · Emergency!' }],
       v => sendCmd(`beacon micE ${v}`)));
 
-    body.appendChild(mkText('Comment (≤43 chars)', b.comment, v => sendCmd(`beacon comment ${v}`), { maxlength: 43 }));
-    body.appendChild(mkText('Status (≤43 chars)',  b.status,  v => sendCmd(`beacon status ${v}`),  { maxlength: 43 }));
+    // Comment row: text input + every-N counter + Tx button
     {
-      const row = mkBool('SmartBeacon active', b.smartBeaconActive, v => sendCmd(`beacon smart ${boolStr(v)}`));
-      const sel = document.createElement('select');
-      sel.className = 'form-select form-select-sm'; sel.style.width = 'auto';
-      SMARTSET_LABELS.forEach((l, j) => {
-        const o = document.createElement('option'); o.value = j; o.textContent = l;
-        if (j == b.smartBeaconSetting) o.selected = true;
-        sel.appendChild(o);
-      });
-      sel.addEventListener('change', () => { markDirty(sel); sendCmd(`beacon smartset ${sel.value}`); });
-      row.appendChild(sel);
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'Comment (≤43 chars)';
+      const ctl = document.createElement('div'); ctl.className = 'field-control';
+      ctl.style.cssText = 'display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap';
+      const cmtInp = document.createElement('input');
+      cmtInp.type = 'text'; cmtInp.className = 'form-control form-control-sm'; cmtInp.maxLength = 43;
+      cmtInp.value = b.comment || ''; cmtInp.placeholder = 'Comment text'; cmtInp.style.flex = '1 1 10rem';
+      cmtInp.addEventListener('change', () => { markDirty(cmtInp); sendCmd(`beacon comment ${cmtInp.value}`); });
+      const rateInp = document.createElement('input');
+      rateInp.type = 'number'; rateInp.className = 'form-control form-control-sm'; rateInp.min = 1;
+      rateInp.value = other.sendCommentAfterXBeacons ?? 10; rateInp.style.cssText = 'width:4.5rem;flex-shrink:0';
+      rateInp.title = 'Send comment every N beacons';
+      rateInp.addEventListener('change', () => { markDirty(rateInp); sendCmd(`commentafter ${rateInp.value}`); });
+      const rateLbl = document.createElement('span'); rateLbl.className = 'form-text small text-nowrap'; rateLbl.textContent = 'every N';
+      const txBtn = document.createElement('button');
+      txBtn.type = 'button'; txBtn.className = 'btn btn-outline-primary btn-sm flex-shrink-0';
+      txBtn.title = 'Send comment beacon now (does not reset beacon timer)'; txBtn.textContent = 'Tx';
+      txBtn.addEventListener('click', () => sendCmd('tx comment'));
+      ctl.appendChild(cmtInp); ctl.appendChild(rateInp); ctl.appendChild(rateLbl); ctl.appendChild(txBtn);
+      row.appendChild(lbl); row.appendChild(ctl);
       body.appendChild(row);
     }
+
+    // Status row: text input + Tx button
+    {
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'Status (≤43 chars)';
+      const ctl = document.createElement('div'); ctl.className = 'field-control';
+      ctl.style.cssText = 'display:flex;gap:0.4rem;align-items:center';
+      const stsInp = document.createElement('input');
+      stsInp.type = 'text'; stsInp.className = 'form-control form-control-sm'; stsInp.maxLength = 43;
+      stsInp.value = b.status || ''; stsInp.placeholder = 'Status text'; stsInp.style.flex = '1';
+      stsInp.addEventListener('change', () => { markDirty(stsInp); sendCmd(`beacon status ${stsInp.value}`); });
+      const txBtn = document.createElement('button');
+      txBtn.type = 'button'; txBtn.className = 'btn btn-outline-primary btn-sm flex-shrink-0';
+      txBtn.title = 'Send status packet now (does not reset beacon timer)'; txBtn.textContent = 'Tx';
+      txBtn.addEventListener('click', () => sendCmd('tx status'));
+      ctl.appendChild(stsInp); ctl.appendChild(txBtn);
+      row.appendChild(lbl); row.appendChild(ctl);
+      body.appendChild(row);
+    }
+
+    // SmartBeacon combined dropdown: "— Disabled —" or profile 0–4
+    body.appendChild(mkSelect('SmartBeacon profile',
+      b.smartBeaconActive ? String(b.smartBeaconSetting ?? 2) : '',
+      [{ v: '',  l: '— Disabled —' },
+       ...SMARTSET_LABELS.map((l, j) => ({ v: String(j), l }))],
+      v => {
+        if (v === '') {
+          sendCmd('beacon smart off');
+        } else {
+          sendCmd('beacon smart on');
+          sendCmd(`beacon smartset ${v}`);
+        }
+      }));
 
     body.appendChild(mkGroupTitle('Beacon Timing & Path'));
     body.appendChild(mkSelect('Beacon TX path', other.beaconPath ?? other.path ?? 'WIDE1-1',
       [{v:'WIDE1-1', l:'WIDE1-1  (1 hop)'}, {v:'WIDE1-1,WIDE2-1', l:'WIDE1-1,WIDE2-1  (2 hops)'}, {v:'WIDE1-1,WIDE2-2', l:'WIDE1-1,WIDE2-2  (3 hops)'}],
       v => sendCmd(`beaconpath ${v}`)));
-    body.appendChild(mkNumber('Non-smart rate (min)',     other.nonSmartBeaconRate,                   v => sendCmd(`nonsmartrate ${v}`)));
-    body.appendChild(mkNumber('Comment every N beacons', other.sendCommentAfterXBeacons,             v => sendCmd(`commentafter ${v}`)));
+    body.appendChild(mkNumber('Non-smart rate (min)', other.nonSmartBeaconRate, v => sendCmd(`nonsmartrate ${v}`)));
   });
 
   // ── SmartBeacon Custom ───────────────────
@@ -1766,6 +1880,236 @@ document.getElementById('import-file-input').addEventListener('change', async fu
 });
 
 document.getElementById('btn-clear-con').addEventListener('click', () => { consoleEl.innerHTML = ''; });
+
+// ─────────────────────────────────────────────
+//  Flash Firmware Modal
+//  Uses esptool-js (Espressif official library) loaded dynamically from
+//  unpkg CDN when the user actually clicks Flash — not on page load.
+//  ESP32 targets flash the merged _web_factory.bin (bootloader + app + spiffs
+//  combined) at offset 0x0. nRF52 targets offer UF2 drag-and-drop instead.
+// ─────────────────────────────────────────────
+
+const FLASH_RELEASES_API = 'https://api.github.com/repos/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest';
+const ESPTOOLJS_URL      = 'https://unpkg.com/esptool-js@0.4.3/bundle.js';
+
+// Board env name → chip family (nrf52 uses UF2 path, others use esptool-js)
+const FLASH_BOARDS = {
+  'heltec_v3_433_aprs': 'esp32s3',
+  'tbeam_433_aprs':     'esp32',
+  'lilygo_t3_433_aprs': 'esp32',
+  'LoRanger_V1':        'esp32s3',
+  'heltec_t114':        'nrf52',
+};
+
+let _flashAssets     = {};   // asset filename → browser_download_url
+let _flashTag        = '';   // e.g. "v1.2.0"
+let _flashTransport  = null; // esptool-js Transport (kept for disconnect-on-close)
+let _flashBusy       = false;
+
+// DOM refs for the modal
+const _fModal    = document.getElementById('flashModal');
+const _fBoardSel = document.getElementById('flash-board-sel');
+const _fGoBtn    = document.getElementById('flash-btn-go');
+const _fUf2Btn   = document.getElementById('flash-btn-uf2');
+const _fProgWrap = document.getElementById('flash-progress-wrap');
+const _fProgBar  = document.getElementById('flash-progress-bar');
+const _fStatus   = document.getElementById('flash-status');
+const _fRelText  = document.getElementById('flash-release-text');
+const _fNrfInfo  = document.getElementById('flash-nrf-info');
+const _fEspInfo  = document.getElementById('flash-esp-info');
+const _fPortWarn = document.getElementById('flash-port-warning');
+
+function _flashResetUI() {
+  _fBoardSel.value = '';
+  [_fGoBtn, _fUf2Btn, _fNrfInfo, _fEspInfo, _fPortWarn, _fProgWrap].forEach(el => el.classList.add('d-none'));
+  _fProgBar.style.width = '0%';
+  _fProgBar.textContent = '0%';
+  _fProgBar.classList.add('progress-bar-animated');
+  _fProgBar.classList.remove('bg-success', 'bg-danger');
+  _fStatus.textContent = '';
+}
+
+function _flashSetProgress(pct, msg) {
+  _fProgBar.style.width = pct + '%';
+  _fProgBar.textContent = pct + '%';
+  if (msg !== undefined) _fStatus.textContent = msg;
+}
+
+// Fetch GitHub release metadata when the modal opens
+_fModal.addEventListener('show.bs.modal', async () => {
+  _flashResetUI();
+  _flashAssets = {};
+  _flashTag    = '';
+  _fRelText.textContent = 'Loading latest release…';
+
+  try {
+    const resp = await fetch(FLASH_RELEASES_API);
+    if (!resp.ok) throw new Error('GitHub API returned HTTP ' + resp.status);
+    const data = await resp.json();
+    _flashTag  = data.tag_name || '';
+    const date = data.published_at
+      ? new Date(data.published_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })
+      : '';
+    _fRelText.innerHTML =
+      'Release <strong>' + _flashTag + '</strong>' +
+      (date ? ' &mdash; ' + date : '') +
+      ' &nbsp;<a href="' + data.html_url + '" target="_blank" rel="noopener" style="font-size:0.8rem">' +
+      'view on GitHub</a>';
+    for (const asset of (data.assets || [])) {
+      _flashAssets[asset.name] = asset.browser_download_url;
+    }
+  } catch (e) {
+    _fRelText.textContent = '⚠ Could not load release info: ' + e.message;
+  }
+});
+
+// Disconnect esptool transport (if any) when the modal closes
+_fModal.addEventListener('hidden.bs.modal', async () => {
+  if (_flashTransport) {
+    try { await _flashTransport.disconnect(); } catch {}
+    _flashTransport = null;
+  }
+  _flashBusy = false;
+});
+
+// Board selection drives which action buttons appear
+_fBoardSel.addEventListener('change', () => {
+  const env = _fBoardSel.value;
+  [_fGoBtn, _fUf2Btn, _fNrfInfo, _fEspInfo, _fPortWarn, _fProgWrap].forEach(el => el.classList.add('d-none'));
+
+  if (!env) return;
+
+  const chip = FLASH_BOARDS[env];
+
+  if (chip === 'nrf52') {
+    _fNrfInfo.classList.remove('d-none');
+    const uf2Name = env + '_firmware.uf2';
+    const uf2Url  = _flashAssets[uf2Name];
+    if (uf2Url) {
+      _fUf2Btn.href     = uf2Url;
+      _fUf2Btn.download = uf2Name;
+      _fUf2Btn.classList.remove('d-none');
+    } else if (_flashTag) {
+      _fNrfInfo.querySelector
+        && (_fNrfInfo.insertAdjacentHTML('beforeend',
+          '<p class="mb-0 mt-2 text-warning small">⚠ ' + uf2Name + ' not found in release ' + _flashTag + '.</p>'));
+    }
+  } else {
+    // Show connected-port warning if the config serial connection is open
+    if (connected) _fPortWarn.classList.remove('d-none');
+    _fEspInfo.classList.remove('d-none');
+    const binName = env + '_web_factory.bin';
+    if (_flashAssets[binName]) {
+      _fGoBtn.dataset.env = env;
+      _fGoBtn.classList.remove('d-none');
+    } else if (_flashTag) {
+      _fEspInfo.insertAdjacentHTML('beforeend',
+        '<p class="mb-0 mt-2 text-warning small">⚠ ' + binName + ' not found in release ' + _flashTag + '.</p>');
+    }
+  }
+});
+
+// Flash button: download firmware and write via esptool-js
+_fGoBtn.addEventListener('click', async () => {
+  if (_flashBusy) return;
+  const env     = _fGoBtn.dataset.env;
+  const binName = env + '_web_factory.bin';
+  const binUrl  = _flashAssets[binName];
+  if (!binUrl) { alert('Firmware binary not found in release.'); return; }
+
+  _flashBusy      = true;
+  _fGoBtn.disabled = true;
+  _fProgWrap.classList.remove('d-none');
+  _fProgBar.classList.add('progress-bar-animated');
+  _fProgBar.classList.remove('bg-success', 'bg-danger');
+
+  try {
+    // Step 1 — Download the factory binary from GitHub release
+    _flashSetProgress(0, 'Downloading firmware from GitHub…');
+    const dlResp = await fetch(binUrl);
+    if (!dlResp.ok) throw new Error('Download failed: HTTP ' + dlResp.status);
+    const buffer = await dlResp.arrayBuffer();
+    _flashSetProgress(8, 'Downloaded ' + (buffer.byteLength / 1024).toFixed(0) + ' KB Connecting to device…');
+
+    // Step 2 — Dynamically import esptool-js (ES module, loaded once on demand)
+    let ESPLoader, Transport;
+    try {
+      ({ ESPLoader, Transport } = await import(ESPTOOLJS_URL));
+    } catch (ie) {
+      throw new Error('Could not load esptool-js from CDN: ' + ie.message +
+        '\nCheck your internet connection, then try again.');
+    }
+
+    // Step 3 — Ask the browser to open the ESP device's serial port
+    _flashSetProgress(10, 'Select the ESP device port in the browser prompt…');
+    const serialPort  = await navigator.serial.requestPort();
+    _flashTransport   = new Transport(serialPort, false /* debug */);
+
+    // Terminal adapter: pipe esptool-js log lines to the status div
+    const term = {
+      clean()         {},
+      writeLine(data) { if (data && data.trim()) _fStatus.textContent = data.trim(); },
+      write(data)     { if (data && data.trim()) _fStatus.textContent = data.trim(); },
+    };
+
+    const loader = new ESPLoader({ transport: _flashTransport, baudrate: 921600, romBaudrate: 115200, terminal: term });
+
+    // Step 4 — Connect to the ROM bootloader
+    _flashSetProgress(12, 'Connecting to ROM bootloader… (hold BOOT + tap RST if stuck)');
+    const chip = await loader.main();
+    _flashSetProgress(16, 'Connected: ' + chip + ' Erasing + writing flash…');
+
+    // Step 5 — Convert ArrayBuffer to Latin-1 binary string (esptool-js format)
+    const binaryString = _arrayBufToBinStr(buffer);
+
+    // Step 6 — Write flash (compressed upload, factory binary at offset 0x0)
+    await loader.write_flash({
+      fileArray:      [{ data: binaryString, address: 0x0 }],
+      flash_size:     'keep',
+      compress:       true,
+      reportProgress(fileIndex, written, total) {
+        const pct = Math.round(16 + (written / total) * 80);
+        _flashSetProgress(pct,
+          'Writing… ' + (written / 1024).toFixed(0) + ' / ' + (total / 1024).toFixed(0) + ' KB');
+      },
+    });
+
+    // Step 7 — Reset device and disconnect
+    _flashSetProgress(97, 'Resetting device…');
+    await loader.hard_reset();
+    await _flashTransport.disconnect();
+    _flashTransport = null;
+
+    _flashSetProgress(100, '✅ Flash complete! Press RST (or unplug and replug) to boot the new firmware.');
+    _fProgBar.classList.remove('progress-bar-animated');
+    _fProgBar.classList.add('bg-success');
+
+  } catch (e) {
+    _fProgBar.classList.remove('progress-bar-animated');
+    _fProgBar.classList.add('bg-danger');
+    _flashSetProgress(0, '❌ Error: ' + e.message);
+    _fProgBar.style.width = '0%';
+    _fProgBar.textContent = '0%';
+    if (_flashTransport) {
+      try { await _flashTransport.disconnect(); } catch {}
+      _flashTransport = null;
+    }
+  } finally {
+    _fGoBtn.disabled = false;
+    _flashBusy       = false;
+  }
+});
+
+/** Convert an ArrayBuffer to a Latin-1 binary string as required by esptool-js write_flash. */
+function _arrayBufToBinStr(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let str = '';
+  // Iterate byte-by-byte; avoids spread-operator stack overflow on multi-MB binaries
+  for (let i = 0; i < bytes.length; i++) {
+    str += String.fromCharCode(bytes[i]);
+  }
+  return str;
+}
 
 // Manual console input
 const consoleInput = document.getElementById('console-input');
