@@ -1,5 +1,10 @@
 # LoRa Field Ops APRS Tracker
 
+## [⚙️ Open Serial Configuration Tool](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/serial_config.html)
+> Configure your device over USB — no app install required. Works in Chrome and Edge.
+
+---
+
 A multi-role LoRa APRS firmware for 433 MHz amateur radio operations. Supports tracker, iGate, and digipeater roles on a single configurable firmware build. Designed for field deployment at events, search and rescue operations, and remote area monitoring where cellular coverage is absent.
 
 Derived from [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/LoRa_APRS_Tracker) (CA2RXU), with significant architectural changes and new features targeted at 433 MHz APRS operation.
@@ -17,7 +22,7 @@ Two release assets are published per ESP32 board:
 | File | When to use | Tool required |
 |---|---|---|
 | `<board>_firmware.bin` | **Normal OTA update** — device already running, WiFi reachable | None — upload via device web UI at `192.168.4.1 → Device → Update Firmware` |
-| `<board>_web_factory.bin` | **First-time flash or recovery** — new device, bricked device, or partition table changed | USB cable + Chrome/Edge → [apps.k7swi.org/LoRa\_Tracker](https://apps.k7swi.org/LoRa_Tracker/) |
+| `<board>_web_factory.bin` | **First-time flash or recovery** — new device, bricked device, or partition table changed | USB cable + Chrome/Edge → [kj7nye.github.io/LoRa\_FieldOps\_APRS\_Tracker/flasher](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/) |
 
 > **Why two files?** The factory binary is a merged image (bootloader + partition table + firmware + filesystem) that writes the entire flash from scratch. The OTA binary is the bare application only — it fits in the OTA partition and is what the device web UI expects. Uploading the factory binary via OTA will fail with "Not Enough Space."
 
