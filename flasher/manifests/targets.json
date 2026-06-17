@@ -1,0 +1,42 @@
+{
+  "version": "v1.0.2",
+  "published": "2026-06-17",
+  "repo": "KJ7NYE/LoRa_FieldOps_APRS_Tracker",
+  "targets": [
+    {
+      "id": "heltec_v3_433_aprs",
+      "label": "Heltec WiFi LoRa 32 V3",
+      "chip": "ESP32-S3",
+      "description": "Heltec WiFi LoRa 32 V3 — ESP32-S3, SX1262, SSD1306 OLED, WiFi/BLE.",
+      "manifest": "heltec_v3_433_aprs.json"
+    },
+    {
+      "id": "tbeam_433_aprs",
+      "label": "TTGO T-Beam",
+      "chip": "ESP32",
+      "description": "TTGO T-Beam V1.2 — ESP32, SX1278, u-blox GPS, SSD1306 OLED, WiFi/BLE.",
+      "manifest": "tbeam_433_aprs.json"
+    },
+    {
+      "id": "lilygo_t3_433_aprs",
+      "label": "LilyGo T3",
+      "chip": "ESP32",
+      "description": "LilyGo T3 — ESP32, SX1278, SSD1306 OLED, WiFi/BLE. No onboard GPS.",
+      "manifest": "lilygo_t3_433_aprs.json"
+    },
+    {
+      "id": "LoRanger_V1",
+      "label": "KJ7NYE LoRanger V1",
+      "chip": "ESP32-S3",
+      "description": "KJ7NYE LoRanger V1 — ESP32-S3, E22-400M30S (SX1262), ATGM336H GPS. Headless (no display).",
+      "manifest": "LoRanger_V1.json"
+    },
+    {
+      "id": "heltec_t114",
+      "label": "Heltec T114",
+      "chip": "nRF52840",
+      "description": "Heltec T114 — nRF52840, SX1262, Quectel L76K GPS, ST7789 TFT. Use UF2 drag-and-drop — Web Serial is not supported on nRF52.",
+      "uf2_url": "https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/download/v1.0.2/heltec_t114_firmware.uf2"
+    }
+  ]
+}

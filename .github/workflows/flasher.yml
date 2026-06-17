@@ -157,3 +157,31 @@ jobs:
                     "${{ matrix.target.name }}_firmware.uf2" --clobber
                   gh release upload "$TAG" \
                     "${{ matrix.target.name }}_dfu.zip" --clobber
+
+
+    # ── Update GitHub Pages flasher manifests ───────────────────────────────
+    publish-manifests:
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: main
+
+            - name: Generate flasher manifests
+              env:
+                  TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+              run: |
+                  python3 tools/generate_manifests.py "${TAG}" "$(date -u +%Y-%m-%d)"
+
+            - name: Commit and push manifests
+              env:
+                  TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git add flasher/manifests/
+                  git diff --staged --quiet || git commit -m "chore: update flasher manifests for ${TAG}"
+                  git push
