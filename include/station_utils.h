@@ -7,13 +7,19 @@
 namespace STATION_Utils {
 
     // Send the device's own APRS position beacon via LoRa.
-    // Uses Config.gpsSource to get position (GPS, fixed, external).
+    // forceComment=true bypasses the every-N counter and always includes the comment.
     // Called by device_role.cpp on the beacon interval timer.
-    void sendBeacon();
+    void sendBeacon(bool forceComment = false);
 
     // Send an APRS status beacon: CALLSIGN>APLRT1,path:>status
     // Falls back to sendBeacon() if beacons[0].status is empty.
     void sendStatusBeacon();
+
+    // Immediate on-demand TX from web UI / serial CLI — does NOT reset lastTxTime.
+    // sendCommentBeaconNow: position beacon with comment always included.
+    // sendStatusBeaconNow: status packet (falls back to position if status is empty).
+    void sendCommentBeaconNow();
+    void sendStatusBeaconNow();
 
     // Send an uncompressed position beacon with PHG extension.
     // PHG (Power-Height-Gain) advertises fixed-station RF capabilities.

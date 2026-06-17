@@ -20,6 +20,7 @@
 #include "lora_utils.h"
 #include "battery_utils.h"
 #include "gps_utils.h"
+#include "station_utils.h"
 #include "version.h"
 #ifdef HAS_WIFI
 #include "aprs_is_utils.h"
@@ -167,6 +168,9 @@ namespace SERIAL_Setup {
         Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
         Serial.println(F("  aprsiss filter <filter>     aprsiss status"));
         Serial.println(F("  tcpkiss port <n>             (TCP KISS port, default 8001; server auto-starts with WiFi STA)"));
+        Serial.println(F("\n-- transmit now (no timer reset) --"));
+        Serial.println(F("  tx comment                 send position+comment immediately"));
+        Serial.println(F("  tx status                  send status packet immediately"));
         Serial.println(F("\n-- other --"));
         Serial.println(F("  digi <off|wide1|wide1+wide2>  (works with any role)"));
         Serial.println(F("  wifi password <text>       (AP password; AP triggers on NOCALL or USR button at boot)"));
@@ -922,6 +926,19 @@ namespace SERIAL_Setup {
         else if (cmd == "sendalt")                  { if (n >= 2) applyBool(tk[1], Config.sendAltitude, "sendAltitude"); else err("sendalt on|off"); }
         else if (cmd == "nonsmartrate")             { if (n >= 2) { Config.nonSmartBeaconRate = tk[1].toInt(); ok("nonSmartBeaconRate = " + String(Config.nonSmartBeaconRate)); } else err("nonsmartrate <min>"); }
         else if (cmd == "commentafter")             { if (n >= 2) { Config.sendCommentAfterXBeacons = tk[1].toInt(); ok("sendCommentAfterXBeacons = " + String(Config.sendCommentAfterXBeacons)); } else err("commentafter <n>"); }
+        else if (cmd == "tx") {
+            if (n < 2) { err("tx comment|status"); return; }
+            String sub = tk[1]; sub.toLowerCase();
+            if (sub == "comment") {
+                STATION_Utils::sendCommentBeaconNow();
+                Serial.println(F("OK tx comment beacon sent (timer unchanged)"));
+            } else if (sub == "status") {
+                STATION_Utils::sendStatusBeaconNow();
+                Serial.println(F("OK tx status beacon sent (timer unchanged)"));
+            } else {
+                err("tx comment|status");
+            }
+        }
         // multi-role commands
         else if (cmd == "role")     cmdRole(tk, n, line);
         else if (cmd == "fixed")    cmdFixed(tk, n);

@@ -57,21 +57,22 @@
                                 <div id="beaconSection" class="accordion-collapse collapse show" data-bs-parent="#configAccordion">
                                     <div class="accordion-body">
                                         <div class="row g-3">
-                                            <div class="col-md-4">
+                                            <!-- Row 1: Identity fields -->
+                                            <div class="col-md-3">
                                                 <label class="form-label" for="beacons.0.callsign">Callsign</label>
                                                 <input type="text" class="form-control" id="beacons.0.callsign" name="beacons.0.callsign" maxlength="9" />
                                             </div>
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <label class="form-label" for="beacons.0.tacticalCallsign">Tactical callsign/Object</label>
                                                 <input type="text" class="form-control" id="beacons.0.tacticalCallsign" name="beacons.0.tacticalCallsign" maxlength="9" />
                                             </div>
-                                            <div class="col-md-2">
-                                                <label class="form-label" for="beacons.0.symbol">Symbol</label>
-                                                <input type="text" class="form-control" id="beacons.0.symbol" name="beacons.0.symbol" maxlength="1" />
-                                            </div>
-                                            <div class="col-md-2">
+                                            <div class="col-md-1">
                                                 <label class="form-label" for="beacons.0.overlay">Overlay</label>
                                                 <input type="text" class="form-control" id="beacons.0.overlay" name="beacons.0.overlay" maxlength="1" />
+                                            </div>
+                                            <div class="col-md-1">
+                                                <label class="form-label" for="beacons.0.symbol">Symbol</label>
+                                                <input type="text" class="form-control" id="beacons.0.symbol" name="beacons.0.symbol" maxlength="1" />
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label" for="beacons.0.micE">Mic-E encoding</label>
@@ -87,30 +88,47 @@
                                                     <option value="7">7 · Emergency!</option>
                                                 </select>
                                             </div>
+                                            <!-- Row 2: Comment + rate + Tx | Status + Tx -->
                                             <div class="col-md-4">
                                                 <label class="form-label" for="beacons.0.comment">Comment <span class="text-muted fw-normal small">(≤43 chars)</span></label>
                                                 <input type="text" class="form-control" id="beacons.0.comment" name="beacons.0.comment" maxlength="43" />
                                             </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label" for="sendCommentAfterXBeacons">Every Nth</label>
+                                                <input type="number" class="form-control" id="sendCommentAfterXBeacons" name="sendCommentAfterXBeacons" min="1" />
+                                            </div>
+                                            <div class="col-md-1 d-flex flex-column justify-content-end">
+                                                <label class="form-label">&nbsp;</label>
+                                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="txNow('send-comment')" title="Send comment beacon now (does not reset beacon timer)">Tx</button>
+                                            </div>
                                             <div class="col-md-4">
-                                                <label class="form-label" for="beacons.0.status">Status <span class="text-muted fw-normal small">(≤43 chars, long-press button)</span></label>
+                                                <label class="form-label" for="beacons.0.status">Status <span class="text-muted fw-normal small">(≤43 chars)</span></label>
                                                 <input type="text" class="form-control" id="beacons.0.status" name="beacons.0.status" maxlength="43" />
                                             </div>
-                                            <div class="col-md-6">
-                                                <div class="d-flex align-items-center gap-3 flex-wrap">
-                                                    <div class="form-check form-switch mb-0">
-                                                        <input class="form-check-input" type="checkbox" id="beacons.0.smartBeaconActive" name="beacons.0.smartBeaconActive" />
-                                                        <label class="form-check-label" for="beacons.0.smartBeaconActive">SmartBeacon active</label>
-                                                    </div>
-                                                    <select class="form-select form-select-sm" style="width:auto" id="beacons.0.smartBeaconSetting" name="beacons.0.smartBeaconSetting">
-                                                        <option value="0">Runner</option>
-                                                        <option value="1">Bike</option>
-                                                        <option value="2">Car</option>
-                                                        <option value="3">Jetboat</option>
-                                                        <option value="4">Custom</option>
-                                                    </select>
-                                                </div>
+                                            <div class="col-md-1 d-flex flex-column justify-content-end">
+                                                <label class="form-label">&nbsp;</label>
+                                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="txNow('send-status')" title="Send status beacon now (does not reset beacon timer)">Tx</button>
                                             </div>
-                                            <div class="col-md-3">
+                                            <!-- Row 3: SmartBeacon profile (Disabled = off), non-smart rate, TX path -->
+                                            <div class="col-md-4">
+                                                <label class="form-label" for="smartBeaconCombined">SmartBeacon profile</label>
+                                                <select class="form-select" id="smartBeaconCombined">
+                                                    <option value="">— Disabled —</option>
+                                                    <option value="0">Runner</option>
+                                                    <option value="1">Bike</option>
+                                                    <option value="2">Car</option>
+                                                    <option value="3">Jetboat</option>
+                                                    <option value="4">Custom</option>
+                                                </select>
+                                                <!-- Hidden inputs carry the actual config fields -->
+                                                <input type="hidden" id="beacons.0.smartBeaconActive" name="beacons.0.smartBeaconActive" />
+                                                <input type="hidden" id="beacons.0.smartBeaconSetting" name="beacons.0.smartBeaconSetting" />
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label" for="nonSmartBeaconRate">Non-smart rate (min)</label>
+                                                <input type="number" class="form-control" id="nonSmartBeaconRate" name="nonSmartBeaconRate" min="1" />
+                                            </div>
+                                            <div class="col-md-4">
                                                 <label class="form-label" for="beaconPath">Beacon TX path</label>
                                                 <select class="form-select" id="beaconPath" name="beaconPath">
                                                     <option value="">NONE  (direct only)</option>
@@ -118,14 +136,6 @@
                                                     <option value="WIDE1-1,WIDE2-1">WIDE1-1,WIDE2-1  (2 hops)</option>
                                                     <option value="WIDE1-1,WIDE2-2">WIDE1-1,WIDE2-2  (3 hops)</option>
                                                 </select>
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="nonSmartBeaconRate">Non-smart rate (min)</label>
-                                                <input type="number" class="form-control" id="nonSmartBeaconRate" name="nonSmartBeaconRate" min="1" />
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label" for="sendCommentAfterXBeacons">Comment every N beacons</label>
-                                                <input type="number" class="form-control" id="sendCommentAfterXBeacons" name="sendCommentAfterXBeacons" min="1" />
                                             </div>
                                         </div>
                                     </div>
@@ -205,7 +215,7 @@
                                                 </select>
                                             </div>
                                             <div class="col-md-3">
-                                                <label class="form-label" for="phg.height">HAAT (Height above avg terrain)</label>
+                                                <label class="form-label" for="phg.height">HAAT</label>
                                                 <select class="form-select" id="phg.height" name="phg.height">
                                                     <option value="0">10 ft (code 0)</option>
                                                     <option value="1">20 ft (code 1)</option>
@@ -220,7 +230,7 @@
                                                 </select>
                                             </div>
                                             <div class="col-md-2">
-                                                <label class="form-label" for="phg.gain">Antenna gain (dBd)</label>
+                                                <label class="form-label" for="phg.gain">Antenna gain</label>
                                                 <select class="form-select" id="phg.gain" name="phg.gain">
                                                     <option value="0">0 dBd</option>
                                                     <option value="1">1 dBd</option>
@@ -276,7 +286,7 @@
                                                 <label class="form-label" for="lora.0.frequency">Frequency (Hz)</label>
                                                 <input type="number" class="form-control" id="lora.0.frequency" name="lora.0.frequency" />
                                             </div>
-                                            <div class="col-md-2">
+                                            <div class="col-md-3">
                                                 <label class="form-label" for="lora.0.spreadingFactor">Spreading factor</label>
                                                 <select class="form-select" id="lora.0.spreadingFactor" name="lora.0.spreadingFactor">
                                                     <option value="7">SF7</option>
@@ -307,7 +317,7 @@
                                                 </select>
                                             </div>
                                             <div class="col-md-2">
-                                                <label class="form-label" for="lora.0.power">TX power (dBm)</label>
+                                                <label class="form-label" for="lora.0.power">TX power</label>
                                                 <input type="number" class="form-control" id="lora.0.power" name="lora.0.power" min="2" max="22" />
                                             </div>
                                         </div>
@@ -398,13 +408,13 @@
                                             <div class="col-md-4">
                                                 <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="sendSpeedCourse" name="sendSpeedCourse" />
-                                                    <label class="form-check-label" for="sendSpeedCourse">Include speed &amp; course in beacons</label>
+                                                    <label class="form-check-label" for="sendSpeedCourse">Include speed &amp; course</label>
                                                 </div>
                                             </div>
                                             <div class="col-md-4">
                                                 <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="sendAltitude" name="sendAltitude" />
-                                                    <label class="form-check-label" for="sendAltitude">Include altitude in beacons (/A= comment)</label>
+                                                    <label class="form-check-label" for="sendAltitude">Include altitude</label>
                                                 </div>
                                             </div>
                                             <div class="col-12"><hr class="my-1" /></div>
@@ -417,7 +427,7 @@
                                             <div class="col-md-4">
                                                 <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="battery.sendVoltageAlways" name="battery.sendVoltageAlways" />
-                                                    <label class="form-check-label" for="battery.sendVoltageAlways">Send voltage on every beacon</label>
+                                                    <label class="form-check-label" for="battery.sendVoltageAlways">Send voltage every time</label>
                                                 </div>
                                             </div>
                                             <div class="col-md-4">

@@ -79,8 +79,12 @@ function loadSettings(s) {
     setVal('beacons.0.comment',           b.comment           ?? '');
     setVal('beacons.0.status',            b.status            ?? '');
     setVal('beacons.0.tacticalCallsign',  b.tacticalCallsign  ?? '');
-    setVal('beacons.0.smartBeaconActive', b.smartBeaconActive ?? true);
-    setVal('beacons.0.smartBeaconSetting',b.smartBeaconSetting ?? 2);
+    // SmartBeacon combined dropdown: "" = Disabled, "0"-"4" = profile
+    const smartActive  = b.smartBeaconActive  ?? true;
+    const smartProfile = b.smartBeaconSetting ?? 2;
+    setVal('smartBeaconCombined', smartActive ? String(smartProfile) : '');
+    setVal('beacons.0.smartBeaconActive',  smartActive ? 'true' : 'false');
+    setVal('beacons.0.smartBeaconSetting', smartProfile);
     setVal('beacons.0.gpsEcoMode',        b.gpsEcoMode        ?? false);
 
     setVal('deviceRole', s.deviceRole ?? 0);
@@ -268,6 +272,31 @@ document.getElementById('reboot')?.addEventListener('click', async function(e) {
         showToast('Reboot command sent.');
     }
 });
+
+// ── SmartBeacon combined dropdown ─────────────────────────────────────────────
+// Syncs the combined profile/disabled dropdown to the two hidden config fields.
+
+document.getElementById('smartBeaconCombined')?.addEventListener('change', function() {
+    const disabled = this.value === '';
+    setVal('beacons.0.smartBeaconActive',  disabled ? 'false' : 'true');
+    setVal('beacons.0.smartBeaconSetting', disabled ? document.getElementById('beacons.0.smartBeaconSetting').value : this.value);
+});
+
+// ── Immediate Tx ──────────────────────────────────────────────────────────────
+// Send comment or status packet immediately without resetting the beacon timer.
+
+async function txNow(type) {
+    try {
+        const r = await fetch('/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ type })
+        });
+        showToast(r.ok ? await r.text() : 'TX failed: HTTP ' + r.status);
+    } catch (e) {
+        showToast('TX error: ' + e.message);
+    }
+}
 
 // ── APRS-IS connection status ─────────────────────────────────────────────────
 

@@ -175,7 +175,7 @@ namespace STATION_Utils {
 
     // ── Beacon TX ─────────────────────────────────────────────────────────────
 
-    void sendBeacon() {
+    void sendBeacon(bool forceComment) {
         double beaconLat = 0, beaconLng = 0;
         float  beaconElev = 0;
         if (!GPS_Utils::getCurrentLocation(beaconLat, beaconLng, beaconElev)) {
@@ -248,19 +248,19 @@ namespace STATION_Utils {
                 int threshold = Config.battery.sendVoltageAlways
                     ? 1
                     : Config.sendCommentAfterXBeacons;
-                if (updateCounter >= threshold) {
+                if (forceComment || updateCounter >= threshold) {
                     packet += b.comment;
                     packet += " Bat=";
                     packet += String(bv.toFloat(), 2);
                     packet += "V";
-                    updateCounter = 0;
+                    if (!forceComment) updateCounter = 0;
                 }
             }
         } else if (b.comment.length() > 0) {
             updateCounter++;
-            if (updateCounter >= Config.sendCommentAfterXBeacons) {
+            if (forceComment || updateCounter >= Config.sendCommentAfterXBeacons) {
                 packet += b.comment;
-                updateCounter = 0;
+                if (!forceComment) updateCounter = 0;
             }
         }
 
@@ -305,6 +305,24 @@ namespace STATION_Utils {
         #endif
         lastTxTime = millis();
         sendUpdate = false;   // prevent a pending auto-beacon from firing immediately after
+    }
+
+    // Send position beacon with comment forced in, without resetting the beacon
+    // schedule timer.  Called by web UI / serial CLI on-demand Tx buttons.
+    void sendCommentBeaconNow() {
+        uint32_t savedTime    = lastTxTime;
+        uint8_t  savedCounter = updateCounter;
+        sendBeacon(true);           // forceComment=true bypasses every-N gate
+        lastTxTime    = savedTime;  // restore timer so schedule is unaffected
+        updateCounter = savedCounter;
+    }
+
+    // Send status beacon without resetting the beacon schedule timer.
+    // Falls back to a plain position beacon if status text is empty.
+    void sendStatusBeaconNow() {
+        uint32_t savedTime = lastTxTime;
+        sendStatusBeacon();
+        lastTxTime = savedTime;
     }
 
     void sendPHGBeacon() {

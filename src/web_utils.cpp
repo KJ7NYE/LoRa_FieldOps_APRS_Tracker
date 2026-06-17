@@ -26,6 +26,7 @@
 #include "aprs_is_utils.h"
 #include "log_buffer.h"
 #include "version.h"
+#include "station_utils.h"
 
 extern Configuration               Config;
 
@@ -179,7 +180,7 @@ namespace WEB_Utils {
             if (tac.length() > 9) tac = tac.substring(0, 9);
             Config.beacons[0].tacticalCallsign = tac;
         }
-        Config.beacons[0].smartBeaconActive  = request->hasParam("beacons.0.smartBeaconActive", true);
+        Config.beacons[0].smartBeaconActive  = getParamStringSafe("beacons.0.smartBeaconActive") == "true";
         Config.beacons[0].smartBeaconSetting = getParamIntSafe("beacons.0.smartBeaconSetting",  Config.beacons[0].smartBeaconSetting);
 
         //  Station Config
@@ -292,10 +293,12 @@ namespace WEB_Utils {
     void handleAction(AsyncWebServerRequest *request) {
         String type = request->getParam("type", false)->value();
 
-        if (type == "send-beacon") {
-            //lastBeaconTx = 0;
-
-            request->send(200, "text/plain", "Beacon will be sent in a while");
+        if (type == "send-comment") {
+            STATION_Utils::sendCommentBeaconNow();
+            request->send(200, "text/plain", "Comment beacon sent");
+        } else if (type == "send-status") {
+            STATION_Utils::sendStatusBeaconNow();
+            request->send(200, "text/plain", "Status beacon sent");
         } else if (type == "reboot") {
             request->send(200, "text/plain", "Rebooting...");
             scheduleRestart(1000);
