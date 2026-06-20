@@ -563,6 +563,9 @@ async function connectSerial() {
     port = await navigator.serial.requestPort();
     setStatus('connecting', 'Opening port…');
     await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none' });
+    // Assert DTR so native-USB CDC boards (T-Beam 1W, LoRanger) flush their TX
+    // buffer. Harmless on CP210x/CH9102 boards (DTR wired to EN → run/active state).
+    await port.setSignals({ dataTerminalReady: true, requestToSend: false });
     connected  = true;
     serialMode = 'kiss';   // device defaults to KISS TNC on boot
     writer = port.writable.getWriter();
@@ -573,10 +576,10 @@ async function connectSerial() {
     logInfo('Port opened at 115200. Entering Setup mode…');
     _readLoop();
 
-    // Wait for firmware boot if the board resets on port open (DTR→EN wiring).
-    // Boards with CP210x/CH9102 bridges reset immediately; native-USB boards
-    // (LoRanger, nRF52) do not reset and are already running — _waitForBootComplete
-    // returns in ≤500 ms for those.
+    // Wait for firmware boot if the board resets on port open.
+    // CP210x/CH9102 bridges and native-USB boards (T-Beam 1W, LoRanger) all
+    // reset on port open; _waitForBootComplete detects the ROM activity burst
+    // and waits for the [KISS TNC] ready banner before proceeding.
     await _waitForBootComplete();
 
     // Enter setup mode via switchToMode — handles device already being in any mode
