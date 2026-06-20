@@ -41,7 +41,7 @@ jobs:
                     - name: tbeam_433_1w_aprs
                       chip: esp32s3
                       flash_size: 8MB
-                      flash_mode: qio
+                      flash_mode: dio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
 
                     - name: lilygo_t3_433_aprs
