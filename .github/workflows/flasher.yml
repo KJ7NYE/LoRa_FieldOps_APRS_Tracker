@@ -1,7 +1,7 @@
 name: Build and Publish Firmware
 
 # Runs on every GitHub Release publish.
-# Builds all 5 project targets and uploads firmware as release assets.
+# Builds all 6 project targets and uploads firmware as release assets.
 # The web flasher at apps.k7swi.org is updated separately by running
 # ~/deploy_flasher.sh on the server after each release.
 
@@ -37,6 +37,12 @@ jobs:
                       flash_size: 4MB
                       flash_mode: dio
                       spiffs_offset: "0x310000"   # huge_app.csv (firmware too large for dual OTA slots)
+
+                    - name: tbeam_433_1w_aprs
+                      chip: esp32s3
+                      flash_size: 8MB
+                      flash_mode: qio
+                      spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
 
                     - name: lilygo_t3_433_aprs
                       chip: esp32

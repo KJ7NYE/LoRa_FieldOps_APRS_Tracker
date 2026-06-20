@@ -36,6 +36,12 @@ ESP_TARGETS = [
         "desc":  "LilyGo T3 — ESP32, SX1278, SSD1306 OLED, WiFi/BLE. No onboard GPS.",
     },
     {
+        "id":    "tbeam_433_1w_aprs",
+        "label": "LilyGo T-Beam 1W",
+        "chip":  "ESP32-S3",
+        "desc":  "LilyGo T-Beam 1W — ESP32-S3, SX1262 (1 W), onboard GNSS, SH1106 OLED, WiFi/BLE.",
+    },
+    {
         "id":    "LoRanger_V1",
         "label": "KJ7NYE LoRanger V1",
         "chip":  "ESP32-S3",
