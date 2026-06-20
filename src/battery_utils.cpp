@@ -80,7 +80,7 @@ namespace BATTERY_Utils {
                         delay(3);
                     }
                     return (float)(mvSum / averageReadings) / 1000.0f * 3.0f;
-                #endif
+                #else
                 #ifdef ADC_CTRL_PIN
                     // T114-style boards: a discrete FET gates the battery
                     // divider so it doesn't bleed current continuously.
@@ -140,6 +140,7 @@ namespace BATTERY_Utils {
                     // approximate until that lands. Tune via lora32BatReadingCorr config.
                     return (voltage * 4.916F) * (1 + (lora32BatReadingCorr/100));
                 #endif
+                #endif  // !TTGO_T_BEAM_1W
             #else
                 return 0.0;
             #endif
