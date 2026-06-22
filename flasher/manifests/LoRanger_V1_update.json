@@ -1,6 +1,6 @@
 {
-  "name": "LoRa FieldOps — KJ7NYE LoRanger V1 (Firmware Update)",
-  "version": "v1.0.7",
+  "name": "LoRa FieldOps \u2014 KJ7NYE LoRanger V1 (Firmware Update)",
+  "version": "v1.0.8",
   "builds": [
     {
       "chipFamily": "ESP32-S3",

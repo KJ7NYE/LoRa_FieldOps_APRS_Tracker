@@ -1,6 +1,6 @@
 {
-  "name": "LoRa FieldOps — TTGO T-Beam (Firmware Update)",
-  "version": "v1.0.7",
+  "name": "LoRa FieldOps \u2014 TTGO T-Beam (Firmware Update)",
+  "version": "v1.0.8",
   "builds": [
     {
       "chipFamily": "ESP32",
