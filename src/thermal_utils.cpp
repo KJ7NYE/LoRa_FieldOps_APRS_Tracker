@@ -42,12 +42,14 @@ namespace {
     constexpr float    TEMP_SHUTDOWN_C  = 85.0f;    // trigger clean shutdown above this
     constexpr uint32_t TX_COOLDOWN_MS   = 30000UL;  // post-TX fan hold (ms)
     constexpr uint32_t SAMPLE_MS        = 30000UL;  // temperature sampling interval (ms)
+    constexpr uint32_t STATUS_LOG_MS    = 60000UL;  // periodic debug status print interval (ms)
 
     // ── Module state ─────────────────────────────────────────────────────────
     static float    currentTempC     = 25.0f;
     static bool     fanOn            = false;
     static bool     overTempFlag     = false;
     static uint32_t lastSampleMs     = 0;
+    static uint32_t lastStatusLogMs  = 0;
     static uint32_t txEndMs          = 0;
     static bool     txCooldownActive = false;
 
@@ -74,12 +76,27 @@ namespace {
         return adcMvToTempC((float)(sum / 5));
     }
 
-    static void setFan(bool on) {
+    // Apply fan state and print to Serial immediately (visible without log mode).
+    static void setFan(bool on, const char* reason) {
         if (fanOn == on) return;
         fanOn = on;
         digitalWrite(FAN_CTRL_PIN, on ? HIGH : LOW);
+        Serial.printf("[Thermal] Fan %s — %s (%.1f C)\n",
+                      on ? "ON " : "OFF", reason, (double)currentTempC);
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
-                   "Fan %s (%.1f C)", on ? "ON" : "OFF", (double)currentTempC);
+                   "Fan %s — %s (%.1f C)", on ? "ON" : "OFF", reason, (double)currentTempC);
+    }
+
+    // Evaluate fan state against current temp and cooldown; call after any state change.
+    static void updateFanState() {
+        if (!fanOn) {
+            if (txCooldownActive)              setFan(true,  "TX cooldown active");
+            else if (currentTempC >= FAN_ON_TEMP_C) setFan(true, "temp threshold");
+        } else {
+            if (!txCooldownActive && currentTempC < FAN_OFF_TEMP_C) {
+                setFan(false, "temp + cooldown clear");
+            }
+        }
     }
 
 } // anonymous namespace
@@ -92,20 +109,41 @@ namespace THERMAL_Utils {
             analogSetPinAttenuation(TEMP_SENSOR_PIN, ADC_11db);
         #endif
         pinMode(FAN_CTRL_PIN, OUTPUT);
-        setFan(false);
-        lastSampleMs = 0;  // trigger an immediate first sample on the first monitor() call
+        fanOn = false;
+        digitalWrite(FAN_CTRL_PIN, LOW);
+        lastSampleMs    = 0;  // trigger an immediate first sample on the first monitor() call
+        lastStatusLogMs = 0;
+        Serial.println("[Thermal] setup complete — fan OFF");
     }
 
     void monitor() {
         uint32_t now = millis();
 
-        // Expire TX cooldown before evaluating fan state.
+        // ── Expire TX cooldown ────────────────────────────────────────────────
+        // This runs every loop (not rate-limited) so the fan turns off promptly
+        // when the cooldown ends rather than waiting for the next temperature sample.
         if (txCooldownActive && (now - txEndMs >= TX_COOLDOWN_MS)) {
             txCooldownActive = false;
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Thermal", "TX cooldown expired");
+            Serial.printf("[Thermal] TX cooldown expired — temp %.1f C\n", (double)currentTempC);
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
+                       "TX cooldown expired — temp %.1f C", (double)currentTempC);
+            updateFanState();  // re-evaluate fan now, not at the next 30s sample
         }
 
-        // Rate-limit ADC sampling — temperature changes slowly.
+        // ── Periodic status log ───────────────────────────────────────────────
+        if (now - lastStatusLogMs >= STATUS_LOG_MS) {
+            lastStatusLogMs = now;
+            uint32_t coolRemainS = txCooldownActive
+                ? (uint32_t)((TX_COOLDOWN_MS - (now - txEndMs)) / 1000UL) : 0;
+            Serial.printf("[Thermal] status: %.1f C | fan %s | cooldown %s (%us remain) | sampleAge %us\n",
+                          (double)currentTempC,
+                          fanOn ? "ON " : "off",
+                          txCooldownActive ? "active" : "off",
+                          (unsigned)coolRemainS,
+                          (unsigned)((now - lastSampleMs) / 1000UL));
+        }
+
+        // ── Rate-limited temperature sample ───────────────────────────────────
         if (lastSampleMs != 0 && (now - lastSampleMs < SAMPLE_MS)) return;
         lastSampleMs = now;
 
@@ -113,42 +151,43 @@ namespace THERMAL_Utils {
             float t = readTempC();
             if (!isnan(t)) {
                 currentTempC = t;
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
-                           "%.1f C", (double)currentTempC);
             }
+            Serial.printf("[Thermal] sample: %.1f C | fan %s | cooldown %s\n",
+                          (double)currentTempC,
+                          fanOn ? "ON " : "off",
+                          txCooldownActive ? "active" : "off");
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
+                       "%.1f C | fan %s | cooldown %s",
+                       (double)currentTempC,
+                       fanOn ? "ON" : "off",
+                       txCooldownActive ? "active" : "off");
         #endif
 
         overTempFlag = (currentTempC >= TEMP_WARN_C);
 
         if (currentTempC >= TEMP_SHUTDOWN_C) {
+            Serial.printf("[Thermal] OVER-TEMP SHUTDOWN at %.1f C\n", (double)currentTempC);
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Thermal",
                        "Over-temp shutdown at %.1f C", (double)currentTempC);
             POWER_Utils::shutdown();
             return;
         }
 
-        // Fan state machine: hysteresis prevents rapid cycling.
-        if (!fanOn) {
-            if (txCooldownActive || currentTempC >= FAN_ON_TEMP_C) {
-                setFan(true);
-            }
-        } else {
-            if (!txCooldownActive && currentTempC < FAN_OFF_TEMP_C) {
-                setFan(false);
-            }
-        }
+        updateFanState();
     }
 
     void onTxStart() {
-        // Turn fan on before radio.transmit() — PA is the primary heat source.
-        setFan(true);
+        Serial.printf("[Thermal] TX start — fan on\n");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal", "TX start");
+        setFan(true, "TX start");
     }
 
     void onTxEnd() {
-        // Start cooldown timer; monitor() will hold the fan on until it expires
-        // or temperature drops below FAN_OFF_TEMP_C.
         txEndMs          = millis();
         txCooldownActive = true;
+        Serial.printf("[Thermal] TX end — cooldown %us\n", (unsigned)(TX_COOLDOWN_MS / 1000UL));
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
+                   "TX end — cooldown %us", (unsigned)(TX_COOLDOWN_MS / 1000UL));
     }
 
     bool isOverTemp() {
