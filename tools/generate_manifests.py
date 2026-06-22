@@ -66,11 +66,12 @@ index = {
     "repo":      "KJ7NYE/LoRa_FieldOps_APRS_Tracker",
     "targets": [
         {
-            "id":          t["id"],
-            "label":       t["label"],
-            "chip":        t["chip"],
-            "description": t["desc"],
-            "manifest":    f"{t['id']}.json",
+            "id":              t["id"],
+            "label":           t["label"],
+            "chip":            t["chip"],
+            "description":     t["desc"],
+            "manifest":        f"{t['id']}.json",
+            "update_manifest": f"{t['id']}_update.json",
         }
         for t in ESP_TARGETS
     ] + [NRF_TARGET],
@@ -82,6 +83,8 @@ print("Wrote flasher/manifests/targets.json")
 
 # per-target ESP Web Tools manifests
 for t in ESP_TARGETS:
+    # Factory manifest: full merged binary (bootloader + partitions + firmware + SPIFFS).
+    # Overwrites all flash regions including config. Use for first-time install or factory reset.
     manifest = {
         "name":    f"LoRa FieldOps — {t['label']}",
         "version": tag,
@@ -94,3 +97,18 @@ for t in ESP_TARGETS:
     with open(path, "w") as f:
         json.dump(manifest, f, indent=2)
     print(f"Wrote {path}")
+
+    # Update manifest: bare firmware binary at partition offset 0x10000.
+    # Leaves SPIFFS untouched so the user's configuration is preserved.
+    update_manifest = {
+        "name":    f"LoRa FieldOps — {t['label']} (Firmware Update)",
+        "version": tag,
+        "builds": [{
+            "chipFamily": t["chip"],
+            "parts": [{"path": f"{base}/{t['id']}_firmware.bin", "offset": 65536}],
+        }],
+    }
+    update_path = f"flasher/manifests/{t['id']}_update.json"
+    with open(update_path, "w") as f:
+        json.dump(update_manifest, f, indent=2)
+    print(f"Wrote {update_path}")

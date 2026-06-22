@@ -8,35 +8,40 @@
       "label": "Heltec WiFi LoRa 32 V3",
       "chip": "ESP32-S3",
       "description": "Heltec WiFi LoRa 32 V3 \u2014 ESP32-S3, SX1262, SSD1306 OLED, WiFi/BLE.",
-      "manifest": "heltec_v3_433_aprs.json"
+      "manifest": "heltec_v3_433_aprs.json",
+      "update_manifest": "heltec_v3_433_aprs_update.json"
     },
     {
       "id": "tbeam_433_aprs",
       "label": "TTGO T-Beam",
       "chip": "ESP32",
       "description": "TTGO T-Beam V1.2 \u2014 ESP32, SX1278, u-blox GPS, SSD1306 OLED, WiFi/BLE.",
-      "manifest": "tbeam_433_aprs.json"
+      "manifest": "tbeam_433_aprs.json",
+      "update_manifest": "tbeam_433_aprs_update.json"
     },
     {
       "id": "lilygo_t3_433_aprs",
       "label": "LilyGo T3",
       "chip": "ESP32",
       "description": "LilyGo T3 \u2014 ESP32, SX1278, SSD1306 OLED, WiFi/BLE. No onboard GPS.",
-      "manifest": "lilygo_t3_433_aprs.json"
+      "manifest": "lilygo_t3_433_aprs.json",
+      "update_manifest": "lilygo_t3_433_aprs_update.json"
     },
     {
       "id": "tbeam_433_1w_aprs",
       "label": "LilyGo T-Beam 1W",
       "chip": "ESP32-S3",
       "description": "LilyGo T-Beam 1W \u2014 ESP32-S3, SX1262 (1 W), onboard GNSS, SH1106 OLED, WiFi/BLE.",
-      "manifest": "tbeam_433_1w_aprs.json"
+      "manifest": "tbeam_433_1w_aprs.json",
+      "update_manifest": "tbeam_433_1w_aprs_update.json"
     },
     {
       "id": "LoRanger_V1",
       "label": "KJ7NYE LoRanger V1",
       "chip": "ESP32-S3",
       "description": "KJ7NYE LoRanger V1 \u2014 ESP32-S3, E22-400M30S (SX1262), ATGM336H GPS. Headless (no display).",
-      "manifest": "LoRanger_V1.json"
+      "manifest": "LoRanger_V1.json",
+      "update_manifest": "LoRanger_V1_update.json"
     },
     {
       "id": "heltec_t114",

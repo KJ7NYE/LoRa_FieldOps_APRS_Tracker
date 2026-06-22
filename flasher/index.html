@@ -92,6 +92,26 @@
 
     <!-- ESP32: Web Serial flash -->
     <div id="esp-panel" style="display:none">
+
+      <!-- Flash mode selector -->
+      <div id="flash-mode-group" class="mb-3 p-3" style="background:#0d1117; border:1px solid #30363d; border-radius:6px; font-size:0.88rem">
+        <div class="fw-semibold mb-2" style="font-size:0.82rem; text-transform:uppercase; letter-spacing:0.05em; color:#8b949e">Flash mode</div>
+        <div class="form-check mb-1">
+          <input class="form-check-input" type="radio" name="flashMode" id="mode-factory" value="factory" checked>
+          <label class="form-check-label" for="mode-factory">
+            <strong>Fresh Install</strong>
+            <span class="text-muted ms-1" style="font-size:0.83rem">— flashes everything, resets configuration to defaults</span>
+          </label>
+        </div>
+        <div class="form-check" id="mode-update-row">
+          <input class="form-check-input" type="radio" name="flashMode" id="mode-update" value="update">
+          <label class="form-check-label" for="mode-update">
+            <strong>Firmware Update</strong>
+            <span class="text-muted ms-1" style="font-size:0.83rem">— updates firmware only, preserves your saved configuration</span>
+          </label>
+        </div>
+      </div>
+
       <p class="mb-3" style="font-size:0.9rem">
         Connect your device via USB, then click <strong>Install</strong> to flash.
         The board will reset into firmware when complete.
@@ -160,7 +180,22 @@
   const elFooterDate   = document.getElementById('footer-date');
   const elFooterLink   = document.getElementById('footer-release-link');
 
-  let targetsData = null;
+  let targetsData  = null;
+  let currentTarget = null;
+
+  // ── Flash mode helpers ─────────────────────────────────────────────────
+  function updateInstallManifest() {
+    if (!currentTarget) return;
+    const mode = document.querySelector('input[name="flashMode"]:checked').value;
+    const file = (mode === 'update' && currentTarget.update_manifest)
+      ? currentTarget.update_manifest
+      : currentTarget.manifest;
+    elInstallBtn.setAttribute('manifest', `./manifests/${file}`);
+  }
+
+  document.querySelectorAll('input[name="flashMode"]').forEach(radio => {
+    radio.addEventListener('change', updateInstallManifest);
+  });
 
   // ── Load targets.json ──────────────────────────────────────────────────
   fetch(MANIFESTS_URL)
@@ -213,10 +248,15 @@
   // ── Target selection change ────────────────────────────────────────────
   elSelect.addEventListener('change', () => {
     const id = elSelect.value;
+    currentTarget = null;
+
     elFlashPanel.style.display  = 'none';
     elEspPanel.style.display    = 'none';
     elNrfPanel.style.display    = 'none';
     elDesc.style.display        = 'none';
+
+    // Reset to Fresh Install when the user picks a different board
+    document.getElementById('mode-factory').checked = true;
 
     if (!id || !targetsData) return;
 
@@ -238,8 +278,11 @@
       elNrfPanel.style.display = '';
     } else if (target.manifest) {
       // ESP32 — Web Serial via ESP Web Tools
-      const manifestUrl = `./manifests/${target.manifest}`;
-      elInstallBtn.setAttribute('manifest', manifestUrl);
+      currentTarget = target;
+      // Show "Firmware Update" option only when an update manifest is available
+      document.getElementById('mode-update-row').style.display =
+        target.update_manifest ? '' : 'none';
+      updateInstallManifest();
       elEspPanel.style.display = '';
     }
   });

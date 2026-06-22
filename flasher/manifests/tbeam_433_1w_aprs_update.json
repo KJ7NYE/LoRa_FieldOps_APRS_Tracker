@@ -1,0 +1,15 @@
+{
+  "name": "LoRa FieldOps — LilyGo T-Beam 1W (Firmware Update)",
+  "version": "v1.0.7",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/tbeam_433_1w_aprs_firmware.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}

@@ -187,6 +187,7 @@ jobs:
                   gh release download "${TAG}" \
                     --repo KJ7NYE/LoRa_FieldOps_APRS_Tracker \
                     --pattern "*_web_factory.bin" \
+                    --pattern "*_firmware.bin" \
                     --pattern "heltec_t114_firmware.uf2" \
                     --dir flasher/firmware \
                     --clobber

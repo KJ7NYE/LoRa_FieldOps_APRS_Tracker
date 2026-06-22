@@ -1,0 +1,15 @@
+{
+  "name": "LoRa FieldOps — Heltec WiFi LoRa 32 V3 (Firmware Update)",
+  "version": "v1.0.7",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/heltec_v3_433_aprs_firmware.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}
