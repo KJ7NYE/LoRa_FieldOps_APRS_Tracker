@@ -18,6 +18,9 @@
 #include "gps_utils.h"
 #include "battery_utils.h"   // getBatteryInfoVoltage, getPercentVoltageBattery
 #include "power_utils.h"
+#ifdef FAN_CTRL_PIN
+#include "thermal_utils.h"
+#endif
 #include "display.h"
 #include "serial_setup.h"
 #include "station_utils.h"
@@ -136,6 +139,10 @@ void setup() {
 
     bootStatus("LoRa");
     LoRa_Utils::setup();
+
+    #ifdef FAN_CTRL_PIN
+        THERMAL_Utils::setup();
+    #endif
 
     #ifdef HAS_WIFI
         // AP mode is triggered at runtime (8 s hold) or automatically on first boot
@@ -322,6 +329,9 @@ void loop() {
 
     // ── Battery monitor ──────────────────────────────────────────────────
     BATTERY_Utils::monitor();
+    #ifdef FAN_CTRL_PIN
+        THERMAL_Utils::monitor();
+    #endif
 
     // ── Display eco mode timeout check ──────────────────────────────────
     displayEcoTick(Config.display.ecoMode,

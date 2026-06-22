@@ -44,8 +44,8 @@
     #define GPS_VCC             16  // WAKE_UP pin (standby/active toggle)
 
     //  Fan and temperature
-    #define FAN_CTRL_PIN        41  // Cooling fan; on at boot, off at sleep
-    #define TEMP_SENSOR_PIN     14  // NTC temperature sensor (reserved — phase 2)
+    #define FAN_CTRL_PIN        41  // Cooling fan; managed by THERMAL_Utils
+    #define TEMP_SENSOR_PIN     14  // NTC: NCP18XH103F03RB (10 kΩ), 10 kΩ pull-down to GND
 
     //  User input and battery
     #define BUTTON_PIN          17  // USR button — beacon / AP mode trigger

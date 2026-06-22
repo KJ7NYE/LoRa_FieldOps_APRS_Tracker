@@ -27,6 +27,9 @@
 #include "display.h"
 #include "led_utils.h"
 #include "log_buffer.h"
+#ifdef FAN_CTRL_PIN
+#include "thermal_utils.h"
+#endif
 
 extern logging::Logger  logger;
 extern Configuration    Config;
@@ -233,7 +236,13 @@ namespace LoRa_Utils {
         #if defined(TTGO_T_BEAM_1W)
             digitalWrite(RADIO_RXEN, LOW);
         #endif
+        #ifdef FAN_CTRL_PIN
+            THERMAL_Utils::onTxStart();
+        #endif
         int state = radio.transmit("\x3c\xff\x01" + newPacket);
+        #ifdef FAN_CTRL_PIN
+            THERMAL_Utils::onTxEnd();
+        #endif
         transmitFlag = true;
         if (state == RADIOLIB_ERR_NONE) {
             //Serial.println(F("success!"));

@@ -16,6 +16,10 @@
 #include "kiss_utils.h"
 #include "display.h"
 #include "logger.h"
+#include "board_pinout.h"
+#ifdef FAN_CTRL_PIN
+#include "thermal_utils.h"
+#endif
 #ifdef HAS_WIFI
 #include "aprs_is_utils.h"
 #endif
@@ -264,6 +268,13 @@ namespace STATION_Utils {
             }
         }
 
+        // Thermal warning — appended so operators see an alert via RF/APRS-IS.
+        #ifdef FAN_CTRL_PIN
+        if (THERMAL_Utils::isOverTemp()) {
+            packet += " !OVERTEMP";
+        }
+        #endif
+
         // Register own beacon in the digi dedup buffer so that echoes heard back on
         // RF (e.g. digipeated copies) are not re-repeated or re-uploaded.
         {
@@ -294,7 +305,13 @@ namespace STATION_Utils {
         }
         // Use generateStatusPacket so that path handling (WIDE-only, DIRECT=no-path) is
         // consistent with all other beacon types; avoids a dangling comma when path is empty.
-        String packet = APRSPacketLib::generateStatusPacket(b.callsign, "APLRT1", Config.beaconPath, b.status);
+        String statusText = b.status;
+        #ifdef FAN_CTRL_PIN
+        if (THERMAL_Utils::isOverTemp()) {
+            statusText += " !OVERTEMP";
+        }
+        #endif
+        String packet = APRSPacketLib::generateStatusPacket(b.callsign, "APLRT1", Config.beaconPath, statusText);
         {
             int selfColon = packet.indexOf(":");
             String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;

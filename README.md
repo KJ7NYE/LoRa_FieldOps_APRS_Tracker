@@ -110,6 +110,21 @@ Type `setup` or `log` over serial to switch; any mode returns to KISS on disconn
 
 > **Note for Heltec V3 and LoRanger V1:** the USR button is wired to GPIO0 (the ESP32 BOOT pin). Holding it during power-up or reset forces the chip into ROM download mode instead of running firmware. AP mode must therefore be triggered at runtime, not at boot.
 
+### Thermal Management (T-Beam 1W)
+
+The T-Beam 1W has a cooling fan (GPIO41) and an NTC thermistor input (GPIO14). The firmware implements hybrid thermal control:
+
+| Condition | Fan behaviour |
+|---|---|
+| LoRa TX active | Fan turns on immediately at TX start |
+| Within 30 s of TX end | Fan held on (post-TX cooldown) |
+| Temperature ≥ 50 °C | Fan turns on |
+| Temperature < 42 °C and no TX cooldown | Fan turns off |
+| Temperature ≥ 75 °C | Fan on + `!OVERTEMP` appended to next beacon |
+| Temperature ≥ 85 °C | Clean shutdown (same path as low-battery shutdown) |
+
+Temperature is sampled every 30 seconds from a Murata NCP18XH103F03RB (10 kΩ NTC, B = 3380 K) via a 10 kΩ pull-down voltage divider, using the ESP32-S3's eFuse-calibrated `analogReadMilliVolts()`.
+
 ---
 
 ## Building

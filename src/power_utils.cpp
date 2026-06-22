@@ -437,8 +437,7 @@ namespace POWER_Utils {
             // Same fix pattern as HELTEC_T114's GPS_VCC above.
             pinMode(RADIO_VCC_PIN, OUTPUT);
             digitalWrite(RADIO_VCC_PIN, HIGH);
-            pinMode(FAN_CTRL_PIN, OUTPUT);
-            digitalWrite(FAN_CTRL_PIN, HIGH);
+            // FAN_CTRL_PIN is owned by THERMAL_Utils::setup() — do not touch it here.
         #endif
     }
 
