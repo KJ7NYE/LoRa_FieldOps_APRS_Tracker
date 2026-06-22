@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 Heltec WiFi LoRa 32 V3",
-  "version": "v1.0.5",
+  "version": "v1.0.6",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
