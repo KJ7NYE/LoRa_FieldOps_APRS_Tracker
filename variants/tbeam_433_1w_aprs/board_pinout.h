@@ -47,6 +47,9 @@
     #define FAN_CTRL_PIN        41  // Cooling fan; managed by THERMAL_Utils
     #define TEMP_SENSOR_PIN     14  // NTC: NCP18XH103F03RB (10 kΩ), 10 kΩ pull-down to GND
 
+    //  User LED — heartbeat / TX-RX indicator (active-HIGH)
+    #define INTERNAL_LED_PIN    18  // IO18 — user LED; gated by Config.display.ledEnabled
+
     //  User input and battery
     #define BUTTON_PIN          17  // USR button — beacon / AP mode trigger
                                     // IO0 (BOOT) = strapping pin, no define
