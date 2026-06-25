@@ -120,15 +120,15 @@ jobs:
               if: matrix.target.chip != 'nrf52'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
               run: |
-                  TAG=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
                   # Factory binary: merged image for first-time flash via web serial flasher (USB required).
-                  gh release upload "$TAG" \
+                  gh release upload "$RELEASE_TAG" \
                     "${{ matrix.target.name }}_web_factory.bin" --clobber
                   # OTA binary: bare app binary for WiFi OTA update via the device web UI (192.168.4.1).
                   cp .pio/build/${{ matrix.target.name }}/firmware.bin \
                      ${{ matrix.target.name }}_firmware.bin
-                  gh release upload "$TAG" \
+                  gh release upload "$RELEASE_TAG" \
                     "${{ matrix.target.name }}_firmware.bin" --clobber
 
             # ── nRF52: UF2 drag-and-drop + BLE DFU zip ────────────────────
@@ -157,11 +157,11 @@ jobs:
               if: matrix.target.chip == 'nrf52'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
               run: |
-                  TAG=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-                  gh release upload "$TAG" \
+                  gh release upload "$RELEASE_TAG" \
                     "${{ matrix.target.name }}_firmware.uf2" --clobber
-                  gh release upload "$TAG" \
+                  gh release upload "$RELEASE_TAG" \
                     "${{ matrix.target.name }}_dfu.zip" --clobber
 
 
@@ -179,7 +179,7 @@ jobs:
             - name: Download firmware for GitHub Pages hosting
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+                  TAG: ${{ github.event.inputs.tag || github.ref_name }}
               run: |
                   # Firmware is served from GitHub Pages (flasher/firmware/) because
                   # github.com release download URLs block cross-origin CORS fetches.
@@ -194,13 +194,13 @@ jobs:
 
             - name: Generate flasher manifests
               env:
-                  TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+                  TAG: ${{ github.event.inputs.tag || github.ref_name }}
               run: |
                   python3 tools/generate_manifests.py "${TAG}" "$(date -u +%Y-%m-%d)"
 
             - name: Commit and push manifests
               env:
-                  TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+                  TAG: ${{ github.event.inputs.tag || github.ref_name }}
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
