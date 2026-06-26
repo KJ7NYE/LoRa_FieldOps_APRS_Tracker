@@ -67,7 +67,13 @@ for src in files:
     content = f.read()
 
   if src == 'data_embed/index.html':
-    env_vars = env["BOARD"] + "<br>" + ','.join(env["BUILD_FLAGS"]).replace('-Werror -Wall,', '').replace(',-DELEGANTOTA_USE_ASYNC_WEBSERVER=1', '') + "<br>" + "Version date: " + versionDate
+    # env["BUILD_FLAGS"] may contain tuples (e.g. ("NAME","VALUE")) when CPPDEFINES
+    # are appended dynamically by other pre-scripts (gen_version.py). Coerce every
+    # element to str so the join never raises TypeError regardless of PlatformIO version.
+    flags_str = ','.join(str(f) for f in env.get("BUILD_FLAGS", [])) \
+                  .replace('-Werror -Wall,', '') \
+                  .replace(',-DELEGANTOTA_USE_ASYNC_WEBSERVER=1', '')
+    env_vars = str(env.get("BOARD", "")) + "<br>" + flags_str + "<br>" + "Version date: " + versionDate
     build_info = f'{env_vars}<br>Build date: {build_date_str}'.encode()
     content = content.replace(b'%BUILD_INFO%', build_info)
 

@@ -74,12 +74,12 @@ jobs:
               run: pio run -e ${{ matrix.target.name }}
 
             - name: Build filesystem image
-              if: matrix.target.chip != 'nrf52'
+              if: success() && matrix.target.chip != 'nrf52'
               run: pio run --target buildfs -e ${{ matrix.target.name }}
 
             # ── ESP32: assemble merged factory binary ──────────────────────
             - name: Assemble ESP32 factory binary
-              if: matrix.target.chip != 'nrf52'
+              if: success() && matrix.target.chip != 'nrf52'
               run: |
                   set -e
                   mkdir -p installer/firmware
@@ -117,7 +117,7 @@ jobs:
                   fi
 
             - name: Upload ESP32 factory binary to release
-              if: matrix.target.chip != 'nrf52'
+              if: success() && matrix.target.chip != 'nrf52'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -133,13 +133,13 @@ jobs:
 
             # ── nRF52: UF2 drag-and-drop + BLE DFU zip ────────────────────
             - name: Prepare nRF52 UF2
-              if: matrix.target.chip == 'nrf52'
+              if: success() && matrix.target.chip == 'nrf52'
               run: |
                   cp .pio/build/${{ matrix.target.name }}/firmware.uf2 \
                      ${{ matrix.target.name }}_firmware.uf2
 
             - name: Generate nRF52 BLE DFU package
-              if: matrix.target.chip == 'nrf52'
+              if: success() && matrix.target.chip == 'nrf52'
               run: |
                   # adafruit-nrfutil is required for the Adafruit nRF52 bootloader — Nordic's
                   # nrfutil generates a different init packet format that the Adafruit bootloader
@@ -154,7 +154,7 @@ jobs:
                     ${{ matrix.target.name }}_dfu.zip
 
             - name: Upload nRF52 firmware artifacts to release
-              if: matrix.target.chip == 'nrf52'
+              if: success() && matrix.target.chip == 'nrf52'
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
