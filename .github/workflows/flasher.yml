@@ -71,23 +71,31 @@ jobs:
               run: pip install esptool platformio adafruit-nrfutil
 
             - name: Build firmware
-              run: pio run -e ${{ matrix.target.name }}
+              run: |
+                  pio run -e ${{ matrix.target.name }}
+                  # Preserve ESP32 build artifacts immediately — pio buildfs can remove
+                  # firmware.bin on Linux (SCons cleans the build dir when it re-evaluates
+                  # the environment after the second pre-script invocation).
+                  if [ "${{ matrix.target.chip }}" != "nrf52" ]; then
+                    mkdir -p installer/firmware
+                    cp .pio/build/${{ matrix.target.name }}/firmware.bin    installer/firmware/
+                    cp .pio/build/${{ matrix.target.name }}/bootloader.bin  installer/firmware/
+                    cp .pio/build/${{ matrix.target.name }}/partitions.bin  installer/firmware/
+                  fi
 
             - name: Build filesystem image
               if: success() && matrix.target.chip != 'nrf52'
-              run: pio run --target buildfs -e ${{ matrix.target.name }}
+              run: |
+                  pio run --target buildfs -e ${{ matrix.target.name }}
+                  cp .pio/build/${{ matrix.target.name }}/spiffs.bin installer/firmware/
 
             # ── ESP32: assemble merged factory binary ──────────────────────
             - name: Assemble ESP32 factory binary
               if: success() && matrix.target.chip != 'nrf52'
               run: |
                   set -e
-                  mkdir -p installer/firmware
-
-                  cp .pio/build/${{ matrix.target.name }}/firmware.bin    installer/firmware/
-                  cp .pio/build/${{ matrix.target.name }}/bootloader.bin  installer/firmware/
-                  cp .pio/build/${{ matrix.target.name }}/partitions.bin  installer/firmware/
-                  cp .pio/build/${{ matrix.target.name }}/spiffs.bin      installer/firmware/
+                  # firmware.bin/bootloader.bin/partitions.bin were copied in the Build
+                  # firmware step; spiffs.bin was copied in the Build filesystem step.
                   cp ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
                      installer/firmware/
 
@@ -126,7 +134,9 @@ jobs:
                   gh release upload "$RELEASE_TAG" \
                     "${{ matrix.target.name }}_web_factory.bin" --clobber
                   # OTA binary: bare app binary for WiFi OTA update via the device web UI (192.168.4.1).
-                  cp .pio/build/${{ matrix.target.name }}/firmware.bin \
+                  # Use the copy preserved in installer/firmware/ — .pio/build/ may have been
+                  # cleared by buildfs on Linux.
+                  cp installer/firmware/firmware.bin \
                      ${{ matrix.target.name }}_firmware.bin
                   gh release upload "$RELEASE_TAG" \
                     "${{ matrix.target.name }}_firmware.bin" --clobber
