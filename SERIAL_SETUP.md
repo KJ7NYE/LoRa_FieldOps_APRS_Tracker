@@ -43,10 +43,10 @@ Edits live in RAM until you `save`. Three exit paths:
 
 | Command   | Behavior                                                                      |
 |-----------|-------------------------------------------------------------------------------|
-| `save`    | Writes `tracker_conf.json` to SPIFFS, clears the dirty flag, stays in setup.  |
+| `save`    | Writes `tracker_conf.json` to the filesystem, clears the dirty flag, stays in setup. |
 | `exit`    | Leaves setup mode. **Refuses** to leave if there are unsaved changes.         |
-| `discard` | Throws away unsaved edits. Reboots the device to reload config from SPIFFS.   |
-| `reboot`  | Plain `ESP.restart()`. Same as `discard` if you have unsaved changes.         |
+| `discard` | Throws away unsaved edits. Reboots the device to reload config from disk.     |
+| `reboot`  | Plain device restart. Same as `discard` if you have unsaved changes.          |
 
 While setup mode is active, the global logger is dropped to **ERROR-only** so
 that periodic `[INFO] LoRa Tx --->` lines don't garble your prompt. The
@@ -59,60 +59,61 @@ previous level is restored on `exit`.
 ### Core
 
 | Command                                   | Description                                            |
-|-------------------------------------------|--------------------------------------------------------|
+|--------------------------------------------|---------------------------------------------------------|
 | `help`                                    | List all commands.                                     |
 | `show`                                    | Dump entire config.                                    |
-| `show <section>`                          | Dump one section (`beacons`, `lora`, `smartcustom`, `display`, `bt`, `notif`, `bat`, `telem`, `ptt`, `winlink`, `wifi`, `other`). |
+| `show <section>`                          | Dump one section (`beacons`, `lora`, `smartcustom`, `display`, `bt`, `bat`, `ptt`, `phg`, `wifi`, `other`). |
 | `show secrets`                            | Toggle masked password display (`***` ↔ plaintext).    |
 | `save`                                    | Persist to `tracker_conf.json`.                        |
 | `export`                                  | Dump the current saved `tracker_conf.json` to the terminal. |
 | `import`                                  | Paste a full `tracker_conf.json`. Auto-ends on balanced braces; Ctrl-C aborts. Validates JSON + non-empty `beacons[0].callsign`; reboots on success. |
 | `discard`                                 | Drop unsaved changes (reboots).                        |
-| `exit`                                    | Leave setup mode (errors if dirty).                    |
-| `reboot`                                  | `ESP.restart()`.                                       |
+| `exit` / `quit`                           | Leave setup mode (errors if dirty).                    |
+| `reboot`                                  | Reboot the device.                                     |
+| `format YES-ERASE-ALL`                    | Wipe the on-device filesystem (config and everything else) and reboot to embedded defaults. Requires the exact confirmation token; anything else just prints a warning. |
+| `otadfu`                                  | Enter BLE OTA DFU mode (nRF52 boards only, e.g. Heltec T114). |
+| `version`                                 | Print the firmware version string.                     |
 | `log <off\|error\|warn\|info\|debug>`     | Set logger level applied after `exit`.                 |
 
 ### Beacons
 
-The tracker holds multiple beacon profiles (typically 3). Use `select` to pick
-which one subsequent commands edit.
+This firmware uses a **single beacon profile** (`Config.beacons[0]`) — there
+is no `beacon select` or `beacon list`; every `beacon` command below edits
+that one profile directly.
 
 | Command                           | Description                                  |
-|-----------------------------------|----------------------------------------------|
-| `beacon list`                     | List all beacon slots.                       |
-| `beacon select <i>`               | Choose beacon to edit (0-based index).       |
+|-------------------------------------|-------------------------------------------------|
 | `beacon callsign <CALL-SSID>`     | Set callsign (e.g. `KJ7NYE-7`).              |
 | `beacon symbol <c>`               | APRS symbol character.                       |
 | `beacon overlay <c>`              | Symbol overlay character.                    |
-| `beacon micE <0..7>`              | Mic-E status code.                           |
+| `beacon mice <0..7>`              | Mic-E status code.                           |
 | `beacon comment <text...>`        | Free-text comment (rest of line).            |
 | `beacon status <text...>`         | Status string (rest of line).                |
-| `beacon tactical <text...>`       | Tactical callsign (≤9 chars). When set, transmits APRS Object reports with this name as the label; source callsign stays your licensed call. Empty value reverts to position report. Overrides Mic-E. |
+| `beacon tactical <text...>`       | Tactical callsign / object name (≤9 chars, longer input is truncated). When set, beacon TX switches from a position report to an APRS Object Report using this name as the object label; the AX.25 source callsign stays your licensed call, and directed APRS station queries are also answered when addressed to this name (see the main [README](README.md#aprs-station-queries)). Empty value reverts to a normal position report. Overrides Mic-E. |
 | `beacon label <text...>`          | Profile label shown on screen.               |
 | `beacon smart on\|off`            | SmartBeacon active.                          |
-| `beacon smartset <0..3>`          | SmartBeacon profile (`0`=Runner, `1`=Bike, `2`=Car, `3`=Custom — see [SmartBeacon Custom Profile](#smartbeacon-custom-profile)). |
-| `beacon gpseco on\|off`           | Per-beacon GPS eco mode.                     |
+| `beacon smartset <0..4>`          | SmartBeacon profile (`0`=Runner, `1`=Bike, `2`=Car, `3`=Jetboat, `4`=Custom — see [SmartBeacon Custom Profile](#smartbeacon-custom-profile)). Out-of-range values are clamped to `0` on boot with a warning. |
+| `tx comment\|status`              | Send a position+comment or status beacon immediately, without resetting the SmartBeacon/status timers. |
 
 ### SmartBeacon Custom Profile
 
-A user-editable 4th SmartBeacon profile shared by every beacon that selects
-`smartset 3`. Edits take effect **live** — no `save` + reboot needed to
-retune cadence in the field. Persist with `save` to keep them across reboots.
+A user-editable 5th SmartBeacon profile (index 4) used when the beacon
+selects `smartset 4`. Edits take effect **live** — no `save` + reboot needed
+to retune cadence in the field. Persist with `save` to keep them across
+reboots.
 
 | Command                              | Description                                                |
-|--------------------------------------|------------------------------------------------------------|
-| `smartcustom show`                   | Print the 8 custom values plus which beacons use them.     |
+|------------------------------------------|------------------------------------------------------------|
+| `smartcustom show`                   | Print the 6 custom values and whether the beacon currently uses them. |
 | `smartcustom slowrate <sec>`         | Beacon interval at or below `slowSpeed`.                   |
 | `smartcustom slowspeed <km/h>`       | Speed at/below which `slowRate` applies.                   |
 | `smartcustom fastrate <sec>`         | Beacon interval at or above `fastSpeed`.                   |
 | `smartcustom fastspeed <km/h>`       | Speed at/above which `fastRate` applies.                   |
-| `smartcustom mintxdist <m>`          | Minimum distance between beacons.                          |
-| `smartcustom mindelta <sec>`         | Minimum spacing between beacons.                           |
 | `smartcustom turnmindeg <deg>`       | Minimum heading change to trigger a corner peg.            |
 | `smartcustom turnslope <n>`          | Turn-angle slope (lower = peg sooner at speed).            |
 
-Defaults are bike-like (`120, 5, 60, 40, 100, 12, 12, 60`). The on-disk JSON
-gains a new top-level `customSmartBeacon` object. Older configs without the
+Defaults are bike-like (`120, 5, 60, 40, 12, 60`). The on-disk JSON stores
+these under a top-level `customSmartBeacon` object. Older configs without the
 key are auto-upgraded on first boot via the existing missing-key rewrite
 path.
 
@@ -122,12 +123,12 @@ a warning to serial — the tracker won't crash on a bad value.
 
 ### LoRa
 
-Four region presets are stored: `0=EU`, `1=PL`, `2=UK`, `3=US`.
+A single LoRa radio profile (`Config.loraTypes[0]`) — there is no region
+preset list or `lora select`; set the values directly for your region/band
+plan.
 
 | Command                  | Description                       |
-|--------------------------|-----------------------------------|
-| `lora list`              | Print all four region presets.    |
-| `lora select <0..3>`     | Choose region to edit.            |
+|------------------------------|------------------------------------|
 | `lora freq <Hz>`         | Frequency in hertz.               |
 | `lora sf <7..12>`        | Spreading factor.                 |
 | `lora bw <Hz>`           | Signal bandwidth in hertz.        |
@@ -137,81 +138,87 @@ Four region presets are stored: `0=EU`, `1=PL`, `2=UK`, `3=US`.
 ### Display
 
 | Command                       | Description                                    |
-|-------------------------------|------------------------------------------------|
-| `display eco on\|off`         | Eco mode (sleep screen between updates).       |
+|-----------------------------------|---------------------------------------------------|
+| `display eco on\|off`         | Eco mode (blank backlight after the configured timeout). |
 | `display turn180 on\|off`     | Rotate display 180°.                           |
-| `display symbol on\|off`      | Show APRS symbol on main screen.               |
-| `display timeout <sec>`       | Auto-off timeout in seconds.                   |
+| `display invert on\|off`      | Invert display colors.                         |
+| `display led on\|off`         | Enable/disable the onboard status LED.         |
+| `display timeout <sec>`       | Eco-mode auto-off timeout in seconds.          |
 
 ### Bluetooth
 
 | Command                       | Description                                           |
-|-------------------------------|-------------------------------------------------------|
+|-----------------------------------|-------------------------------------------------------|
 | `bt on\|off`                  | Activate Bluetooth at boot.                           |
 | `bt name <text>`              | Bluetooth device name (e.g. `LoRaTracker`).           |
-| `bt ble on\|off`              | Use BLE (off → Bluetooth Classic, where supported).   |
-| `bt kiss on\|off`             | KISS framing (off → TNC2 plain text).                 |
-
-### Notifications
-
-| Command                                  | Description                          |
-|------------------------------------------|--------------------------------------|
-| `notif tx on\|off`                       | LED on TX.                           |
-| `notif msg on\|off`                      | LED on message RX.                   |
-| `notif flashled on\|off`                 | Flashlight LED feature enabled.      |
-| `notif buzzer on\|off`                   | Buzzer master enable.                |
-| `notif beep boot on\|off`                | Beep on boot-up.                     |
-| `notif beep tx on\|off`                  | Beep on TX.                          |
-| `notif beep rx on\|off`                  | Beep on message RX.                  |
-| `notif beep station on\|off`             | Beep when new station heard.         |
-| `notif beep low on\|off`                 | Beep on low battery.                 |
-| `notif beep shutdown on\|off`            | Beep on shutdown.                    |
 
 ### Battery
 
 | Command                         | Description                              |
-|---------------------------------|------------------------------------------|
+|--------------------------------------|-------------------------------------|
 | `bat sendv on\|off`             | Include voltage in beacon comment.       |
-| `bat astelem on\|off`           | Send voltage as telemetry parameter.     |
 | `bat alwaysv on\|off`           | Send voltage on every beacon.            |
-| `bat monitor on\|off`           | Enable low-battery monitor.              |
 | `bat sleepv <volts>`            | Voltage threshold for deep sleep.        |
-
-### Telemetry
-
-| Command                          | Description                            |
-|----------------------------------|----------------------------------------|
-| `telem on\|off`                  | Enable telemetry.                      |
-| `telem send on\|off`             | Send telemetry packets periodically.   |
-| `telem tempcorr <float>`         | Temperature correction offset (°C).    |
+| `bat read`                      | Force a fresh ADC sample and print voltage + percent. |
 
 ### PTT
 
 | Command                          | Description                                |
-|----------------------------------|--------------------------------------------|
+|---------------------------------------|-----------------------------------------|
 | `ptt on\|off`                    | PTT trigger active.                        |
 | `ptt pin <n>`                    | GPIO pin number.                           |
 | `ptt reverse on\|off`            | Invert active level.                       |
 | `ptt predelay <ms>`              | Delay before TX after asserting PTT.       |
 | `ptt postdelay <ms>`             | Delay after TX before releasing PTT.       |
 
-### Winlink / WiFi / Other
+### PHG Beaconing
+
+Power-Height-Gain beaconing sends an uncompressed position beacon advertising
+fixed-station RF capability, on its own timer, per the APRS spec's PHG
+extension.
+
+| Command                          | Description                                |
+|---------------------------------------|-----------------------------------------|
+| `phg show`                       | Print current PHG settings and the encoded PHG string. |
+| `phg on\|off`                    | Enable/disable PHG beaconing.              |
+| `phg power <0..9>`               | Power digit.                               |
+| `phg height <0..9>`              | Height digit.                              |
+| `phg gain <0..9>`                | Gain digit.                                |
+| `phg dir <0..9>`                 | Directivity digit.                         |
+| `phg rate <min>`                 | Interval between PHG beacons.              |
+
+### Multi-Role Settings
+
+| Command                                       | Description                                |
+|----------------------------------------------------|---------------------------------------------|
+| `role show`                                   | Show current device role and GPS source.   |
+| `role set tracker\|igate\|digipeater`         | Set device role (takes effect after `save` + reboot). iGate is unavailable on nRF52 boards (no WiFi). |
+| `role gps internal\|fixed\|none`              | Set GPS source (takes effect after `save` + reboot). |
+| `fixed latitude <dd.dddddd>`                  | Fixed-position latitude, used when GPS source = Fixed. |
+| `fixed longitude <dd.dddddd>`                 | Fixed-position longitude.                  |
+| `fixed elevation <m>`                         | Fixed-position elevation in meters.        |
+| `wifista on\|off`                             | Enable/disable WiFi station mode (iGate uplink). |
+| `wifista ssid <text>`                         | WiFi STA SSID.                             |
+| `wifista password <text>`                     | WiFi STA password.                         |
+| `aprsiss server <host>`                       | APRS-IS server hostname.                   |
+| `aprsiss port <n>`                            | APRS-IS server port.                       |
+| `aprsiss passcode <code>`                     | APRS-IS passcode override (leave unset to auto-compute from callsign). |
+| `aprsiss filter <filter>`                     | APRS-IS server-side filter string.         |
+| `aprsiss status`                              | Print live APRS-IS connection status.      |
+| `tcpkiss port <n>`                            | TCP KISS server port (default 8001; server auto-starts once WiFi STA connects). |
+
+### Other
 
 | Command                          | Description                                                    |
-|----------------------------------|----------------------------------------------------------------|
-| `winlink password <text>`        | Winlink RMS password.                                          |
-| `wifi on\|off`                   | WiFi-AP web-config persistent mode (stays up indefinitely).    |
-| `wifi window on\|off`            | 30-second AP at boot (default **off** — see [WiFi AP Behavior](#wifi-ap-behavior)). |
-| `wifi password <text>`           | WiFi AP password.                                              |
-| `digipeater on\|off`             | Persisted digipeater boot default (see [Digipeater Behavior](#digipeater-behavior)). |
-| `path <text>`                    | APRS digipeater path (e.g. `WIDE1-1`).                         |
-| `email <addr>`                   | Email for the GPS-mail extras feature.                         |
-| `simplified on\|off`             | Simplified tracker mode (no menu, no buttons).                 |
-| `disablegps on\|off`             | Run as a TNC-only (no GPS).                                    |
-| `sendalt on\|off`                | Include altitude in beacons.                                   |
-| `nonsmartrate <min>`             | Beacon interval when SmartBeacon is off.                       |
-| `rememberstation <sec>`          | How long to remember heard stations.                           |
-| `commentafter <n>`               | Send beacon comment every Nth beacon.                          |
+|---------------------------------------|--------------------------------------------------------------|
+| `digi off\|wide1\|wide1+wide2`    | Digipeater mode — works on any device role (see [Digipeater Behavior](#digipeater-behavior)). |
+| `wifi password <text>`           | Config AP password (AP triggers on `NOCALL-7` callsign or a long USR-button hold at boot). |
+| `beaconpath <path>`              | APRS TX path, e.g. `WIDE1-1` or `WIDE1-1,WIDE2-1`.              |
+| `gps read`                       | Print the current GPS position from whichever source is active. |
+| `sendspeed on\|off`              | Include speed/course in beacons.                                |
+| `sendalt on\|off`                | Include altitude in beacons.                                    |
+| `nonsmartrate <min>`             | Beacon interval when SmartBeacon is off.                        |
+| `commentafter <n>`               | Send beacon comment every Nth beacon.                            |
 
 ---
 
@@ -219,60 +226,49 @@ Four region presets are stored: `0=EU`, `1=PL`, `2=UK`, `3=US`.
 
 ### Digipeater Behavior
 
-Two-mode design:
+Digipeating is controlled by a single persisted setting, `Config.digiMode`
+(`off` / `wide1` / `wide1+wide2`), editable via `digi off|wide1|wide1+wide2`
+and available to any device role, not just the dedicated Digipeater role.
 
-- **`Config.digipeating`** (persisted in `tracker_conf.json`)
-  → "Should the digipeater be ON at boot?"
-  Edited via `digipeater on|off` in the setup CLI.
-  Survives reboots when saved.
-
-- **`digipeaterActive`** (RAM only)
-  → "Is the digipeater on right now?"
-  Toggled by the on-device menu (Extras → Digipeater).
-  Resets to `Config.digipeating` on every boot.
-
-The setup CLI's `digipeater on|off` updates **both** values, so the change
-takes effect immediately *and* persists once you `save`. The on-device menu
-toggle remains transient (no flash write per press) so users can flip the
-digi off temporarily without committing the change.
+`digipeaterActive` is a RAM-only convenience mirror set once at boot from
+`Config.digiMode != off` — there is no separate on-device menu toggle (this
+firmware has no on-device menu) and no distinct "boot default vs. runtime"
+split to reason about: change the mode, `save`, and it takes effect
+immediately and persists across reboots.
 
 ### WiFi AP Behavior
 
-Three orthogonal flags govern the AP at boot:
+The config AP is triggered by `WIFI_Utils::checkIfWiFiAP()` at boot, using
+two independent conditions — no CLI on/off toggle exists for this behavior:
 
-| Flag                       | Default | Effect when true                                                      |
-|----------------------------|---------|-----------------------------------------------------------------------|
-| Callsign == `NOCALL-7`     | (varies)| Force AP up indefinitely. Safety net for fresh/unconfigured devices.  |
-| `Config.wifiAP.active`     | true*   | AP stays up indefinitely. Set by the on-device "WiFi AP" menu.        |
-| `Config.wifiAP.bootWindow` | **false** | AP up for 30 seconds at boot, then auto-shuts if no client connects. |
+| Condition                        | Effect                                                        |
+|----------------------------------------|-----------------------------------------------------------------|
+| Callsign == `NOCALL-7`           | AP starts automatically. Safety net for a fresh/unconfigured device. |
+| USR button held at boot          | AP starts even if the callsign is already configured.         |
 
-*`active` defaults to `true` so a freshly-flashed device is always
-configurable, but the web-config flow clears it to `false` on exit.
-
-If **none** of the three flags are true, the AP is skipped entirely — faster
-boot, no WiFi radio power.
-
-To enable the 30-second boot AP persistently:
+Once started, the AP session blocks in a loop serving the web UI at
+`192.168.4.1` (while still polling the serial CLI, so USB config works
+concurrently) and shuts down automatically after a period of no client
+activity. The only AP-related CLI setting is the password:
 
 ```
 setup
-wifi window on
+wifi password MyNewPassword
 save
 exit
 ```
 
 ### Password Masking
 
-By default, `winlink.password` and `wifi.password` show as `***` in `show`
+By default, `wifi.password` and other secret fields show as `***` in `show`
 output. Toggle with `show secrets` if you need to verify the actual stored
 value.
 
 ### Backward Compatibility
 
-When the firmware boots with an older `tracker_conf.json` that lacks the new
-`digipeating` or `bootWindow` fields, `readFile()` detects the missing keys,
-sets defaults, rewrites the JSON, and reboots once — giving you a clean
-upgraded config on the next boot.
+When the firmware boots with an older `tracker_conf.json` that lacks newer
+fields, `readFile()` detects the missing keys, sets defaults, rewrites the
+JSON, and reboots once — giving you a clean upgraded config on the next boot.
 
 ### Config Replication via `export` / `import`
 
@@ -295,9 +291,9 @@ If any gate fails, the existing `tracker_conf.json` is untouched and the
 CLI prints a diagnostic. The buffer is capped at 16 KB, and Ctrl-C aborts
 mid-paste cleanly.
 
-**Reboot-on-success.** A successful `import` writes the JSON and calls
-`ESP.restart()` so the new config is the live config. This matches the
-existing `discard` semantics.
+**Reboot-on-success.** A successful `import` writes the JSON and reboots so
+the new config is the live config. This matches the existing `discard`
+semantics.
 
 **Round-trip canonicalization.** `import` reserializes via ArduinoJson, so
 whitespace and unknown fields are stripped. An `export` from a newer
@@ -316,43 +312,28 @@ backstops with C++ defaults on the next boot.
 
 ```
 setup
-beacon select 0
 beacon callsign KJ7NYE-7
 beacon symbol [
 beacon overlay /
 beacon comment LoRanger V1 KJ7NYE
-lora select 3
 lora power 22
-path WIDE1-1
+beaconpath WIDE1-1
 save
 exit
 ```
 
-### Verifying digipeater persistence
+### Checking and changing digipeater mode
 
 ```
 setup
-show other            # digipeating(boot)=off, digipeaterActive=off
-digipeater on
-show other            # both on
+show other            # digiMode=off, digiActive(runtime)=no
+digi wide1
+show other            # digiMode=wide1, digiActive(runtime)=yes
 save
 reboot
 setup
-show other            # both still on -- proves persistence
+show other            # digiMode still wide1 -- proves persistence
 ```
-
-### Enabling the 30-second boot AP
-
-```
-setup
-wifi window on
-save
-exit
-```
-
-The AP `LoRaTracker-AP` (default password `1234567890`) will now appear on
-every boot for 30 seconds. Connect to it within that window to access the
-web-config at `192.168.4.1`.
 
 ### Bumping logger verbosity for a debug session
 
@@ -388,16 +369,18 @@ The CLI reads/writes the same fields the web-config touches. Mapping CLI
 section → JSON path in `tracker_conf.json`:
 
 | CLI section    | JSON key             |
-|----------------|----------------------|
+|----------------|-----------------------|
 | `beacons`      | `beacons[]`          |
-| `lora`         | `lora[]`             |
+| `lora`         | `loraTypes[]`         |
 | `smartcustom`  | `customSmartBeacon`  |
-| `display`      | `display`            |
-| `bt`           | `bluetooth`          |
-| `notif`        | `notification`       |
-| `bat`          | `battery`            |
-| `telem`        | `telemetry`          |
-| `ptt`          | `pttTrigger`         |
-| `winlink`      | `winlink`            |
-| `wifi`         | `wifiAP`             |
-| `other`        | `other`              |
+| `display`      | `display`             |
+| `bt`           | `bluetooth`           |
+| `bat`          | `battery`             |
+| `ptt`          | `ptt`                  |
+| `phg`          | `phg`                  |
+| `wifi`         | `wifiAP`               |
+| `role`/`fixed` | `deviceRole`, `gpsSource`, `fixedPosition` |
+| `wifista`      | `wifiSTA`              |
+| `aprsiss`      | `aprsIS`               |
+| `tcpkiss`      | `tcpKISS`              |
+| `other`        | top-level scalars (`beaconPath`, `nonSmartBeaconRate`, `sendSpeedCourse`, `sendAltitude`, `digiMode`, `sendCommentAfterXBeacons`) |

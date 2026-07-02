@@ -2,6 +2,8 @@
 
 Handoff document covering ESP32 work that landed and the design decisions for an nRF52840 port. Drop into a future chat to continue without re-deriving context.
 
+> **Status: historical design/handoff doc.** PR-1 (nRF52 platform + Heltec T114) fully landed — see CHANGELOG.md's 2026-05-03 entry. Sections below describe the state and reasoning at design/landing time; known-stale spots (content that never matched what actually shipped, or work that has since shipped) have been corrected or removed inline rather than left to rot.
+
 ---
 
 ## What landed (ESP32 build, currently shipped)
@@ -34,47 +36,19 @@ Five-step PR landed as four commits. Each step is a green-build checkpoint on it
 | Commit | Step | What |
 |---|---|---|
 | `9e64f69` | 1 + 2 | ESP32 capability flags (`HAS_WIFI` / `HAS_NIMBLE` / `HAS_WEB_UI` / `HAS_DISPLAY` in `[common].build_flags`) gating ESP-only subsystems behind `#ifdef`; new `[nrf52_common]` block in [common_settings.ini](common_settings.ini); [variants/heltec_t114/](variants/heltec_t114/); header shims under [include/nrf52_shims/](include/nrf52_shims/) intercepting `<SPIFFS.h>` and `<logger.h>` on nRF builds; `#ifdef ARDUINO_ARCH_NRF52` arms across 12 source files for SPIFFS↔InternalFS, ESP.restart↔NVIC_SystemReset, Wire/SPI.begin no-args, ledc PWM→`tone()`, gpsSerial→Serial1 macro, esp_sleep→SYSTEMOFF, etc. |
-| `ba83b1f` | 3 | ST7789 driver path in [src/display.cpp](src/display.cpp) behind `HAS_TFT_ST7789`. Software SPI on dedicated TFT pins; Adafruit_GFX-based; text-only rendering. |
+| `ba83b1f` | 3 | ST7789 driver path in [src/display.cpp](src/display.cpp) behind `HAS_TFT_ST7789`. Hardware SPI on a second SPIM peripheral (`SPIClass SPI1` on `NRF_SPIM2`, since the primary `SPI` bus is owned by the SX1262 radio); Adafruit_GFX-based; text-only rendering. |
 | `247161e` | 4 | First-boot embedded defaults: [tools/embed_config.py](tools/embed_config.py) pre-build script reads [data/tracker_conf.json](data/tracker_conf.json) and emits `include/generated/default_config_embed.h` (gitignored). [src/configuration.cpp](src/configuration.cpp) writes `DEFAULT_CONFIG_JSON` straight to LittleFS on first boot; ESP32 path unchanged. |
 | `15c1a75` | 5 | FCC TX-gate at [src/lora_utils.cpp](src/lora_utils.cpp) `sendNewPacket` chokepoint, using existing `APRSPacketLib::checkNocall()` validator on the source-callsign field. Active on both platforms. |
 
 **T114 build (`heltec_t114` env, fresh from clean `pio run`):** Flash 40.9% (333 KB / 815), RAM 32.3% (80 KB / 248). UF2-flashable `firmware.zip` produced. Display body active, embedded defaults baked in, TX-gate enforcing.
 
-**ESP32 envs unchanged** — `heltec_wireless_tracker` measured at 46.9% / 17.3% throughout PR-1, identical to pre-PR baseline.
-
-### T114 default-pin conflicts (notification subsystem)
-
-`setDefaultValues()` in [src/configuration.cpp](src/configuration.cpp) ships generic ESP32-era defaults for the LED / buzzer pins that overlap critical hardware on the T114:
-
-| Default field           | Pin | T114 hardware function       |
-|---|---|---|
-| `notification.ledTxPin`        | 13 | `PIN_WIRE1_SCL` (I2C bus 1) |
-| `notification.ledMessagePin`   |  2 | `TFT_RST_PIN` (resets the ST7789!) |
-| `notification.ledFlashlightPin`| 14 | `NEOPIXEL_DATA` (onboard 2× neopixels) |
-| `notification.buzzerPinVcc`    | 25 | `SX126X_RESET` (resets the LoRa radio!) |
-
-Two layers of protection are in place:
-
-1. **Function-level gates** — `MSG_Utils::ledNotification()` / `Utils::checkFlashlight()` early-return if the corresponding feature flag (`Config.notification.ledMessage` / `Config.notification.ledFlashlight`) is off, so the pin is never touched even if it were unsafe. Buzzer entry points already gate on `Config.notification.buzzerActive` at every call site.
-2. **Per-board macro overrides in `board_pinout.h`** — `setDefaultValues()` reads `LED_TX_PIN_DEFAULT` / `LED_MESSAGE_PIN_DEFAULT` / `BUZZER_TONE_PIN_DEFAULT` / `BUZZER_VCC_PIN_DEFAULT` / `LED_FLASHLIGHT_PIN_DEFAULT` instead of hard-coding pin numbers. The fallback values (13 / 2 / 33 / 25 / 14) match the historical ESP32 defaults; T114's [board_pinout.h](variants/heltec_t114/board_pinout.h) overrides all five to `-1`. `digitalWrite(-1, …)` is a no-op on Adafruit's BSP (out of `NUM_DIGITAL_PINS` range), so even if a feature is later enabled, the user must point the pin at an actual safe pad before anything happens.
-
-If a future nRF52 variant has different pin overlaps, set the same macros in its `board_pinout.h`. **Do not** rely solely on the function-level gates — those protect the *default-off* case but a user enabling a feature should not be one config write away from a TFT-reset / radio-reset / I²C-pullup-fight.
-
-### Root cause of the T114 "screen goes black after boot" hang
-
-Worth recording because the symptom (TFT goes black ~1 s after `loop()` starts) was nothing like the actual bug:
-
-- `MSG_Utils::ledNotification()` originally probed `digitalRead(Config.notification.ledMessagePin)` *every loop iteration*, regardless of whether the LED-message feature was enabled — only the feature's runtime *event* (`messageLed` flag set on incoming msg) gated the HIGH/blink path; the "reset to LOW if pin reads HIGH" branch ran unconditionally.
-- On T114 the default `ledMessagePin = 2` is the same physical pin as `TFT_RST_PIN`. After `tft.init()` released RST to HIGH, the next loop iteration's `ledNotification()` read HIGH, decided the LED was "stuck on", and yanked the pin LOW → ST7789 enters reset → display content goes black and stays.
-- Bisection took longer than the fix because the symptom suggested an SPI1 / SPIM2 deinitialization problem when the actual culprit was a totally unrelated pin write to a coincidentally-shared GPIO.
-
-Lesson for future ports: every unconditional `digitalWrite` to a config-driven pin number is a latent bug if the pin map varies between boards — even when the function looks unrelated to the affected hardware. The fix above (gate on the feature flag) is a structural improvement, not a band-aid.
+**ESP32 envs unchanged** — `heltec_v3_433_aprs` measured at 46.9% / 17.3% throughout PR-1, identical to pre-PR baseline.
 
 ### Notes for future maintainers
 
 - **PIO LDF discovery quirk** — LDF doesn't crawl `#include`s reached via custom `-I` paths (like `include/nrf52_shims/`). Worked around by an explicit `#include <Adafruit_LittleFS.h>` in [src/configuration.cpp](src/configuration.cpp) gated on nRF, plus `lib_extra_dirs = ${platformio.packages_dir}/framework-arduinoadafruitnrf52/libraries` in the variant ini. If a future shim needs another BSP-bundled lib, repeat that pattern.
 - **`-Wno-sign-compare` on nRF** — gcc-arm-none-eabi flags signed/unsigned comparisons that gcc-xtensa lets pass. Many `millis()/uint32_t vs signed-int * 1000` and `int i; i < container.size()` sites. Cleaning these up is its own follow-up that benefits both platforms.
-- **Software SPI for the T114 ST7789** — sidesteps the second-SPIM-peripheral coordination needed to share hardware SPI with the LoRa SX1262 on different pins. Adequate for text-only updates; revisit if rich UI lands.
+- **Hardware SPI for the T114 ST7789** — uses a second hardware SPI peripheral (`SPIClass SPI1` on `NRF_SPIM2`) rather than sharing the primary `SPI` bus the LoRa SX1262 owns. Adequate for text-only updates; revisit driver/layout choices if rich UI lands.
 - **Commit message style** — see `feedback_commit_style.md` in memory: omit `Co-Authored-By: Claude` trailer.
 
 ---
@@ -92,7 +66,7 @@ Lesson for future ports: every unconditional `digitalWrite` to a config-driven p
 - Button + USR LED
 - USB-C
 
-The T114 mirrors `heltec_wireless_tracker`'s role on the ESP32 side: an off-the-shelf integrated tracker for firmware iteration.
+The T114 mirrors `heltec_v3_433_aprs`'s role on the ESP32 side: an off-the-shelf integrated tracker for firmware iteration.
 
 **Long-term — `LoRanger_V1_nRF` (custom PCB):**
 
@@ -133,7 +107,11 @@ After the platform layer lands, adding any future nRF52 board is just dropping a
 
 ### Concrete port scope
 
-Files needing changes for the nRF52 platform layer + T114 variant:
+Files needing changes for the nRF52 platform layer + T114 variant. This table
+is a snapshot of the original plan — some filenames have since changed
+(e.g. the entry point was `src/LoRa_APRS_Tracker.cpp` at design time, now
+`src/main.cpp`; `src/msg_utils.cpp` no longer exists under that name), so
+treat exact paths/line numbers here as historical rather than current:
 
 | File | Change | Effort |
 |---|---|---|
@@ -141,7 +119,7 @@ Files needing changes for the nRF52 platform layer + T114 variant:
 | [src/serial_setup.cpp](src/serial_setup.cpp) | Same SPIFFS swap; `ESP.restart()` ↔ `NVIC_SystemReset()` (2 sites) | ~6 `#ifdef` lines |
 | [src/msg_utils.cpp](src/msg_utils.cpp), [src/station_utils.cpp](src/station_utils.cpp) | SPIFFS swap | ~4 lines each |
 | [src/power_utils.cpp:462-464](src/power_utils.cpp#L462-L464) | `esp_sleep_*` block → `NRF_POWER->SYSTEMOFF` or `sd_power_system_off()` | 5 lines |
-| [src/LoRa_APRS_Tracker.cpp:45](src/LoRa_APRS_Tracker.cpp#L45) | Wrap `<WiFi.h>` and `<BluetoothSerial.h>` in `#ifdef HAS_WIFI` / `#ifdef HAS_BT_CLASSIC` (some already half-gated) | ~6 lines |
+| `src/main.cpp` (entry point, formerly `LoRa_APRS_Tracker.cpp`) | Wrap `<WiFi.h>` and `<BluetoothSerial.h>` in `#ifdef HAS_WIFI` / `#ifdef HAS_BT_CLASSIC` (some already half-gated) | ~6 lines |
 | [src/display.cpp](src/display.cpp) | Step 2: gated body behind `HAS_DISPLAY`, added no-op stubs + `screenBrightness` / `symbolAvailable` globals so other TUs link. Step 3 (next): ST7789 driver path, Adafruit ST7789 lib added to nRF52 lib_deps, layout reused via Adafruit GFX with scale tweaks (240×135 vs 128×64). | Step 2: ~25 lines. Step 3: ~30-50 lines additional. |
 | [src/battery_utils.cpp](src/battery_utils.cpp) | nRF52840 ADC: 12-bit at 0.6 V Vref × gain. Different scale factor than ESP32. **Tune via existing `lora32BatReadingCorr` config — do not edit the formula** (per durable memory). | new `#ifdef ARDUINO_ARCH_NRF52` branch with different starting constant |
 | New: `tools/embed_config.py` | Reads [data/tracker_conf.json](data/tracker_conf.json), emits `default_config_embed.h` with `static const char DEFAULT_CONFIG_JSON[] = R"json(...)json";` for first-boot use. Wired into [platformio.ini](platformio.ini) `extra_scripts` for nRF52 envs (and optionally ESP32 as a `uploadfs`-skipped fallback). | ~30 lines |
@@ -168,13 +146,17 @@ Per [memory/project_lighttracker_flag_split.md](memory/project_lighttracker_flag
 
 ## Future PRs
 
-PR-1 (Steps 1-5) is shipped — see "What landed (PR-1)" above. Remaining work:
+PR-1 (Steps 1-5) is shipped — see "What landed (PR-1)" above. Since then, two
+items originally listed here have also shipped:
 
-- **Additional nRF52 boards** (`LoRanger_V1_nRF`, RAK4631, Adafruit Feather, …) — 2-file variant-only PRs (`platformio.ini` + `board_pinout.h`) on top of the platform layer. No shared-code touches expected.
-- **T114 hardware glue** — small follow-ups before flashing real hardware: drive `VEXT_ENABLE` (`GPS_VCC` on T114 = P0.21) before GPS init, and `ADC_CTRL_PIN` (P0.6) HIGH-then-LOW around battery reads. Both deferred from PR-1 since they don't affect compile-and-link.
+- ~~**T114 hardware glue**~~ **Done** — commit `552ae38` drives `VEXT_ENABLE` (P0.21) HIGH for L76K GPS power and gates battery ADC reads with `ADC_CTRL_PIN` (P0.6), per the 2026-05-03 CHANGELOG entry.
+- ~~**Hardware SPI for the T114 TFT**~~ **Done** — landed as part of PR-1 Step 3 (`ba83b1f`); the ST7789 driver already uses a second hardware SPI peripheral (`SPIClass SPI1` on `NRF_SPIM2`), not software/bitbang SPI.
+
+Remaining work:
+
+- **Additional nRF52 boards** (`LoRanger_V1_nRF`, RAK4631, Adafruit Feather, …) — 2-file variant-only PRs (`platformio.ini` + `board_pinout.h`) on top of the platform layer. No shared-code touches expected. Not started — no such variant directories exist yet.
 - **Rich UI on T114 ST7789** — battery / GPS-fix / signal-bar icons. The legacy SSD1306 path uses driver-specific helpers that don't carry over; T114 would need GFX-based versions. Defer until there's a real reason.
-- **Hardware SPI for the T114 TFT** — would require a second `SPIClass` instance on `NRF_SPIM2` (since `SPI` is owned by RadioLib for SX1262). Nice-to-have when a use case actually demands faster redraws.
-- **`-Wno-sign-compare` cleanup** — fix the underlying signed/unsigned mismatches the codebase has accumulated. Benefits both platforms; would let nRF builds drop the warning suppression.
+- **`-Wno-sign-compare` cleanup** — fix the underlying signed/unsigned mismatches the codebase has accumulated. Benefits both platforms; would let nRF builds drop the warning suppression. Still present in `common_settings.ini`'s `[nrf52_common]` block — not yet cleaned up.
 
 ---
 
@@ -187,7 +169,7 @@ PR-1 (Steps 1-5) is shipped — see "What landed (PR-1)" above. Remaining work:
 5. **BLE-based config** — would require Adafruit Bluefruit BLE stack and a phone app. Out of scope for serial-CLI design.
 6. **Per-variant `default_config.h`** — would diverge from the existing single-source-of-truth `data/tracker_conf.json` ESP32 convention. Replaced with project-level JSON + pre-build script that generates the embedded header at build time.
 7. ~~**T114 headless first** — considered, rejected.~~ **Reversed in practice.** Splitting PR-1 into stepwise green-build commits made headless-first practical: the platform layer (Step 2) lands without a working display, USB serial gives enough bring-up debug visibility, and the ST7789 driver becomes its own focused follow-up (Step 3) instead of bloating the platform commit.
-8. **Standalone ESP32-only TX-gate PR** — considered, dropped. Existing soft-warning + auto-rightArrow UI in [src/LoRa_APRS_Tracker.cpp:190-194](src/LoRa_APRS_Tracker.cpp#L190-L194) is sufficient on a shipping ESP32 build that's past initial config. The hard gate is load-bearing only with boot-with-defaults; it travels with PR-1.
+8. **Standalone ESP32-only TX-gate PR** — considered, dropped. Existing soft-warning + auto-rightArrow UI in `src/main.cpp` (formerly `LoRa_APRS_Tracker.cpp`) is sufficient on a shipping ESP32 build that's past initial config. The hard gate is load-bearing only with boot-with-defaults; it travels with PR-1.
 
 ---
 
@@ -207,7 +189,7 @@ PR-1 (Steps 1-5) is shipped — see "What landed (PR-1)" above. Remaining work:
 - [src/display.cpp](src/display.cpp) — display driver path; body gated behind `HAS_DISPLAY` (Step 2). Step 3 adds ST7789 path for T114.
 - [data/tracker_conf.json](data/tracker_conf.json) — single source of truth for default config (both platforms).
 - *New:* `tools/embed_config.py` — pre-build script that emits `default_config_embed.h` from the JSON.
-- [variants/heltec_wireless_tracker/](variants/heltec_wireless_tracker/) — closest existing template for an off-the-shelf integrated tracker variant.
+- [variants/heltec_v3_433_aprs/](variants/heltec_v3_433_aprs/) — closest existing template for an off-the-shelf integrated tracker variant.
 - [variants/LoRanger_V1/](variants/LoRanger_V1/) — template for the eventual `LoRanger_V1_nRF` variant.
 - [SERIAL_SETUP.md](SERIAL_SETUP.md) — user-facing CLI reference, includes the new commands and the cloning example.
 - [CHANGELOG.md](CHANGELOG.md) — fork-overlay history.
@@ -218,4 +200,4 @@ PR-1 (Steps 1-5) is shipped — see "What landed (PR-1)" above. Remaining work:
 
 - **Battery formula must not be edited** — tune via `lora32BatReadingCorr` config field. (Reason: ADC noise on ESP32-S3 was originally fine-tuned this way; same approach applies to nRF52 with a different starting constant.)
 - **Commit messages omit `Co-Authored-By: Claude` trailer** — durable preference.
-- **Active dev/test board (ESP32 side) is `heltec_wireless_tracker`** — daily flashing happens there, not LoRanger_V1 (which is still being built). On the nRF52 side, **`heltec_t114` plays the same role** — the off-the-shelf bring-up board, not the future custom `LoRanger_V1_nRF`.
+- **Active dev/test board (ESP32 side) is `heltec_v3_433_aprs`** — daily flashing happens there, not LoRanger_V1 (which is still being built). On the nRF52 side, **`heltec_t114` plays the same role** — the off-the-shelf bring-up board, not the future custom `LoRanger_V1_nRF`.

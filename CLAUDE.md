@@ -16,7 +16,7 @@ pio run -e <env> -t uploadfs         # Upload filesystem only
 pio run -e <env> -t buildfs          # Build filesystem image without uploading
 ```
 
-There are no automated tests — the CI workflow (`build.yml`) only compiles all environments.
+There are no automated tests — the CI workflow (`.github/workflows/commit.yml`) only compiles all environments.
 
 ## Hardware Targets / PlatformIO Environments
 
@@ -25,10 +25,11 @@ There are no automated tests — the CI workflow (`build.yml`) only compiles all
 | `heltec_t114` | nRF52840 | SX1262 | L76K (onboard) | ST7789 1.14" TFT | BLE 5 (native) |
 | `heltec_v3_433_aprs` | ESP32-S3 | SX1262 | None | SSD1306 OLED | WiFi + NimBLE |
 | `tbeam_433_aprs` | ESP32 | SX1278 | u-blox NEO-6M/M8N | SSD1306 OLED | WiFi + NimBLE + BT Classic |
+| `tbeam_433_1w_aprs` | ESP32-S3 | SX1262 (1 W) | onboard GNSS | SH1106 OLED | WiFi + NimBLE |
 | `lilygo_t3_433_aprs` | ESP32 | SX1278 | None | SSD1306 OLED | WiFi + NimBLE |
 | `LoRanger_V1` | ESP32-S3 | SX1262 (E22-400M30S) | ATGM336H (onboard) | None (headless) | WiFi + NimBLE |
 
-Capability flags (defined per environment in `common_settings.ini`): `HAS_WIFI`, `HAS_NIMBLE`, `HAS_WEB_UI`, `HAS_DISPLAY`, `HAS_BT_CLASSIC`, `HAS_TFT_ST7789`. Platform macros: `HELTEC_T114`, `HELTEC_V3_433_APRS`, `TTGO_T_Beam_V1_2_433_APRS`, `LORANGER_V1`.
+Capability flags (defined per environment in `common_settings.ini`): `HAS_WIFI`, `HAS_NIMBLE`, `HAS_WEB_UI`, `HAS_DISPLAY`, `HAS_BT_CLASSIC`, `HAS_TFT_ST7789`. Platform macros: `HELTEC_T114`, `HELTEC_V3_433_APRS`, `TTGO_T_Beam_V1_2_433_APRS`, `TTGO_T_BEAM_1W`, `LORANGER_V1`.
 
 ## Architecture
 
@@ -75,8 +76,9 @@ Runtime config is stored as `tracker_conf.json` on the filesystem. Three interfa
 | `src/configuration.cpp` | JSON config load/save, struct definitions, first-boot defaults |
 | `src/lora_utils.cpp` | RadioLib wrapper; TX/RX; FCC TX gate (blocks if callsign is NOCALL) |
 | `src/station_utils.cpp` | Beacon/status packet generation; Mic-E encoding; tactical objects |
-| `src/smartbeacon_utils.cpp` | SmartBeacon interval calculation; 4 profiles (Runner/Bike/Car/Custom) |
+| `src/smartbeacon_utils.cpp` | SmartBeacon interval calculation; 5 profiles (Runner/Bike/Car/Jetboat/Custom) |
 | `src/digi_utils.cpp` | WIDE1-1/WIDE2 digipeating; 25-slot djb2 hash dedup (30s TTL) |
+| `src/query_utils.cpp` | APRS station capability query parsing/dispatch (?APRSD, ?PING?, etc.); also surfaces the Msg: display indicator |
 | `src/display.cpp` | SSD1306 OLED + ST7789 TFT rendering; eco-mode timeout |
 | `src/gps_utils.cpp` | TinyGPSPlus parser; GPS_INTERNAL/GPS_FIXED/GPS_NONE sources |
 | `src/wifi_utils.cpp` | WiFi AP + STA management |

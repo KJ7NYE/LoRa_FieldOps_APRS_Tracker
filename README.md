@@ -74,6 +74,7 @@ Any role can also digipeat simultaneously. The digipeater includes a 30-second h
 - **Digipeater deduplication** — 25-slot djb2 hash ring, 30 s TTL prevents duplicate relays
 - **6-character Maidenhead grid square** — displayed on TFT (format: `AA00aa`)
 - **APRS station capability queries** — responds to directed and undirected queries from any APRS tool; see [APRS Station Queries](#aprs-station-queries)
+- **PHG (Power-Height-Gain) beaconing** — optional uncompressed position beacon advertising fixed-station RF capability, sent on its own timer
 
 ### Connectivity
 - **USB serial KISS TNC** — default mode at 115200 baud; compatible with APRSDroid, Xastir, Direwolf
@@ -91,15 +92,17 @@ USB serial operates in three modes, switchable at runtime without reconnecting:
 Type `setup` or `log` over serial to switch; any mode returns to KISS on disconnect or reboot.
 
 ### Configuration
-- **Web UI** — served over WiFi AP (hold USR button ≥8 s while running, or callsign = NOCALL-7 on first boot); full configuration via browser
+- **Web UI** — served over WiFi AP (hold USR button ≥8 s while running, or callsign = NOCALL-7 on first boot); full configuration via browser, plus OTA firmware update, JSON config backup/restore, and a live firmware log viewer
 - **Serial config tool** (`serial_config.html`) — standalone HTML page using the Web Serial API; works in Chrome/Edge 89+; no server required
-- **Serial CLI** — `setup` → interactive command line with `help`, `show`, `save`, `reboot`
-- **JSON config file** — `tracker_conf.json` on LittleFS/SPIFFS; importable/exportable via serial config tool
+- **Serial CLI** — `setup` → interactive command line with `help`, `show`, `save`, `reboot`; see [Serial CLI Reference](#serial-cli-reference) below and [SERIAL_SETUP.md](SERIAL_SETUP.md) for the full command set
+- **JSON config file** — `tracker_conf.json` on LittleFS/SPIFFS; importable/exportable via serial config tool or the serial CLI's `export`/`import` commands
 
 ### Display
 - **TFT (T114)** — 240×135 ST7789; tactical or callsign large header, 5 body lines, TX overlay, eco mode backlight timeout
 - **OLED (V3/T-Beam/T3)** — 128×64; callsign header, role+battery, last-heard station
 - **Tactical callsign** — when set, shown as the large primary identifier; RF callsign shown smaller below
+- **"Last:" heard-station line** — shows the most recently heard station's callsign-SSID, or the reported object's name instead when the packet is an APRS Object Report
+- **"Msg:" received-message indicator** — flashes on the T114's bottom row for any addressed or broadcast message (a query like `?PING?` or a plain free-text message); persists until the next received packet updates the heard-station line
 - **Display eco mode** — configurable timeout; wakes on button press, packet RX, or TX
 - **LED indicator** — heartbeat (50 ms/1.5 s) + TX/RX flash; can be disabled in config
 
@@ -186,12 +189,12 @@ Alternatively, use the serial config tool:
 | Setting | Description |
 |---|---|
 | Callsign | Your amateur radio callsign with SSID (e.g., `KJ7NYE-9`) |
-| Tactical callsign | Short event/role identifier (≤9 chars); shown large on display when set |
+| Tactical callsign | Short event/role identifier (≤9 chars); shown large on display when set. Also switches beacon TX from a position report to an APRS Object Report using this name as the object label — the AX.25 source callsign stays your licensed call. Empty value reverts to a normal position report. |
 | Symbol | APRS symbol code (e.g., `>` = car, `[` = runner) |
 | Overlay | Symbol table (`/` = primary, `\` = alternate, or overlay letter) |
 | Comment | Appended to beacon packet every N beacons |
 | Status | Status text sent on long button press |
-| SmartBeacon | Adaptive rate based on speed/heading; profiles: Runner, Bike, Car, Custom |
+| SmartBeacon | Adaptive rate based on speed/heading; profiles: Runner, Bike, Car, Jetboat, Custom |
 | Beacon TX path | `WIDE1-1` (1 hop) or `WIDE1-1,WIDE2-1` (2 hops) |
 | Non-smart rate | Fallback interval (minutes) when SmartBeacon is disabled |
 
@@ -211,6 +214,13 @@ Alternatively, use the serial config tool:
 | Rotate 180° | Flip display for reversed mounting |
 | LED indicator | Enable/disable the onboard status LED |
 
+### PHG (fixed-station beaconing)
+| Setting | Description |
+|---|---|
+| Enabled | Send an uncompressed position beacon with a PHG extension on its own timer |
+| Power / Height / Gain / Directivity | PHG digits (0-9 each) encoded into the beacon per APRS spec |
+| Beacon rate | Interval between PHG beacons |
+
 ### WiFi (iGate/AP)
 | Setting | Description |
 |---|---|
@@ -225,45 +235,64 @@ Alternatively, use the serial config tool:
 
 ## Serial CLI Reference
 
-Connect USB serial at 115200 baud, then type `setup` to enter the CLI.
+Connect USB serial at 115200 baud, then type `setup` to enter the CLI. This is an abbreviated quick reference — see [SERIAL_SETUP.md](SERIAL_SETUP.md) for the full command list with descriptions, behavior notes, and example sessions.
 
 ```
 help                              show all commands
 show [section]                    show current config (all or specific section)
+show secrets                      toggle masked password display
 save                              write config to flash
 reboot                            reboot device
 discard                           discard unsaved changes
 export                            print full config as JSON (copy/paste to save)
-import                            paste JSON config (ends with Ctrl+Z or empty line)
+import                            paste JSON config (ends on balanced braces)
+format YES-ERASE-ALL              wipe filesystem, reboot to defaults
+otadfu                            enter BLE OTA DFU mode (nRF52 only)
+version                           print firmware version string
 
 -- beacons --
 beacon callsign <CALL-SSID>
-beacon symbol <c>          overlay <c>          micE <0..7>
+beacon symbol <c>          overlay <c>          mice <0..7>
 beacon comment <text>      status <text>        label <text>
 beacon tactical <text>     (≤9 chars)
 beacon smart on|off
-beacon smartset <0..3>     (0=Runner 1=Bike 2=Car 3=Custom)
+beacon smartset <0..4>     (0=Runner 1=Bike 2=Car 3=Jetboat 4=Custom)
 beaconpath <path>
-
--- display --
-display eco|turn180|led on|off
-display timeout <sec>
+tx comment|status          send position/status beacon now (timer unchanged)
 
 -- role --
 role set tracker|igate|digipeater
 role gps internal|fixed|none
+fixed latitude <dd>    longitude <dd>    elevation <m>
 digi off|wide1|wide1+wide2
 
 -- network --
 wifista on|off    ssid <ssid>    password <pw>
 aprsiss server <host>    port <n>    passcode <code>    filter <f>
 tcpkiss port <n>
+wifi password <text>
 
 -- bluetooth --
 bt on|off    name <device-name>
 
 -- lora --
 lora freq <hz>    sf <7..12>    bw <hz>    cr <5..8>    power <dbm>
+
+-- display --
+display eco|turn180|led on|off
+display timeout <sec>
+
+-- PHG beaconing --
+phg show                          show current PHG settings
+phg on|off                        enable/disable PHG beacon
+phg power <0..9>    height <0..9>    gain <0..9>    dir <0..9>
+phg rate <min>                    interval between PHG beacons
+
+-- misc --
+gps read                          print current GPS position
+sendspeed on|off    sendalt on|off
+nonsmartrate <min>
+commentafter <n>
 
 -- serial mode --
 log [off|error|warn|info|debug]   switch to log monitor mode
@@ -331,9 +360,11 @@ All device roles (Tracker, iGate, Digipeater) respond to APRS station capability
 
 Duplicate queries from the same station are suppressed for 60 seconds. If the incoming message includes a sequence number (`{NNN}`), an ACK is sent before the response.
 
+Directed queries are also answered when addressed to the configured **tactical callsign** (object name), not just the device's real callsign — `?APRSP`/`?APRS?` addressed to the tactical name reply with the Object Report.
+
 ### Directed queries
 
-Send as an APRS message addressed to the device's callsign:
+Send as an APRS message addressed to the device's callsign (or its tactical callsign, if set):
 
 | Query | Response |
 |---|---|

@@ -16,6 +16,8 @@ jobs:
                   chip: esp32s3
                 - name: tbeam_433_aprs
                   chip: esp32
+                - name: tbeam_433_1w_aprs
+                  chip: esp32s3
                 - name: lilygo_t3_433_aprs
                   chip: esp32
                 - name: LoRanger_V1
