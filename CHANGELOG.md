@@ -9,6 +9,17 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-07-02 — Answer queries addressed to the tactical object
+
+APRS station capability queries (see 2026-06-15 entry below) are now also recognized when addressed to the configured tactical object name (`beacons.0.tacticalCallsign`), not just the device's real callsign. `?APRSP` / `?APRS?` addressed to the tactical name reply with the Object Report (as already emitted by `sendBeacon()` when a tactical name is set); all other directed queries (`?APRSD ?APRSH ?APRSL ?APRSS ?APRST ?APRSV ?PING? ?VER`) reply the same way they do for the real callsign. The digipeater's own-address guard was extended to match, so messages addressed to the tactical object also aren't needlessly re-relayed.
+
+Files changed:
+
+- [src/query_utils.cpp](src/query_utils.cpp), [include/query_utils.h](include/query_utils.h) — addressee routing also matches the configured tactical object name
+- [src/digi_utils.cpp](src/digi_utils.cpp) — same-station relay guard extended to the tactical object name
+
+---
+
 ## 2026-06-15 — Add APRS station capability query support
 
 All device roles (Tracker, iGate, Digipeater) now respond to APRS station capability queries (APRS 1.01 §13). Queries arrive as directed APRS message packets addressed to the device's own callsign, or as undirected broadcasts to the `APRS` / `IGATE` symbolic addresses. Query keywords are matched case-insensitively. Duplicate queries from the same sender are suppressed for 60 seconds. Incoming messages with a sequence number receive an ACK before the response.

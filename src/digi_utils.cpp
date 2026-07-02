@@ -88,11 +88,14 @@ namespace DIGI_Utils {
 
         // Guard: don't relay message packets addressed to us — prevents IS→RF→IS loops
         // and ensures our own query responses are not re-digipeated by ourselves.
+        // "Us" includes the configured tactical object name, if set.
         int dcIdx = packet.indexOf("::");
         if (dcIdx > 0) {
             String addressee = packet.substring(dcIdx + 2, dcIdx + 11);
             addressee.trim();
-            if (addressee == myCall) return;
+            String tactical = Config.beacons[0].tacticalCallsign;
+            tactical.trim();
+            if (addressee == myCall || (tactical.length() > 0 && addressee == tactical)) return;
         }
 
         // Dedup: skip if we've repeated this same payload within the TTL window.

@@ -1,7 +1,8 @@
 /* query_utils.cpp — APRS station capability query handler.
  *
  * Supported queries (APRS 1.01 §13):
- *   Directed (addressed to our callsign):
+ *   Directed (addressed to our callsign, or to the configured tactical
+ *   object name if one is set):
  *     ?APRSD  ?APRSH <CALL>  ?APRSL  ?APRSP  ?APRSS  ?APRST  ?APRSV
  *     ?PING?  ?VER
  *   Undirected (addressed to "APRS"):
@@ -99,9 +100,15 @@ namespace QUERY_Utils {
         if (arrowIdx <= 0) return;
         String sender = rawPacket.substring(0, arrowIdx);
 
-        // Route: addressed to us directly, or to the broadcast aliases.
+        // Route: addressed to us directly (real callsign or tactical object
+        // name, if configured), or to the broadcast aliases.
         const String& myCall = Config.beacons[0].callsign;
-        bool toUs    = (addressee == myCall);
+        String tactical = Config.beacons[0].tacticalCallsign;
+        tactical.trim();
+        tactical.toUpperCase();
+
+        bool toUs    = (addressee == myCall) ||
+                       (tactical.length() > 0 && addressee == tactical);
         bool toAPRS  = (addressee == "APRS");
         bool toIGATE = (addressee == "IGATE");
 

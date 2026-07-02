@@ -7,7 +7,8 @@
 namespace QUERY_Utils {
 
     // Inspect a received raw AX.25 packet string and respond to APRS station
-    // capability queries directed at our callsign or broadcast to APRS/IGATE.
+    // capability queries directed at our callsign (or the configured tactical
+    // object name, if set) or broadcast to APRS/IGATE.
     //
     // Handles: ?APRS? ?APRSD ?APRSH ?APRSL ?APRSP ?APRSS ?APRST ?APRSV
     //          ?PING? ?VER ?IGATE?
