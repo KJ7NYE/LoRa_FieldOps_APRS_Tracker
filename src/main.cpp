@@ -239,6 +239,11 @@ void loop() {
         displayActivity();   // incoming packet wakes the display
         String packet = rx.text.substring(3);   // strip 3-byte RSSI prefix
 
+        // Update heard-station log first: clears any stale "Msg:" display
+        // indicator from a prior packet before QUERY_Utils (below) can set a
+        // fresh one for this packet, so it persists until the next RX event.
+        STATION_Utils::updateLastHeard(packet);
+
         // Digipeating (any role, controlled by digiMode config)
         DIGI_Utils::processLoRaPacket(packet);
 
@@ -269,8 +274,6 @@ void loop() {
 
         // Respond to directed and undirected APRS capability queries.
         QUERY_Utils::processLoRaPacket(packet);
-
-        STATION_Utils::updateLastHeard(packet);
     }
 
     // ── BLE / BT inbound (KISS TX) ──────────────────────────────────────
@@ -444,9 +447,21 @@ void loop() {
             line5 = "Up " + String(upSec / 3600) + "h" + String((upSec % 3600) / 60) + "m";
         }
 
-        // ── Line 6: last heard station ───────────────────────────────────
-        String lastRx = STATION_Utils::getLastHeardSummary();
-        String line6 = lastRx.length() > 0 ? "Last: " + lastRx : "";
+        // ── Line 6: last heard station, or a pending "Msg:" indicator ─────
+        // The message indicator (set by QUERY_Utils::processLoRaPacket() for
+        // any addressed/broadcast packet) persists until the next RX event
+        // updates the heard log (see STATION_Utils::updateLastHeard()).
+        String line6;
+        String pendingMsg = STATION_Utils::getPendingMessage();
+        if (pendingMsg.length() > 0) {
+            // ~20 chars fit the T114 row at text size 2 (12px/char over 240px).
+            String text = pendingMsg;
+            if (text.length() > 12) text = text.substring(0, 12) + "...";
+            line6 = "Msg: " + text;
+        } else {
+            String lastRx = STATION_Utils::getLastHeardSummary();
+            line6 = lastRx.length() > 0 ? "Last: " + lastRx : "";
+        }
 
         displayStatus(callsign, tactical, line2, line3, line4, line5, line6);
     }

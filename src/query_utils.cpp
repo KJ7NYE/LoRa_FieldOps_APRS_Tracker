@@ -114,6 +114,20 @@ namespace QUERY_Utils {
 
         if (!toUs && !toAPRS && !toIGATE) return;
 
+        // Surface the message text on the status display (as a "Msg:"
+        // indicator) for any addressed/broadcast packet that reaches this
+        // point, whether it turns out to be a query or a plain message.
+        // Persists until the next RX event (see STATION_Utils::updateLastHeard()).
+        {
+            String displayText = msgPayload;
+            int msgBrace = displayText.indexOf('{');
+            if (msgBrace >= 0) displayText = displayText.substring(0, msgBrace);
+            displayText.trim();
+            if (displayText.length() > 0) {
+                STATION_Utils::setPendingMessage(displayText);
+            }
+        }
+
         // Must be a query.
         if (!msgPayload.startsWith("?")) return;
 

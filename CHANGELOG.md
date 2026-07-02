@@ -9,6 +9,18 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-07-02 — Show object names on "Last:" and a "Msg:" received indicator
+
+Two status-display improvements. First, when the most recently heard packet is an APRS Object Report (`;OBJECTNAME*...`), the "Last:" line now shows the reported object's name instead of the transmitting station's callsign-SSID — the `?APRSD`/`?APRSH`/`?APRSL` heard-station log still tracks the real callsign, only the display summary changed. Second, any addressed or broadcast message packet (a query like `?PING?` or a plain free-text message) now flashes a `Msg: <text>` indicator on the T114's bottom display row; it stays up until the next RX event refreshes the heard-station log, rather than on a fixed timer.
+
+Files changed:
+
+- [src/station_utils.cpp](src/station_utils.cpp), [include/station_utils.h](include/station_utils.h) — object-name-aware `updateLastHeard()`; new `setPendingMessage()`/`getPendingMessage()` transient message state
+- [src/query_utils.cpp](src/query_utils.cpp) — captures addressed message text into the pending-message display state
+- [src/main.cpp](src/main.cpp) — `updateLastHeard()` now runs before digi/forwarding/query dispatch each RX cycle; line6 construction prefers a pending message over the last-heard summary
+
+---
+
 ## 2026-07-02 — Answer queries addressed to the tactical object
 
 APRS station capability queries (see 2026-06-15 entry below) are now also recognized when addressed to the configured tactical object name (`beacons.0.tacticalCallsign`), not just the device's real callsign. `?APRSP` / `?APRS?` addressed to the tactical name reply with the Object Report (as already emitted by `sendBeacon()` when a tactical name is set); all other directed queries (`?APRSD ?APRSH ?APRSL ?APRSS ?APRST ?APRSV ?PING? ?VER`) reply the same way they do for the real callsign. The digipeater's own-address guard was extended to match, so messages addressed to the tactical object also aren't needlessly re-relayed.

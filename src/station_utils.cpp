@@ -89,14 +89,44 @@ namespace STATION_Utils {
     static uint8_t    heardCount = 0;
     static String     lastHeardCallsign = "";
 
+    // Transient "message received" indicator for the status display. Set by
+    // QUERY_Utils::processLoRaPacket() for any addressed/broadcast message
+    // packet (query or free text); cleared at the top of updateLastHeard()
+    // so it persists only until the next RX event, not on a fixed timer.
+    static String     pendingMessageText = "";
+
+    void setPendingMessage(const String& text) {
+        pendingMessageText = text;
+    }
+
+    String getPendingMessage() {
+        return pendingMessageText;
+    }
+
     // Accepts the full raw AX.25 packet string: "SENDER>DEST,PATH:payload"
     void updateLastHeard(const String& rawPacket) {
+        // Any new RX event supersedes a previously pending Msg: indicator —
+        // QUERY_Utils::processLoRaPacket() (called after this) will set a
+        // fresh one if this packet is itself an addressed message.
+        pendingMessageText = "";
+
         int arrowIdx = rawPacket.indexOf('>');
         if (arrowIdx <= 0) return;
 
         String sender = rawPacket.substring(0, arrowIdx);
         if (sender.length() == 0) return;
-        lastHeardCallsign = sender;
+
+        // Object Reports (info field DTI ';', see APRSPacketLib::generateObjectPacket)
+        // carry the reported object's name, not the transmitting station's callsign.
+        // Show the object name on "Last:" instead of the sender's callsign-SSID.
+        String displayName = sender;
+        int infoColon = rawPacket.indexOf(':', arrowIdx);
+        if (infoColon > 0 && rawPacket.charAt(infoColon + 1) == ';') {
+            String objName = rawPacket.substring(infoColon + 2, infoColon + 11);  // 9-char field
+            objName.trim();
+            if (objName.length() > 0) displayName = objName;
+        }
+        lastHeardCallsign = displayName;
 
         // Extract path segment (between first ',' and ':') to check for digi hops.
         // A '*' suffix on any path element means the packet was repeated by a digi.
