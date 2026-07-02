@@ -13,8 +13,12 @@ namespace QUERY_Utils {
     // Handles: ?APRS? ?APRSD ?APRSH ?APRSL ?APRSP ?APRSS ?APRST ?APRSV
     //          ?PING? ?VER ?IGATE?
     //
-    // Responses are queued via STATION_Utils::addToOutputPacketBuffer().
-    // Duplicate queries from the same sender are suppressed for 60 s.
+    // Also ACKs plain (non-query) APRS messages addressed to our callsign or
+    // tactical name — no automated reply, just the ack — since the tracker
+    // cannot assume a KISS client is attached to do this instead.
+    //
+    // Responses/acks are queued via STATION_Utils::addToOutputPacketBuffer().
+    // Duplicate queries/messages from the same sender are suppressed for 60 s.
     void processLoRaPacket(const String& rawPacket);
 
 }

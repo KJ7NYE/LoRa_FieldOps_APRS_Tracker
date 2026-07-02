@@ -362,6 +362,8 @@ Duplicate queries from the same station are suppressed for 60 seconds. If the in
 
 Directed queries are also answered when addressed to the configured **tactical callsign** (object name), not just the device's real callsign — `?APRSP`/`?APRS?` addressed to the tactical name reply with the Object Report.
 
+**Plain messages are ACKed too.** A free-text APRS message (not a query) addressed to the device's callsign or tactical name gets an ACK if it carries a sequence number — no automated reply, just the ack. The tracker sends this itself rather than relying on an attached KISS client, since it's commonly deployed with no client attached at all.
+
 ### Directed queries
 
 Send as an APRS message addressed to the device's callsign (or its tactical callsign, if set):

@@ -9,6 +9,17 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-07-02 — ACK plain messages, not just queries
+
+Previously only APRS capability queries (`?PING?`, `?APRSD`, etc.) got an ACK from the firmware — a plain free-text message addressed to the tracker's callsign or tactical name was displayed (via the "Msg:" indicator) but never acked, leaving the sender unsure whether it was received. The tracker now ACKs any addressed message that carries a sequence number, whether or not it's a query, and does so unconditionally rather than assuming an attached KISS client (phone app, TNC software) will handle it — the common deployment (Tracker/iGate/Digipeater in the field) has no client attached at all. No automated reply is generated for free text, only the ack; duplicate messages from the same sender within 60 s are suppressed the same way duplicate queries already were.
+
+Files changed:
+
+- [src/query_utils.cpp](src/query_utils.cpp), [include/query_utils.h](include/query_utils.h) — ACK plain messages addressed to us, independent of the existing query-dispatch path
+- [README.md](README.md) — document the new ACK behavior in the APRS Station Queries section
+
+---
+
 ## 2026-07-02 — Documentation sync ahead of release
 
 Brought README.md, CLAUDE.md, SERIAL_SETUP.md, and NRF52_PORT_NOTES.md in line with the current codebase, verified directly against source rather than against each other. README gained the Jetboat SmartBeacon profile, PHG (Power-Height-Gain) beaconing, tactical-object query routing, and the "Msg:"/object-name-"Last:" display behavior, plus a link to SERIAL_SETUP.md. CLAUDE.md picked up the missing `tbeam_433_1w_aprs` environment and a `query_utils.cpp` row in the source file map, and corrected a stale `build.yml` CI filename reference. SERIAL_SETUP.md had a substantial correction pass: it documented a multi-beacon, multi-region-preset, `notif`/`telem`/`winlink` command architecture that doesn't exist in this fork's single-beacon `serial_setup.cpp` — the Command Reference, Behavior Notes, and Config Field Map sections were rebuilt directly from the actual command dispatch table. NRF52_PORT_NOTES.md, a historical design/handoff doc, got a full accuracy pass: removed a "notification subsystem" pin-conflict section describing config fields that never existed in this repository's history, corrected claims that the T114 TFT uses software SPI (it uses a second hardware SPI peripheral), moved already-shipped "T114 hardware glue" and "hardware SPI" items out of Future PRs, and fixed stale `heltec_wireless_tracker`/`LoRa_APRS_Tracker.cpp` references to their current names.
