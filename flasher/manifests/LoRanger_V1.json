@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 KJ7NYE LoRanger V1",
-  "version": "v1.1.2",
+  "version": "V1.1.3",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
