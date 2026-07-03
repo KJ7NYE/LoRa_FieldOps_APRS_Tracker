@@ -1,4 +1,4 @@
-/* query_utils.cpp — APRS station capability query handler.
+/* query_utils.cpp — APRS station capability query and message handler.
  *
  * Supported queries (APRS 1.01 §13):
  *   Directed (addressed to our callsign, or to the configured tactical
@@ -10,9 +10,15 @@
  *   iGate query (addressed to "IGATE", iGate mode only):
  *     ?IGATE?
  *
- * Responses are queued through addToOutputPacketBuffer() so the
+ * Plain (non-query) APRS messages addressed to our callsign or tactical
+ * name are ACKed here too, independent of any attached KISS client — the
+ * tracker is often deployed with no client attached at all, so it must
+ * not rely on one to satisfy the sender's ack expectation. No automated
+ * reply is generated for free text, only the ack.
+ *
+ * Responses/acks are queued through addToOutputPacketBuffer() so the
  * 200 ms inter-packet gap is respected and TX does not block the main loop.
- * Duplicate queries from the same sender are suppressed for 60 s.
+ * Duplicate queries/messages from the same sender are suppressed for 60 s.
  */
 
 #include <APRSPacketLib.h>
@@ -128,8 +134,35 @@ namespace QUERY_Utils {
             }
         }
 
-        // Must be a query.
-        if (!msgPayload.startsWith("?")) return;
+        // Plain (non-query) message: ACK it if it carries a sequence number,
+        // then stop — free-text messages get no automated reply, only
+        // capability queries do below. The tracker acks on its own rather
+        // than relying on an attached KISS client, since the common
+        // deployment (Tracker/iGate/Digipeater in the field) has no client
+        // attached at all. Only meaningful when addressed directly to us;
+        // the broadcast aliases (APRS/IGATE) are for queries, not messages.
+        if (!msgPayload.startsWith("?")) {
+            if (!toUs) return;
+
+            String text = msgPayload;
+            int brace = text.indexOf('{');
+            if (brace >= 0) text = text.substring(0, brace);
+            text.trim();
+
+            // Rate-limit: ignore duplicate messages from the same sender.
+            if (!queryDedup.isNew(sender, text)) return;
+
+            String msgNo = extractMsgNo(msgPayload);
+            if (msgNo.length() > 0) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO,
+                    "Query", "Message from %s, ACKed (msg# %s)", sender.c_str(), msgNo.c_str());
+                STATION_Utils::addToOutputPacketBuffer(buildAck(sender, msgNo));
+            } else {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO,
+                    "Query", "Message from %s (no msg#, not acked)", sender.c_str());
+            }
+            return;
+        }
 
         // Strip message number before matching query keyword, then normalise to
         // uppercase so matching is case-insensitive (?aprsv == ?APRSV, etc.).

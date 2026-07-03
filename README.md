@@ -352,6 +352,19 @@ SmartBeacon adjusts the beacon interval dynamically:
 
 Heading changes above `turnMinDeg` threshold trigger an immediate beacon regardless of time elapsed.
 
+### Built-in profiles
+
+Four fixed presets are built in, selected via `beacon smartset <0..3>`:
+
+| Profile | Slow Rate | Slow Speed | Fast Rate | Fast Speed | Min Turn Angle | Turn Slope |
+|---|---|---|---|---|---|---|
+| **0 — Runner** | 90 s | 5 km/h | 45 s | 18 km/h | 12° | 60 |
+| **1 — Bike** | 120 s | 5 km/h | 45 s | 50 km/h | 12° | 60 |
+| **2 — Car** | 90 s | 10 km/h | 36 s | 97 km/h | 10° | 80 |
+| **3 — Jetboat** | 60 s | 30 km/h | 10 s | 97 km/h | 5° | 150 |
+
+A 5th profile, **Custom** (`smartset 4`), is fully user-editable rather than a fixed preset — see [SERIAL_SETUP.md's SmartBeacon Custom Profile section](SERIAL_SETUP.md#smartbeacon-custom-profile) for its tuning commands. Its out-of-the-box defaults are bike-like (120 s / 5 km/h / 60 s / 40 km/h / 12° / 60).
+
 ---
 
 ## APRS Station Queries
@@ -361,6 +374,8 @@ All device roles (Tracker, iGate, Digipeater) respond to APRS station capability
 Duplicate queries from the same station are suppressed for 60 seconds. If the incoming message includes a sequence number (`{NNN}`), an ACK is sent before the response.
 
 Directed queries are also answered when addressed to the configured **tactical callsign** (object name), not just the device's real callsign — `?APRSP`/`?APRS?` addressed to the tactical name reply with the Object Report.
+
+**Plain messages are ACKed too.** A free-text APRS message (not a query) addressed to the device's callsign or tactical name gets an ACK if it carries a sequence number — no automated reply, just the ack. The tracker sends this itself rather than relying on an attached KISS client, since it's commonly deployed with no client attached at all.
 
 ### Directed queries
 
