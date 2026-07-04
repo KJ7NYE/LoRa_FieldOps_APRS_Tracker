@@ -26,7 +26,6 @@
 #include "station_utils.h"
 #include "led_utils.h"
 #include "device_role.h"
-#include "kiss_utils.h"
 #include "digi_utils.h"
 #include "query_utils.h"
 #include "version.h"
@@ -34,7 +33,6 @@
 #include <WiFi.h>
 #include "wifi_utils.h"
 #include "aprs_is_utils.h"
-#include "tcp_kiss_utils.h"
 #endif
 #if defined(HAS_NIMBLE) || defined(ARDUINO_ARCH_NRF52)
 #include "ble_utils.h"
@@ -247,30 +245,15 @@ void loop() {
         // Digipeating (any role, controlled by digiMode config)
         DIGI_Utils::processLoRaPacket(packet);
 
-        // iGate upload + TCP KISS forward
+        // iGate upload (RX-only APRS-IS gating — inserts qAR/qAO gate path)
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) {
             APRS_IS_Utils::processLoRaPacket(packet);
         }
-        if (WIFI_Utils::isSTAConnected()) {
-            TCP_KISS_Utils::sendToClients(packet);
-        }
         #endif
 
-        // Serial KISS forward — always on in KISS mode
-        if (SERIAL_Setup::isKISSMode()) {
-            String kissFrame = KISS_Utils::encodeKISS(packet);
-            Serial.write((const uint8_t*)kissFrame.c_str(), kissFrame.length());
-        }
-
-        // BLE/BT KISS forward
-        if (Config.bluetooth.active && bluetoothConnected) {
-            #if defined(ARDUINO_ARCH_NRF52) || defined(HAS_NIMBLE)
-                BLE_Utils::sendToPhone(packet);
-            #elif defined(HAS_BT_CLASSIC)
-                BLUETOOTH_Utils::sendToPhone(packet);
-            #endif
-        }
+        // Mirror to every attached KISS transport (TCP/serial/BLE/BT)
+        STATION_Utils::forwardToKissClients(packet);
 
         // Respond to directed and undirected APRS capability queries.
         QUERY_Utils::processLoRaPacket(packet);

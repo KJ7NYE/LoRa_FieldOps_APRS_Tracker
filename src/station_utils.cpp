@@ -22,11 +22,21 @@
 #endif
 #ifdef HAS_WIFI
 #include "aprs_is_utils.h"
+#include "wifi_utils.h"
+#include "tcp_kiss_utils.h"
+#endif
+#include "serial_setup.h"
+#if defined(HAS_NIMBLE) || defined(ARDUINO_ARCH_NRF52)
+#include "ble_utils.h"
+#endif
+#ifdef HAS_BT_CLASSIC
+#include "bluetooth_utils.h"
 #endif
 
 extern Configuration    Config;
 extern logging::Logger  logger;
 extern TinyGPSPlus      gps;
+extern bool             bluetoothConnected;
 
 // Declared in main.cpp
 extern bool             sendUpdate;
@@ -55,6 +65,29 @@ static constexpr uint32_t  OUT_DELAY_AFTER_ACK_MS = 2000;  // give receiver time
 static bool                lastOutWasAck = false;
 
 namespace STATION_Utils {
+
+    // Mirror a raw TNC2-format packet (no RSSI prefix) out to every attached
+    // KISS transport. Shared by the RX path (main.cpp) and the self-beacon
+    // send functions below, so a KISS host sees the device's own TX the same
+    // way it sees packets heard over RF.
+    void forwardToKissClients(const String& packet) {
+        #ifdef HAS_WIFI
+        if (WIFI_Utils::isSTAConnected()) {
+            TCP_KISS_Utils::sendToClients(packet);
+        }
+        #endif
+        if (SERIAL_Setup::isKISSMode()) {
+            String kissFrame = KISS_Utils::encodeKISS(packet);
+            Serial.write((const uint8_t*)kissFrame.c_str(), kissFrame.length());
+        }
+        if (Config.bluetooth.active && bluetoothConnected) {
+            #if defined(ARDUINO_ARCH_NRF52) || defined(HAS_NIMBLE)
+                BLE_Utils::sendToPhone(packet);
+            #elif defined(HAS_BT_CLASSIC)
+                BLUETOOTH_Utils::sendToPhone(packet);
+            #endif
+        }
+    }
 
     void addToOutputPacketBuffer(const String& packet) {
         outBuffer.push(packet);
@@ -318,6 +351,7 @@ namespace STATION_Utils {
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
         #endif
+        forwardToKissClients(packet);
 
         if (smartBeaconActive) {
             previousHeading = currentHeading;
@@ -352,6 +386,7 @@ namespace STATION_Utils {
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
         #endif
+        forwardToKissClients(packet);
         lastTxTime = millis();
         sendUpdate = false;   // prevent a pending auto-beacon from firing immediately after
     }
@@ -414,6 +449,7 @@ namespace STATION_Utils {
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
         #endif
+        forwardToKissClients(packet);
         // Update shared lastTxTime so the regular beacon timer is pushed out;
         // prevents a regular beacon from firing seconds after a PHG beacon.
         lastTxTime = millis();

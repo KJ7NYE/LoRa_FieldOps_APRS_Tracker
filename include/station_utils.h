@@ -6,6 +6,11 @@
 
 namespace STATION_Utils {
 
+    // Mirror a raw TNC2-format packet (no RSSI prefix) out to every attached KISS
+    // transport (TCP KISS, serial KISS, BLE/BT KISS). Used both for RX'd packets
+    // and for the device's own self-generated beacons.
+    void forwardToKissClients(const String& packet);
+
     // Send the device's own APRS position beacon via LoRa.
     // forceComment=true bypasses the every-N counter and always includes the comment.
     // Called by device_role.cpp on the beacon interval timer.
