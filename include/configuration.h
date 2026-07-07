@@ -121,6 +121,13 @@ public:
     uint16_t port;
     String  passcode;
     String  filter;
+    // Enables the IS->RF downlink (listenAPRSIS() in aprs_is_utils.cpp).
+    // Independent of passcode validity: an unverified passcode already blocks
+    // downlink (and degrades RF->IS uploads to qAO), so this is a separate,
+    // explicit on/off for the downlink direction rather than overloading the
+    // passcode field. Downlink is always restricted to messages addressed to
+    // a station heard directly on RF recently, regardless of this setting.
+    bool    downlinkEnabled;
 };
 
 class TCPKISS {

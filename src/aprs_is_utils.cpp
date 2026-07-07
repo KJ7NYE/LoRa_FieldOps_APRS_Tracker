@@ -14,6 +14,7 @@
 #include "dedup_utils.h"
 #include "configuration.h"
 #include "lora_utils.h"
+#include "station_utils.h"
 #include "display.h"
 #include "logger.h"
 #include "log_buffer.h"
@@ -209,6 +210,12 @@ namespace APRS_IS_Utils {
         LogBuffer::pushf(LogBuffer::TYPE_IGT, "IS: %s", uploadLine.c_str());
     }
 
+    // Stations heard directly (no digi hop) within this window are treated
+    // as "local" for downlink purposes — matches the APRS-IS IGate spec's
+    // heard-list requirement (typically <=30-60 min in real deployments).
+    static constexpr uint32_t HEARD_WINDOW_MS  = 30UL * 60UL * 1000UL;
+    static constexpr int      HEARD_WINDOW_MIN = 30;
+
     void listenAPRSIS() {
         if (!aprsIsClient.connected()) return;
 
@@ -219,8 +226,10 @@ namespace APRS_IS_Utils {
 
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS", "Rx: %s", line.c_str());
 
-            // Downlink: re-TX IS packets to LoRa RF when passcode is valid
-            if (!passcodeValid) continue;
+            // Downlink requires an explicit opt-in plus a validated passcode —
+            // an unverified login already degrades RF->IS uploads to qAO, so
+            // it must not be allowed to originate new RF traffic either.
+            if (!Config.aprsIS.downlinkEnabled || !passcodeValid) continue;
 
             // Filter out third-party or loopback packets.
             // qAR/qAO = originated from RF — don't re-gate back to RF (avoids IS→RF→IS loops).
@@ -229,18 +238,58 @@ namespace APRS_IS_Utils {
             if (line.indexOf(",qAR,")  != -1) continue;
             if (line.indexOf(",qAO,")  != -1) continue;
 
-            const String& callsign = Config.beacons[0].callsign;
-            String sender = line.substring(0, line.indexOf(">"));
-            if (sender == callsign) continue;   // own packet
+            int arrowIdx = line.indexOf(">");
+            if (arrowIdx <= 0) continue;
+            const String& myCall = Config.beacons[0].callsign;
+            String sender = line.substring(0, arrowIdx);
+            if (sender == myCall) continue;   // own packet
 
-            // Reformat for LoRa TX: strip any IS-injected path segments
-            int colonIdx = line.indexOf(":");
+            // Per the APRS-IS IGate spec, only gate directed messages (not
+            // general position/object/status traffic) from IS back to RF —
+            // gating everything is what caused RF stations to hear (and
+            // re-gate) our own beacon a second time.
+            int colonIdx = line.indexOf(":", arrowIdx);
             if (colonIdx < 3) continue;
-            String txPacket = sender + ">" + "APLRG1";
+            if (line.charAt(colonIdx + 1) != ':') continue;    // not a message packet
+            if (line.charAt(colonIdx + 11) != ':') continue;   // malformed addressee field
+
+            // Don't gate if the sender has itself just been heard on RF —
+            // it's already local, so relaying its own message back doesn't
+            // help and risks a loop.
+            int senderHeardMin = STATION_Utils::minutesSinceHeard(sender);
+            if (senderHeardMin >= 0 && senderHeardMin < HEARD_WINDOW_MIN) continue;
+
+            String addressee = line.substring(colonIdx + 2, colonIdx + 11);
+            addressee.trim();
+            addressee.toUpperCase();
+
+            // Only gate if the addressee has actually been heard directly on
+            // RF recently — otherwise there's no reason to believe the
+            // message can reach them at all.
+            if (!STATION_Utils::wasHeardDirect(addressee, HEARD_WINDOW_MS)) continue;
+
+            // Extract the original destination (TOCALL) for the third-party wrap.
+            int commaIdx = line.indexOf(",", arrowIdx);
+            String origToCall = (commaIdx > 0 && commaIdx < colonIdx)
+                ? line.substring(arrowIdx + 1, commaIdx)
+                : line.substring(arrowIdx + 1, colonIdx);
+
+            // Wrap in standard APRS third-party format so other igates that
+            // hear this retransmission recognize it already came from
+            // APRS-IS (the TCPIP marker) and don't gate it back to IS —
+            // this is what actually prevents the duplicate-log symptom.
+            String txPacket = myCall + ">APRS";
             if (Config.beaconPath.length() > 0) {
                 txPacket += ",";
                 txPacket += Config.beaconPath;
             }
+            txPacket += ":}";
+            txPacket += sender;
+            txPacket += ">";
+            txPacket += origToCall;
+            txPacket += ",TCPIP,";
+            txPacket += myCall;
+            txPacket += "*";
             txPacket += line.substring(colonIdx);
 
             LoRa_Utils::sendNewPacket(txPacket);

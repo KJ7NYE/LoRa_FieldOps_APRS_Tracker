@@ -1924,6 +1924,8 @@ function renderConfig() {
     body.appendChild(mkText('Passcode (override)', aprsIS.passcode, v => sendCmd(`aprsiss passcode ${v}`),
       { placeholder: 'auto (derived from callsign)' }));
     body.appendChild(mkText('Filter',   aprsIS.filter,   v => sendCmd(`aprsiss filter ${v}`)));
+    body.appendChild(mkBool('Gate messages from APRS-IS to RF', aprsIS.downlinkEnabled ?? true,
+      v => sendCmd(`aprsiss downlink ${boolStr(v)}`)));
 
     body.appendChild(mkGroupTitle('TCP KISS Server'));
     body.appendChild(mkNumber('Port', tcpKISS.port, v => sendCmd(`tcpkiss port ${v}`), { min:1, max:65535 }));

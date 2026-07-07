@@ -61,6 +61,12 @@ namespace STATION_Utils {
     // Returns elapsed minutes if callsign is in the heard log, -1 if not found.
     int minutesSinceHeard(const String& callsign);
 
+    // True if callsign was heard directly (no digi hop) on RF within the last
+    // maxAgeMs. Used by the APRS-IS IS->RF message downlink to confirm the
+    // addressee is actually within direct RF range before gating a message
+    // to it (see aprs_is_utils.cpp listenAPRSIS()).
+    bool wasHeardDirect(const String& callsign, uint32_t maxAgeMs);
+
     // Packet dedup (digi/iGate): true if this exact callsign+payload was seen
     // within the last ~30 seconds. Records the packet on first sight.
     bool isInHashBuffer(const String& callsign, const String& payload);

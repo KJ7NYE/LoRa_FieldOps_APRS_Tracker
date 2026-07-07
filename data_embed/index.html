@@ -606,6 +606,13 @@
                                                         <label class="form-label" for="aprsIS.filter">Filter</label>
                                                         <input type="text" class="form-control" id="aprsIS.filter" name="aprsIS.filter" />
                                                     </div>
+                                                    <div class="col-12">
+                                                        <div class="form-check form-switch mb-0">
+                                                            <input class="form-check-input" type="checkbox" id="aprsIS.downlinkEnabled" name="aprsIS.downlinkEnabled" />
+                                                            <label class="form-check-label" for="aprsIS.downlinkEnabled">Gate messages from APRS-IS to RF</label>
+                                                        </div>
+                                                        <div class="form-text">Only directed messages to a station heard directly on RF in the last 30 min are gated — never general position/object traffic.</div>
+                                                    </div>
                                                 </div>
                                             </div>
 

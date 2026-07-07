@@ -229,6 +229,16 @@ namespace STATION_Utils {
         return -1;
     }
 
+    bool wasHeardDirect(const String& callsign, uint32_t maxAgeMs) {
+        for (uint8_t i = 0; i < heardCount; i++) {
+            uint8_t idx = (heardHead + HEARD_SLOTS - 1 - i) % HEARD_SLOTS;
+            if (heardLog[idx].callsign == callsign) {
+                return heardLog[idx].isDirect && (millis() - heardLog[idx].timestamp) < maxAgeMs;
+            }
+        }
+        return false;
+    }
+
 
     // ── Hash-based dedup buffer ───────────────────────────────────────────────
     // 50-slot ring, 60 s TTL — see include/dedup_utils.h for implementation.

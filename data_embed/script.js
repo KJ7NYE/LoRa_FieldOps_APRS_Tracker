@@ -109,6 +109,7 @@ function loadSettings(s) {
     setVal('aprsIS.port',     ais.port     ?? 14580);
     setVal('aprsIS.passcode', ais.passcode ?? '');
     setVal('aprsIS.filter',   ais.filter   ?? 'r/0/0/0');
+    setVal('aprsIS.downlinkEnabled', ais.downlinkEnabled ?? true);
 
     const tk = s.tcpKISS ?? {};
     setVal('tcpKISS.enabled',       tk.enabled       ?? false);
