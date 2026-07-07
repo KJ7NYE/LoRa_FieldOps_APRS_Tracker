@@ -15,7 +15,7 @@ Derived from [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/Lo
 
 ## Install / Flash Firmware
 
-### ESP32 boards (Heltec V3, T-Beam, T-Beam 1W, T3, LoRanger V1)
+### ESP32 boards (Heltec V3.2, T-Beam, T-Beam 1W, T3, LoRanger V1)
 
 Two release assets are published per ESP32 board:
 
@@ -44,7 +44,7 @@ Two release assets are published per ESP32 board:
 Symptom: the board no longer boots into firmware — pressing RESET only produces
 `waiting for download` (or `boot:0x0 (DOWNLOAD(USB/UART0))`) on the serial console.
 
-Cause: on Heltec V3 and LoRanger V1, the USR button shares the ESP32-S3's GPIO0 BOOT
+Cause: on Heltec V3.2 and LoRanger V1, the USR button shares the ESP32-S3's GPIO0 BOOT
 strapping pin (see the [Button (USR)](#button-usr) section). If GPIO0 is held low
 at the moment of reset, the chip boots into the ROM bootloader instead of firmware.
 The most common trigger isn't the button itself — it's a serial monitor or terminal
@@ -79,7 +79,7 @@ Install explicitly.
 | Board | MCU | LoRa | GPS | Display | WiFi | BLE |
 |---|---|---|---|---|---|---|
 | **Heltec T114** | nRF52840 | SX1262 | Quectel L76K (onboard) | ST7789 1.14" TFT | — | ✅ BLE 5 |
-| **Heltec WiFi LoRa 32 V3** | ESP32-S3 | SX1262 | None (fixed position) | SSD1306/SH1106 OLED | ✅ | ✅ NimBLE |
+| **Heltec WiFi LoRa 32 V3.2** | ESP32-S3 | SX1262 | None (fixed position) | SSD1306/SH1106 OLED | ✅ | ✅ NimBLE |
 | **LilyGo T-Beam** | ESP32 | SX1278 | u-blox NEO-6M/M8N | SSD1306/SH1106 OLED | ✅ | ✅ NimBLE |
 | **LilyGo T-Beam 1W** | ESP32-S3 | SX1262 (1 W) | onboard GNSS (WAKE_UP) | SH1106 OLED | ✅ | ✅ NimBLE |
 | **LilyGo T3 V1.6** | ESP32 | SX1278 | None (fixed position) | SSD1306 OLED | ✅ | ✅ NimBLE |
@@ -194,7 +194,7 @@ pio run -e heltec_t114 -t uploadfs
 | Environment | Board |
 |---|---|
 | `heltec_t114` | Heltec T114 (nRF52840) |
-| `heltec_v3_433_aprs` | Heltec WiFi LoRa 32 V3 |
+| `heltec_v3_433_aprs` | Heltec WiFi LoRa 32 V3.2 |
 | `tbeam_433_aprs` | LilyGo T-Beam |
 | `tbeam_433_1w_aprs` | LilyGo T-Beam 1W |
 | `lilygo_t3_433_aprs` | LilyGo T3 V1.6 |

@@ -5,9 +5,9 @@
   "targets": [
     {
       "id": "heltec_v3_433_aprs",
-      "label": "Heltec WiFi LoRa 32 V3",
+      "label": "Heltec WiFi LoRa 32 V3.2",
       "chip": "ESP32-S3",
-      "description": "Heltec WiFi LoRa 32 V3 \u2014 ESP32-S3, SX1262, SSD1306 OLED, WiFi/BLE.",
+      "description": "Heltec WiFi LoRa 32 V3.2 \u2014 ESP32-S3, SX1262, SSD1306 OLED, WiFi/BLE.",
       "manifest": "heltec_v3_433_aprs.json",
       "update_manifest": "heltec_v3_433_aprs_update.json"
     },

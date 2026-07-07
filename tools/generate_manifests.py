@@ -19,9 +19,9 @@ base = "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware"
 ESP_TARGETS = [
     {
         "id":    "heltec_v3_433_aprs",
-        "label": "Heltec WiFi LoRa 32 V3",
+        "label": "Heltec WiFi LoRa 32 V3.2",
         "chip":  "ESP32-S3",
-        "desc":  "Heltec WiFi LoRa 32 V3 — ESP32-S3, SX1262, SSD1306 OLED, WiFi/BLE.",
+        "desc":  "Heltec WiFi LoRa 32 V3.2 — ESP32-S3, SX1262, SSD1306 OLED, WiFi/BLE.",
     },
     {
         "id":    "tbeam_433_aprs",
