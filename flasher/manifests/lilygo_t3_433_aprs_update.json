@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 LilyGo T3 (Firmware Update)",
-  "version": "v1.1.5",
+  "version": "v1.1.6",
   "builds": [
     {
       "chipFamily": "ESP32",
