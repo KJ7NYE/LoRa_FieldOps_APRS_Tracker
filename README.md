@@ -37,6 +37,43 @@ Two release assets are published per ESP32 board:
 
 ---
 
+## Troubleshooting
+
+### Device stuck in ROM download mode
+
+Symptom: the board no longer boots into firmware — pressing RESET only produces
+`waiting for download` (or `boot:0x0 (DOWNLOAD(USB/UART0))`) on the serial console.
+
+Cause: on Heltec V3 and LoRanger V1, the USR button shares the ESP32-S3's GPIO0 BOOT
+strapping pin (see the [Button (USR)](#button-usr) section). If GPIO0 is held low
+at the moment of reset, the chip boots into the ROM bootloader instead of firmware.
+The most common trigger isn't the button itself — it's a serial monitor or terminal
+(Arduino IDE, PlatformIO monitor, a `serial_config.html` browser tab, etc.) still
+holding an open connection to the board's native-USB port, whose RTS/DTR lines can
+force the same reset-to-bootloader sequence used for flashing.
+
+This is **not a hardware brick** — the chip is already sitting in exactly the state
+esptool needs to reflash it. To recover:
+
+1. Close every program and browser tab connected to the board's COM port.
+2. Unplug and replug the USB cable.
+3. Press RESET. It should boot into firmware normally.
+4. If it's still stuck in download mode after that, reflash it — use the
+   [web flasher](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/) or
+   `esptool.py` directly; the board is ready to accept a flash in this state.
+
+### Configuration reset after reflashing
+
+The web flasher's **Firmware Update** mode updates the application only and preserves
+your saved `tracker_conf.json`; **Fresh Install** writes the full factory image
+(bootloader + partitions + firmware + filesystem) and resets configuration to
+defaults. The flasher defaults to Firmware Update whenever an update-only image is
+available for your board — if you need to wipe configuration on purpose (e.g. a
+partition table change, or recovering a corrupted filesystem), switch to Fresh
+Install explicitly.
+
+---
+
 ## Supported Hardware
 
 | Board | MCU | LoRa | GPS | Display | WiFi | BLE |
