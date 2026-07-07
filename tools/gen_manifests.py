@@ -18,7 +18,7 @@ from datetime import date
 ESP32_TARGETS = [
     {
         "id":         "heltec_v3_433_aprs",
-        "label":      "Heltec WiFi LoRa 32 V3",
+        "label":      "Heltec WiFi LoRa 32 V3.2",
         "chip_family": "ESP32-S3",
         "description": "433 MHz iGate / Digipeater / Tracker — SSD1306 OLED, WiFi, BLE",
     },

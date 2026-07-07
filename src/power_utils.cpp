@@ -67,25 +67,28 @@ namespace POWER_Utils {
 
     #ifdef VEXT_CTRL
         void vext_ctrl_ON() {
-            // Heltec V3 family (incl. our 433-APRS variant): VEXT HIGH = peripherals ON
+            // Heltec V3 family: VEXT HIGH = peripherals ON
             #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || \
-                defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY) || \
-                defined(HELTEC_V3_433_APRS)
+                defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY)
                 digitalWrite(VEXT_CTRL, HIGH);
             #endif
-            // Heltec V3.2 family: VEXT LOW = peripherals ON (inverted polarity)
-            #if defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC)
+            // Heltec V3.2 family (incl. our 433-APRS variant, which only supports
+            // V3.2 hardware): VEXT LOW = peripherals ON (inverted polarity vs. V3).
+            // On true V3.2 silkscreen boards, driving this HIGH leaves the OLED
+            // rail permanently unpowered — display stays dark in every mode.
+            #if defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC) || \
+                defined(HELTEC_V3_433_APRS)
                 digitalWrite(VEXT_CTRL, LOW);
             #endif
         }
 
         void vext_ctrl_OFF() {
             #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || \
-                defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY) || \
-                defined(HELTEC_V3_433_APRS)
+                defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY)
                 digitalWrite(VEXT_CTRL, LOW);
             #endif
-            #if defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC)
+            #if defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC) || \
+                defined(HELTEC_V3_433_APRS)
                 digitalWrite(VEXT_CTRL, HIGH);
             #endif
         }

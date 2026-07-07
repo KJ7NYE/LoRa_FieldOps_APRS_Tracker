@@ -2,13 +2,18 @@
 #define BOARD_PINOUT_H_
 
 /*
- * Heltec WiFi LoRa 32 V3 (ESP32-S3) — 433 MHz APRS multi-role build.
+ * Heltec WiFi LoRa 32 V3.2 (ESP32-S3) — 433 MHz APRS multi-role build.
+ *
+ * Only V3.2 silkscreen boards are supported by this variant. V3.2 inverts
+ * the VEXT power-rail polarity vs. the original V3 (LOW = peripherals ON;
+ * see vext_ctrl_ON()/OFF() in power_utils.cpp) — flashing this firmware to
+ * a true V3 board will leave the OLED unpowered (permanently dark display).
  *
  * Hardware: SX1262 LoRa, OLED 128×64, WiFi, BLE — NO onboard GPS.
  * Default role: iGate or Digipeater with fixed position configured via web UI
  * or serial CLI ("role set igate / role gps fixed / fixed latitude ...").
  *
- * Pinout from Heltec datasheet and verified on production boards.
+ * Pinout from Heltec datasheet and verified on production V3.2 boards.
  */
 
     //  LoRa Radio: SX1262

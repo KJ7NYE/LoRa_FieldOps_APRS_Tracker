@@ -9,6 +9,21 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-07-07 — heltec_v3_433_aprs: fix permanently dark OLED by targeting V3.2 hardware only
+
+`vext_ctrl_ON()`/`OFF()` in `power_utils.cpp` drove `VEXT_CTRL` HIGH-for-on for `HELTEC_V3_433_APRS`, matching the original Heltec WiFi LoRa 32 V3 polarity. Heltec's V3.2 revision inverts this (LOW = peripherals on). On true V3.2 silkscreen boards — which is what's actually sold and what this variant now exclusively targets — the OLED's VEXT rail was never powered, so the display stayed dark in every mode (boot, running, TX) regardless of display/eco-mode/invert settings. Confirmed on two separate V3.2 units.
+
+Moved `HELTEC_V3_433_APRS` into the inverted-polarity branch alongside `HELTEC_V3_2_GPS`/`HELTEC_V3_2_TNC`. This firmware no longer supports original (non-.2) V3 boards for this target.
+
+Files changed:
+
+- [src/power_utils.cpp](src/power_utils.cpp) — invert VEXT polarity for `HELTEC_V3_433_APRS`
+- [variants/heltec_v3_433_aprs/board_pinout.h](variants/heltec_v3_433_aprs/board_pinout.h), [variants/heltec_v3_433_aprs/platformio.ini](variants/heltec_v3_433_aprs/platformio.ini) — document V3.2-only support
+- [README.md](README.md), [CLAUDE.md](CLAUDE.md) — rename board references from "V3" to "V3.2"
+- [tools/gen_manifests.py](tools/gen_manifests.py), [tools/generate_manifests.py](tools/generate_manifests.py), [flasher/manifests/targets.json](flasher/manifests/targets.json), [flasher/manifests/heltec_v3_433_aprs.json](flasher/manifests/heltec_v3_433_aprs.json), [flasher/manifests/heltec_v3_433_aprs_update.json](flasher/manifests/heltec_v3_433_aprs_update.json) — update flasher UI labels
+
+---
+
 ## 2026-07-02 — ACK plain messages, not just queries
 
 Previously only APRS capability queries (`?PING?`, `?APRSD`, etc.) got an ACK from the firmware — a plain free-text message addressed to the tracker's callsign or tactical name was displayed (via the "Msg:" indicator) but never acked, leaving the sender unsure whether it was received. The tracker now ACKs any addressed message that carries a sequence number, whether or not it's a query, and does so unconditionally rather than assuming an attached KISS client (phone app, TNC software) will handle it — the common deployment (Tracker/iGate/Digipeater in the field) has no client attached at all. No automated reply is generated for free text, only the ack; duplicate messages from the same sender within 60 s are suppressed the same way duplicate queries already were.
