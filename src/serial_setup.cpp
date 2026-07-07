@@ -23,7 +23,9 @@
 #include "station_utils.h"
 #include "version.h"
 #ifdef HAS_WIFI
+#include <vector>
 #include "aprs_is_utils.h"
+#include "wifi_utils.h"
 #endif
 
 extern Configuration        Config;
@@ -165,6 +167,8 @@ namespace SERIAL_Setup {
         Serial.println(F("  role gps <internal|fixed|none>"));
         Serial.println(F("  fixed latitude <dd.dddddd>  longitude <dd.dddddd>  elevation <m>"));
         Serial.println(F("  wifista on|off              ssid <text>            password <text>"));
+        Serial.println(F("  wifista scan                (2-4s blocking scan; lists nearby SSIDs)"));
+        Serial.println(F("  wifista status              (prints wifiSTA.connected=true/false)"));
         Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
         Serial.println(F("  aprsiss filter <filter>     aprsiss status"));
         Serial.println(F("  tcpkiss port <n>             (TCP KISS port, default 8001; server auto-starts with WiFi STA)"));
@@ -779,7 +783,7 @@ namespace SERIAL_Setup {
     }
 
     static void cmdWifiSta(String* tk, int n, const String& line) {
-        if (n < 2) { err("wifista <on|off|ssid|password>"); return; }
+        if (n < 2) { err("wifista <on|off|ssid|password|scan|status>"); return; }
         const String& sub = tk[1];
         if (sub == "on" || sub == "off" || sub == "true" || sub == "false") {
             applyBool(tk[1], Config.wifiSTA.enabled, "wifiSTA.enabled");
@@ -791,6 +795,32 @@ namespace SERIAL_Setup {
             if (n < 3) { err("wifista password <text>"); return; }
             Config.wifiSTA.password = restOfLine(line, 2);
             ok("wifiSTA.password updated");
+        } else if (sub == "scan") {
+            #ifdef HAS_WIFI
+                // BLOCKING: scanNetworks() stalls the entire main loop for
+                // ~2-4s (beacon TX, GPS, LoRa RX/TX, TCP KISS all pause) since
+                // SERIAL_Setup::loop() runs there. One-off, user-initiated,
+                // same order of magnitude as the existing blocking
+                // connectSTA() at boot (up to 10s).
+                std::vector<WIFI_Utils::ScanResult> results;
+                int found = WIFI_Utils::scanNetworks(results, 20);
+                Serial.println("wifiSTA.scan.count=" + String(found));
+                for (auto& r : results) {
+                    // key=value tokens, ssid= last (unbounded) so SSIDs
+                    // containing spaces aren't truncated by the parser.
+                    Serial.println("wifiSTA.scan: rssi=" + String(r.rssi) +
+                                    " secure=" + String(r.secure ? "1" : "0") +
+                                    " ssid=" + r.ssid);
+                }
+            #else
+                Serial.println("wifiSTA.scan.count=0");
+            #endif
+        } else if (sub == "status") {
+            #ifdef HAS_WIFI
+                Serial.println(WIFI_Utils::isSTAConnected() ? "wifiSTA.connected=true" : "wifiSTA.connected=false");
+            #else
+                Serial.println("wifiSTA.connected=false");
+            #endif
         } else {
             err("unknown wifista subcommand: " + sub);
         }

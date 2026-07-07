@@ -18,7 +18,9 @@
 
 #include <logger.h>
 #include <WiFi.h>
+#include <algorithm>
 #include "configuration.h"
+#include "wifi_utils.h"
 #include "web_utils.h"
 #include "display.h"
 #include "serial_setup.h"
@@ -40,6 +42,53 @@ namespace WIFI_Utils {
 
     bool isSTAConnected() {
         return WiFi.status() == WL_CONNECTED;
+    }
+
+    int scanNetworks(std::vector<ScanResult>& out, int maxResults) {
+        out.clear();
+
+        // Pure WIFI_AP mode cannot scan on ESP32 -- scanning requires STA to
+        // be enabled. If the config AP is currently hosting, promote to
+        // WIFI_AP_STA so the AP keeps running while we scan. Deliberately
+        // never demote back to WIFI_AP afterward: repeatedly switching modes
+        // on every scan is riskier (AP client drop, LWIP/AP state corruption)
+        // than just staying promoted -- mode resets naturally next boot via
+        // startAutoAP()'s WIFI_MODE_NULL reset.
+        wifi_mode_t mode = WiFi.getMode();
+        if (mode == WIFI_MODE_AP) {
+            WiFi.mode(WIFI_MODE_APSTA);
+        }
+
+        int n = WiFi.scanNetworks(false, false, false, 300);
+        if (n <= 0) {
+            WiFi.scanDelete();
+            return 0;
+        }
+
+        for (int i = 0; i < n; i++) {
+            String ssid = WiFi.SSID(i);
+            if (ssid.length() == 0) continue;   // skip hidden/blank SSIDs
+            int32_t rssi = WiFi.RSSI(i);
+            bool secure = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+
+            bool merged = false;
+            for (auto& r : out) {
+                if (r.ssid == ssid) {
+                    if (rssi > r.rssi) { r.rssi = rssi; r.secure = secure; }
+                    merged = true;
+                    break;
+                }
+            }
+            if (!merged) out.push_back({ssid, rssi, secure});
+        }
+        WiFi.scanDelete();
+
+        std::sort(out.begin(), out.end(), [](const ScanResult& a, const ScanResult& b) {
+            return a.rssi > b.rssi;
+        });
+        if ((int)out.size() > maxResults) out.resize(maxResults);
+
+        return (int)out.size();
     }
 
     void beginSTAConnect() {

@@ -19,8 +19,10 @@
 #include <ArduinoJson.h>
 #include <esp_timer.h>
 #include <Update.h>
+#include <vector>
 #include "configuration.h"
 #include "web_utils.h"
+#include "wifi_utils.h"
 #include "display.h"
 #include "battery_utils.h"
 #include "aprs_is_utils.h"
@@ -89,6 +91,32 @@ namespace WEB_Utils {
     void handleAprsIsStatus(AsyncWebServerRequest *request) {
         bool up = APRS_IS_Utils::isConnected();
         request->send(200, "application/json", up ? "{\"connected\":true}" : "{\"connected\":false}");
+    }
+
+    void handleWifiStaStatus(AsyncWebServerRequest *request) {
+        bool up = WIFI_Utils::isSTAConnected();
+        request->send(200, "application/json", up ? "{\"connected\":true}" : "{\"connected\":false}");
+    }
+
+    // Blocking (~2-4s): runs a synchronous WiFi scan inside the AsyncTCP
+    // request-handler task. This stalls other concurrent HTTP responses for
+    // the duration but not the main loop() (beacon TX, GPS, LoRa RX/TX all
+    // continue), an acceptable cost for a manual, infrequent button click.
+    void handleWifiScan(AsyncWebServerRequest *request) {
+        std::vector<WIFI_Utils::ScanResult> results;
+        WIFI_Utils::scanNetworks(results, 20);
+
+        JsonDocument doc;
+        JsonArray arr = doc.to<JsonArray>();
+        for (auto& r : results) {
+            JsonObject o = arr.add<JsonObject>();
+            o["ssid"]   = r.ssid;
+            o["rssi"]   = r.rssi;
+            o["secure"] = r.secure;
+        }
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
     }
 
     void handleBattery(AsyncWebServerRequest *request) {
@@ -394,6 +422,8 @@ namespace WEB_Utils {
         server.on("/status", HTTP_GET, handleStatus);
         server.on("/battery.json", HTTP_GET, handleBattery);
         server.on("/aprs-is-status.json", HTTP_GET, handleAprsIsStatus);
+        server.on("/wifi-sta-status.json", HTTP_GET, handleWifiStaStatus);
+        server.on("/wifi-scan.json", HTTP_GET, handleWifiScan);
         //server.on("/received-packets.json", HTTP_GET, handleReceivedPackets);
         server.on("/configuration.json", HTTP_GET, handleReadConfiguration);
         server.on("/configuration.json", HTTP_POST, handleWriteConfiguration);

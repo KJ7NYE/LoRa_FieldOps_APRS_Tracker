@@ -553,7 +553,12 @@
                                                 <input type="text" class="form-control" id="wifiAP.password" name="wifiAP.password" />
                                             </div>
 
-                                            <div class="col-12"><h6>Station (for iGate)</h6></div>
+                                            <div class="col-12 d-flex align-items-center gap-2">
+                                                <h6 class="mb-0">Station (for iGate)</h6>
+                                                <span id="wifiStaLed" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#6c757d;flex-shrink:0" title="Unknown"></span>
+                                                <span id="wifiStaStatusText" class="text-muted small">—</span>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary btn-xs ms-1" id="wifiStaCheckBtn">⟳</button>
+                                            </div>
                                             <div class="col-12">
                                                 <div class="form-check form-switch">
                                                     <input class="form-check-input" type="checkbox" id="wifiSTA.enabled" name="wifiSTA.enabled" />
@@ -561,10 +566,18 @@
                                                 </div>
                                             </div>
                                             <div class="col-md-5">
-                                                <label class="form-label">SSID &amp; Password</label>
+                                                <label class="form-label" for="wifiSTA.ssid">SSID</label>
                                                 <div class="input-group">
-                                                    <input type="text" class="form-control" id="wifiSTA.ssid" name="wifiSTA.ssid" placeholder="SSID" />
+                                                    <input type="text" class="form-control" id="wifiSTA.ssid" name="wifiSTA.ssid" placeholder="SSID (or type manually for hidden networks)" list="wifiStaSsidList" />
+                                                    <datalist id="wifiStaSsidList"></datalist>
+                                                    <button type="button" class="btn btn-outline-secondary" id="wifiStaScanBtn">Scan</button>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-5">
+                                                <label class="form-label" for="wifiSTA.password">Password</label>
+                                                <div class="input-group">
                                                     <input type="password" class="form-control" id="wifiSTA.password" name="wifiSTA.password" placeholder="Password" />
+                                                    <button type="button" class="btn btn-outline-secondary" id="wifiStaPassToggle" title="Toggle visibility">Show</button>
                                                 </div>
                                             </div>
 

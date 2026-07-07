@@ -1767,25 +1767,97 @@ function renderConfig() {
     body.appendChild(mkPassword('AP password', wifi.password, v => sendCmd(`wifi password ${v}`)));
 
     body.appendChild(mkGroupTitle('Station (for iGate)'));
+    // ── Live WiFi STA connection indicator ───────────────────────────────────
+    {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:0.6rem;margin-bottom:0.6rem';
+
+      const led = document.createElement('span');
+      led.style.cssText = 'display:inline-block;width:12px;height:12px;border-radius:50%;background:#6c757d;flex-shrink:0';
+
+      const statusTxt = document.createElement('span');
+      statusTxt.className = 'text-muted small';
+      statusTxt.textContent = '—';
+
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm btn-outline-secondary';
+      btn.textContent = '⟳ Check';
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        statusTxt.textContent = 'checking…';
+        try {
+          const resp = await sendCmd('wifista status');
+          if (/wifiSTA\.connected=true/.test(resp)) {
+            led.style.background = '#28a745';
+            statusTxt.textContent = 'connected';
+            statusTxt.className = 'text-success small';
+          } else {
+            led.style.background = '#dc3545';
+            statusTxt.textContent = 'disconnected';
+            statusTxt.className = 'text-danger small';
+          }
+        } catch (_) {
+          led.style.background = '#6c757d';
+          statusTxt.textContent = '—';
+          statusTxt.className = 'text-muted small';
+        }
+        btn.disabled = false;
+      });
+
+      row.appendChild(led);
+      row.appendChild(statusTxt);
+      row.appendChild(btn);
+      body.appendChild(row);
+    }
     body.appendChild(mkBool('WiFi STA enabled', wifiSTA.enabled, v => sendCmd(`wifista ${boolStr(v)}`)));
-    // SSID + Password on same line
+    // SSID row, with an inline Scan button + datalist picker
     {
       const row = document.createElement('div');
       row.className = 'field-row';
-      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'SSID / Password';
+      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'SSID';
       const ctl = document.createElement('div'); ctl.className = 'field-control'; ctl.style.cssText = 'display:flex;gap:0.4rem';
       const ssidInp = document.createElement('input');
       ssidInp.type = 'text'; ssidInp.className = 'form-control form-control-sm';
-      ssidInp.value = wifiSTA.ssid || ''; ssidInp.placeholder = 'SSID';
-      const passInp = document.createElement('input');
-      passInp.type = 'password'; passInp.className = 'form-control form-control-sm';
-      passInp.value = wifiSTA.password || ''; passInp.placeholder = 'Password';
+      ssidInp.value = wifiSTA.ssid || ''; ssidInp.placeholder = 'SSID (or type manually for hidden networks)';
+      ssidInp.setAttribute('list', 'wifiStaSsidList');
+      const dl = document.createElement('datalist');
+      dl.id = 'wifiStaSsidList';
+      const scanBtn = document.createElement('button');
+      scanBtn.className = 'btn btn-sm btn-outline-secondary'; scanBtn.type = 'button';
+      scanBtn.textContent = 'Scan';
+      scanBtn.addEventListener('click', async () => {
+        scanBtn.disabled = true;
+        const prevText = scanBtn.textContent;
+        scanBtn.textContent = 'Scanning…';
+        try {
+          const resp = await sendCmd('wifista scan');
+          dl.innerHTML = '';
+          const lines = resp.split('\n').filter(l => l.includes('wifiSTA.scan:'));
+          lines.forEach(l => {
+            const m = /ssid=(.+)$/.exec(l.trim());
+            const rssiM = /rssi=(-?\d+)/.exec(l);
+            if (m) {
+              const o = document.createElement('option');
+              o.value = m[1];
+              o.label = rssiM ? (m[1] + ' (' + rssiM[1] + ' dBm)') : m[1];
+              dl.appendChild(o);
+            }
+          });
+          if (lines.length === 0) logErr('No networks found');
+        } catch (e) {
+          logErr('Scan failed: ' + e.message);
+        }
+        scanBtn.disabled = false;
+        scanBtn.textContent = prevText;
+      });
       ssidInp.addEventListener('change', () => { markDirty(ssidInp); sendCmd(`wifista ssid ${ssidInp.value}`); });
-      passInp.addEventListener('change', () => { markDirty(passInp); sendCmd(`wifista password ${passInp.value}`); });
-      ctl.appendChild(ssidInp); ctl.appendChild(passInp);
+      ctl.appendChild(ssidInp); ctl.appendChild(dl); ctl.appendChild(scanBtn);
       row.appendChild(lbl); row.appendChild(ctl);
       body.appendChild(row);
     }
+    // Password row -- reuses the existing mkPassword helper (already used for
+    // the AP password above), which gets the show/hide toggle for free.
+    body.appendChild(mkPassword('Password', wifiSTA.password, v => sendCmd(`wifista password ${v}`)));
 
     body.appendChild(mkGroupTitle('APRS-IS'));
     // ── Live APRS-IS connection indicator ────────────────────────────────────
