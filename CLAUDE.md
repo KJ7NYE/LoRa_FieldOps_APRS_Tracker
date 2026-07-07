@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a multi-platform APRS tracker/iGate/digipeater firmware for LoRa radios, forked from CA2RXU's `richonguzman/LoRa_APRS_Tracker`. It adds nRF52840 support, KJ7NYE LoRanger hardware support, and US-compliance tuning. Built with PlatformIO on the Arduino framework.
 
+## Git Remotes
+
+This repo has two remotes: `origin` (`KJ7NYE/LoRa_FieldOps_APRS_Tracker`, this fork) and `upstream` (`richonguzman/LoRa_APRS_Tracker`, the original project). **Never push, open PRs, or comment against `upstream`.** This fork has diverged significantly (nRF52840 support, single-beacon profile, hardware/config changes) and is never intended to be merged back upstream. All branches, pushes, and PRs go to `origin` only. `upstream` exists solely so it can be fetched from for reference (e.g. comparing against upstream behavior when debugging a port issue) — never write to it.
+
+When using `gh pr create` or similar, always pass `--repo KJ7NYE/LoRa_FieldOps_APRS_Tracker` explicitly rather than relying on auto-detection, since this repo is a GitHub fork and `gh` may default to the upstream parent as the PR base.
+
 ## Build Commands
 
 ```sh
