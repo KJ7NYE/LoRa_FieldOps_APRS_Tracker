@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 TTGO T-Beam",
-  "version": "v1.1.6",
+  "version": "v1.1.7",
   "builds": [
     {
       "chipFamily": "ESP32",
