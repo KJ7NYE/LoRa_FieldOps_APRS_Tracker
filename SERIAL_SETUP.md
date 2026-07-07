@@ -204,6 +204,7 @@ extension.
 | `aprsiss port <n>`                            | APRS-IS server port.                       |
 | `aprsiss passcode <code>`                     | APRS-IS passcode override (leave unset to auto-compute from callsign). |
 | `aprsiss filter <filter>`                     | APRS-IS server-side filter string.         |
+| `aprsiss downlink on\|off`                    | Gate directed messages from APRS-IS back to RF (only to a station heard directly on RF in the last 30 min). |
 | `aprsiss status`                              | Print live APRS-IS connection status.      |
 | `tcpkiss port <n>`                            | TCP KISS server port (default 8001; server auto-starts once WiFi STA connects). |
 

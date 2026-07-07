@@ -171,6 +171,7 @@ namespace SERIAL_Setup {
         Serial.println(F("  wifista status              (prints wifiSTA.connected=true/false)"));
         Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
         Serial.println(F("  aprsiss filter <filter>     aprsiss status"));
+        Serial.println(F("  aprsiss downlink on|off     (gate IS messages to a locally-heard station back to RF)"));
         Serial.println(F("  tcpkiss port <n>             (TCP KISS port, default 8001; server auto-starts with WiFi STA)"));
         Serial.println(F("\n-- transmit now (no timer reset) --"));
         Serial.println(F("  tx comment                 send position+comment immediately"));
@@ -827,12 +828,13 @@ namespace SERIAL_Setup {
     }
 
     static void cmdAprsIS(String* tk, int n, const String& line) {
-        if (n < 2) { err("aprsiss <server|port|passcode|filter|status>"); return; }
+        if (n < 2) { err("aprsiss <server|port|passcode|filter|downlink|status>"); return; }
         const String& sub = tk[1];
         if      (sub == "server")   { if (n < 3) { err("aprsiss server <hostname>"); return; } Config.aprsIS.server  = tk[2];                ok("aprsIS.server = "  + Config.aprsIS.server); }
         else if (sub == "port")     { if (n < 3) { err("aprsiss port <port>");    return; } Config.aprsIS.port    = tk[2].toInt();          ok("aprsIS.port = "    + String(Config.aprsIS.port)); }
         else if (sub == "passcode") { if (n < 3) { err("aprsiss passcode <code>"); return; } Config.aprsIS.passcode = tk[2];                ok("aprsIS.passcode updated"); }
         else if (sub == "filter")   { if (n < 3) { err("aprsiss filter <filter>"); return; } Config.aprsIS.filter  = restOfLine(line, 2);   ok("aprsIS.filter = "  + Config.aprsIS.filter); }
+        else if (sub == "downlink") { if (n < 3) { err("aprsiss downlink on|off"); return; } applyBool(tk[2], Config.aprsIS.downlinkEnabled, "aprsIS.downlinkEnabled"); }
         else if (sub == "status")   {
             #ifdef HAS_WIFI
                 Serial.println(APRS_IS_Utils::isConnected() ? "aprsIS.connected=true" : "aprsIS.connected=false");

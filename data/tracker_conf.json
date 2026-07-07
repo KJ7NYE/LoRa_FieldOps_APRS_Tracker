@@ -31,7 +31,7 @@
   "bluetooth": { "active": false, "deviceName": "LoRaAPRS" },
   "wifiAP": { "password": "1234567890" },
   "wifiSTA": { "enabled": false, "ssid": "", "password": "" },
-  "aprsIS": { "server": "rotate.aprs.net", "port": 14580, "passcode": "", "filter": "m/20" },
+  "aprsIS": { "server": "rotate.aprs.net", "port": 14580, "passcode": "", "filter": "m/20", "downlinkEnabled": true },
   "tcpKISS": { "port": 8001 },
   "fixedPosition": { "latitude": 0.0, "longitude": 0.0, "elevation": 0.0 },
   "deviceRole": 0,

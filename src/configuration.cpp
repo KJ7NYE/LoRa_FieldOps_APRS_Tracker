@@ -131,6 +131,7 @@ bool Configuration::writeFile() {
         data["aprsIS"]["port"]                      = aprsIS.port;
         data["aprsIS"]["passcode"]                  = aprsIS.passcode;
         data["aprsIS"]["filter"]                    = aprsIS.filter;
+        data["aprsIS"]["downlinkEnabled"]           = aprsIS.downlinkEnabled;
 
         data["tcpKISS"]["port"]                     = tcpKISS.port;
 
@@ -333,11 +334,13 @@ bool Configuration::readFile() {
         if (data["aprsIS"]["server"].isNull() ||
             data["aprsIS"]["port"].isNull() ||
             data["aprsIS"]["passcode"].isNull() ||
-            data["aprsIS"]["filter"].isNull()) needsRewrite = true;
+            data["aprsIS"]["filter"].isNull() ||
+            data["aprsIS"]["downlinkEnabled"].isNull()) needsRewrite = true;
         aprsIS.server                   = data["aprsIS"]["server"] | "rotate.aprs.net";
         aprsIS.port                     = data["aprsIS"]["port"] | 14580;
         aprsIS.passcode                 = data["aprsIS"]["passcode"] | "";
         aprsIS.filter                   = data["aprsIS"]["filter"] | "m/20";
+        aprsIS.downlinkEnabled          = data["aprsIS"]["downlinkEnabled"] | true;
 
         if (data["tcpKISS"]["port"].isNull()) needsRewrite = true;
         tcpKISS.port                    = data["tcpKISS"]["port"] | 8001;
@@ -451,6 +454,7 @@ void Configuration::setDefaultValues() {
     aprsIS.port                     = 14580;
     aprsIS.passcode                 = "";
     aprsIS.filter                   = "m/20";
+    aprsIS.downlinkEnabled          = true;
 
     tcpKISS.port                    = 8001;
 

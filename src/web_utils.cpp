@@ -267,6 +267,7 @@ namespace WEB_Utils {
         Config.aprsIS.port     = getParamIntSafe   ("aprsIS.port",     Config.aprsIS.port);
         Config.aprsIS.passcode = getParamStringSafe("aprsIS.passcode", Config.aprsIS.passcode);
         Config.aprsIS.filter   = getParamStringSafe("aprsIS.filter",   Config.aprsIS.filter);
+        Config.aprsIS.downlinkEnabled = request->hasParam("aprsIS.downlinkEnabled", true);
 
         //  TCP KISS server
         Config.tcpKISS.port           = getParamIntSafe("tcpKISS.port",            Config.tcpKISS.port);
