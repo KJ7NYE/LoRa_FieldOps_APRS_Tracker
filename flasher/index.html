@@ -97,7 +97,7 @@
       <div id="flash-mode-group" class="mb-3 p-3" style="background:#0d1117; border:1px solid #30363d; border-radius:6px; font-size:0.88rem">
         <div class="fw-semibold mb-2" style="font-size:0.82rem; text-transform:uppercase; letter-spacing:0.05em; color:#8b949e">Flash mode</div>
         <div class="form-check mb-1">
-          <input class="form-check-input" type="radio" name="flashMode" id="mode-factory" value="factory" checked>
+          <input class="form-check-input" type="radio" name="flashMode" id="mode-factory" value="factory">
           <label class="form-check-label" for="mode-factory">
             <strong>Fresh Install</strong>
             <span class="text-muted ms-1" style="font-size:0.83rem">— flashes everything, resets configuration to defaults</span>
@@ -255,9 +255,6 @@
     elNrfPanel.style.display    = 'none';
     elDesc.style.display        = 'none';
 
-    // Reset to Fresh Install when the user picks a different board
-    document.getElementById('mode-factory').checked = true;
-
     if (!id || !targetsData) return;
 
     const target = targetsData.targets.find(t => t.id === id);
@@ -282,6 +279,10 @@
       // Show "Firmware Update" option only when an update manifest is available
       document.getElementById('mode-update-row').style.display =
         target.update_manifest ? '' : 'none';
+      // Default to "Firmware Update" (preserves saved config) when it's available;
+      // otherwise "Fresh Install" is the only option that makes sense.
+      document.getElementById('mode-update').checked  = !!target.update_manifest;
+      document.getElementById('mode-factory').checked = !target.update_manifest;
       updateInstallManifest();
       elEspPanel.style.display = '';
     }
