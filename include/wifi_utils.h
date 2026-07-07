@@ -20,9 +20,26 @@
 #define WIFI_UTILS_H_
 
 #include <Arduino.h>
+#include <vector>
 
 
 namespace WIFI_Utils {
+
+    struct ScanResult {
+        String  ssid;
+        int32_t rssi;
+        bool    secure;
+    };
+
+    // Runs a blocking WiFi.scanNetworks() (~2-4 s). Promotes WIFI_AP to
+    // WIFI_AP_STA first if the config AP is currently hosting (pure AP mode
+    // cannot scan), and deliberately does not demote back afterward -- see
+    // scanNetworks() in wifi_utils.cpp for why. Only call from a
+    // user-triggered request/command handler, never from loop()/tick paths.
+    // Populates out (cleared first), deduplicated by SSID (strongest RSSI
+    // kept), sorted by RSSI descending, capped at maxResults. Hidden/blank
+    // SSIDs are skipped. Returns the number of entries written.
+    int scanNetworks(std::vector<ScanResult>& out, int maxResults = 20);
 
     void startAutoAP();
 

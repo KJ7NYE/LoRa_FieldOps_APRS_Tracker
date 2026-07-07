@@ -102,6 +102,7 @@ function loadSettings(s) {
     setVal('wifiSTA.enabled',  wsta.enabled  ?? false);
     setVal('wifiSTA.ssid',     wsta.ssid     ?? '');
     setVal('wifiSTA.password', wsta.password ?? '');
+    if (wsta.enabled) startWifiStaPolling(); else stopWifiStaPolling();
 
     const ais = s.aprsIS ?? {};
     setVal('aprsIS.server',   ais.server   ?? 'rotate.aprs.net');
@@ -343,6 +344,87 @@ function stopAprsIsPolling() {
 }
 
 document.getElementById('aprsIsCheckBtn')?.addEventListener('click', checkAprsIsStatus);
+
+// ── WiFi STA connection status ────────────────────────────────────────────────
+
+let _wifiStaPoller = null;
+
+async function checkWifiStaStatus() {
+    const led = document.getElementById('wifiStaLed');
+    const txt = document.getElementById('wifiStaStatusText');
+    if (!led) return;
+    try {
+        const res = await fetch('/wifi-sta-status.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const d = await res.json();
+        if (d.connected) {
+            led.style.background = '#28a745';
+            txt.textContent = 'connected';
+            txt.className = 'text-success small';
+        } else {
+            led.style.background = '#dc3545';
+            txt.textContent = 'disconnected';
+            txt.className = 'text-danger small';
+        }
+    } catch (_) {
+        led.style.background = '#6c757d';
+        txt.textContent = '—';
+        txt.className = 'text-muted small';
+    }
+}
+
+function startWifiStaPolling() {
+    if (_wifiStaPoller) return;
+    checkWifiStaStatus();
+    _wifiStaPoller = setInterval(checkWifiStaStatus, 5000);
+}
+
+function stopWifiStaPolling() {
+    if (_wifiStaPoller) { clearInterval(_wifiStaPoller); _wifiStaPoller = null; }
+    const led = document.getElementById('wifiStaLed');
+    const txt = document.getElementById('wifiStaStatusText');
+    if (led) led.style.background = '#6c757d';
+    if (txt) { txt.textContent = '—'; txt.className = 'text-muted small'; }
+}
+
+document.getElementById('wifiStaCheckBtn')?.addEventListener('click', checkWifiStaStatus);
+
+document.getElementById('wifiSTA.enabled')?.addEventListener('change', function() {
+    if (this.checked) startWifiStaPolling(); else stopWifiStaPolling();
+});
+
+document.getElementById('wifiStaPassToggle')?.addEventListener('click', function() {
+    const inp = document.getElementById('wifiSTA.password');
+    if (!inp) return;
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+});
+
+document.getElementById('wifiStaScanBtn')?.addEventListener('click', async function() {
+    const btn = this;
+    const dl  = document.getElementById('wifiStaSsidList');
+    if (!dl) return;
+    btn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = 'Scanning…';
+    try {
+        const res = await fetch('/wifi-scan.json', { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const nets = await res.json();
+        dl.innerHTML = '';
+        nets.forEach(nw => {
+            const o = document.createElement('option');
+            o.value = nw.ssid;
+            o.label = nw.ssid + ' (' + nw.rssi + ' dBm' + (nw.secure ? '' : ', open') + ')';
+            dl.appendChild(o);
+        });
+        if (nets.length === 0) showToast('No networks found');
+    } catch (e) {
+        showToast('Scan failed: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = prevText;
+    }
+});
 
 // ── Live battery read ─────────────────────────────────────────────────────────
 
