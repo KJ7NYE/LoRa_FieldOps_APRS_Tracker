@@ -48,10 +48,10 @@ namespace BATTERY_Utils {
 
     String getPercentVoltageBattery(float voltage) {
         #ifdef TTGO_T_BEAM_1W
-            // 2S Li-ion pack: 6.0 V (empty, 2×3.0 V) to 8.4 V (full, 2×4.2 V)
-            int percent = ((voltage - 6.0f) / (8.4f - 6.0f)) * 100;
+            // 2S Li-ion pack
+            int percent = ((voltage - 6.8f) / (8.0f - 6.8f)) * 100;
         #else
-            int percent = ((voltage - 3.0) / (4.2 - 3.0)) * 100;
+            int percent = ((voltage - 3.4) / (4.0 - 3.4)) * 100;
         #endif
         if (percent < 0)   percent = 0;
         if (percent > 100) percent = 100;
