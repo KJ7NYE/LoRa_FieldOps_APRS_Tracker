@@ -19,7 +19,11 @@
       "Bash(pio run *)",
       "Bash(Select-String -Pattern \"SUCCESS|FAILED|ERROR|error:\")",
       "Bash(Select-Object -Last 30)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(grep -rn \"RSSI\\\\|WiFi\\\\\\\\.status\\\\|WiFi\\\\\\\\.localIP\\\\|WiFi\\\\\\\\.macAddress\" '/c/Users/jongl/Documents/GitHub/LoRa_FieldOps_APRS_Tracker/src/' '/c/Users/jongl/Documents/GitHub/LoRa_FieldOps_APRS_Tracker/include/')",
+      "Bash(git log *)",
+      "PowerShell(pio run -e heltec_v3_433_aprs 2>&1)",
+      "PowerShell(& \"$env:USERPROFILE\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe\" run -e heltec_v3_433_aprs 2>&1 | Select-Object -Last 50)"
     ]
   }
 }
