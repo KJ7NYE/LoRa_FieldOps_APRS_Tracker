@@ -257,6 +257,25 @@
           </select>
         </div>
 
+        <!-- Flash mode selector (ESP32 targets only) -->
+        <div id="flash-mode-group" class="mb-3 p-3 d-none" style="background:var(--bs-tertiary-bg,rgba(0,0,0,.15)); border:1px solid var(--bs-border-color); border-radius:6px; font-size:0.88rem">
+          <div class="fw-semibold mb-2" style="font-size:0.82rem; text-transform:uppercase; letter-spacing:0.05em; color:#8b949e">Flash mode</div>
+          <div class="form-check mb-1">
+            <input class="form-check-input" type="radio" name="flashMode" id="flash-mode-factory" value="factory">
+            <label class="form-check-label" for="flash-mode-factory">
+              <strong>Fresh Install</strong>
+              <span class="text-muted ms-1" style="font-size:0.83rem">&mdash; flashes everything, resets configuration to defaults</span>
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="flashMode" id="flash-mode-update" value="update">
+            <label class="form-check-label" for="flash-mode-update">
+              <strong>Firmware Update</strong>
+              <span class="text-muted ms-1" style="font-size:0.83rem">&mdash; updates firmware only, preserves your saved configuration</span>
+            </label>
+          </div>
+        </div>
+
         <!-- Connected-port warning -->
         <div id="flash-port-warning" class="alert alert-danger py-2 d-none" style="font-size:0.85rem">
           <strong>Config connection is active.</strong> Disconnect from the device first before flashing,
@@ -2062,12 +2081,28 @@ const _fRelText    = document.getElementById('flash-release-text');
 const _fNrfInfo    = document.getElementById('flash-nrf-info');
 const _fEspInfo    = document.getElementById('flash-esp-info');
 const _fPortWarn   = document.getElementById('flash-port-warning');
+const _fModeGroup  = document.getElementById('flash-mode-group');
+const _fModeFactory = document.getElementById('flash-mode-factory');
+const _fModeUpdate  = document.getElementById('flash-mode-update');
 
 function _flashResetUI() {
   _fBoardSel.value = '';
-  [_fInstallBtn, _fUf2Btn, _fNrfInfo, _fEspInfo, _fPortWarn].forEach(el => el.classList.add('d-none'));
+  [_fInstallBtn, _fUf2Btn, _fNrfInfo, _fEspInfo, _fPortWarn, _fModeGroup].forEach(el => el.classList.add('d-none'));
   _fInstallBtn.removeAttribute('manifest');
 }
+
+// Update the install button's manifest to match the selected flash mode
+function _flashUpdateManifest(env) {
+  const mode = document.querySelector('input[name="flashMode"]:checked')?.value || 'factory';
+  const file = mode === 'update' ? `${env}_update.json` : `${env}.json`;
+  _fInstallBtn.setAttribute('manifest', `${FLASH_MANIFEST_BASE}/${file}`);
+}
+
+document.querySelectorAll('input[name="flashMode"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    if (_fBoardSel.value) _flashUpdateManifest(_fBoardSel.value);
+  });
+});
 
 // Show the latest release tag/date in the modal banner
 _fModal.addEventListener('show.bs.modal', async () => {
@@ -2094,7 +2129,7 @@ _fModal.addEventListener('show.bs.modal', async () => {
 // Board selection drives which action panel and button appear
 _fBoardSel.addEventListener('change', () => {
   const env = _fBoardSel.value;
-  [_fInstallBtn, _fUf2Btn, _fNrfInfo, _fEspInfo, _fPortWarn].forEach(el => el.classList.add('d-none'));
+  [_fInstallBtn, _fUf2Btn, _fNrfInfo, _fEspInfo, _fPortWarn, _fModeGroup].forEach(el => el.classList.add('d-none'));
   _fInstallBtn.removeAttribute('manifest');
 
   if (!env) return;
@@ -2108,7 +2143,11 @@ _fBoardSel.addEventListener('change', () => {
     // Warn if the config serial connection is still open (same physical port)
     if (connected) _fPortWarn.classList.remove('d-none');
     _fEspInfo.classList.remove('d-none');
-    _fInstallBtn.setAttribute('manifest', `${FLASH_MANIFEST_BASE}/${env}.json`);
+    // Default to "Firmware Update" (preserves saved config); user can switch to Fresh Install.
+    _fModeUpdate.checked  = true;
+    _fModeFactory.checked = false;
+    _fModeGroup.classList.remove('d-none');
+    _flashUpdateManifest(env);
     _fInstallBtn.classList.remove('d-none');
   }
 });
