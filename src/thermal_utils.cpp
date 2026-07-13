@@ -81,8 +81,6 @@ namespace {
         if (fanOn == on) return;
         fanOn = on;
         digitalWrite(FAN_CTRL_PIN, on ? HIGH : LOW);
-        Serial.printf("[Thermal] Fan %s — %s (%.1f C)\n",
-                      on ? "ON " : "OFF", reason, (double)currentTempC);
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
                    "Fan %s — %s (%.1f C)", on ? "ON" : "OFF", reason, (double)currentTempC);
     }
@@ -113,7 +111,7 @@ namespace THERMAL_Utils {
         digitalWrite(FAN_CTRL_PIN, LOW);
         lastSampleMs    = 0;  // trigger an immediate first sample on the first monitor() call
         lastStatusLogMs = 0;
-        Serial.println("[Thermal] setup complete — fan OFF");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal", "setup complete — fan OFF");
     }
 
     void monitor() {
@@ -124,7 +122,6 @@ namespace THERMAL_Utils {
         // when the cooldown ends rather than waiting for the next temperature sample.
         if (txCooldownActive && (now - txEndMs >= TX_COOLDOWN_MS)) {
             txCooldownActive = false;
-            Serial.printf("[Thermal] TX cooldown expired — temp %.1f C\n", (double)currentTempC);
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
                        "TX cooldown expired — temp %.1f C", (double)currentTempC);
             updateFanState();  // re-evaluate fan now, not at the next 30s sample
@@ -135,12 +132,13 @@ namespace THERMAL_Utils {
             lastStatusLogMs = now;
             uint32_t coolRemainS = txCooldownActive
                 ? (uint32_t)((TX_COOLDOWN_MS - (now - txEndMs)) / 1000UL) : 0;
-            Serial.printf("[Thermal] status: %.1f C | fan %s | cooldown %s (%us remain) | sampleAge %us\n",
-                          (double)currentTempC,
-                          fanOn ? "ON " : "off",
-                          txCooldownActive ? "active" : "off",
-                          (unsigned)coolRemainS,
-                          (unsigned)((now - lastSampleMs) / 1000UL));
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
+                       "status: %.1f C | fan %s | cooldown %s (%us remain) | sampleAge %us",
+                       (double)currentTempC,
+                       fanOn ? "ON" : "off",
+                       txCooldownActive ? "active" : "off",
+                       (unsigned)coolRemainS,
+                       (unsigned)((now - lastSampleMs) / 1000UL));
         }
 
         // ── Rate-limited temperature sample ───────────────────────────────────
@@ -152,10 +150,6 @@ namespace THERMAL_Utils {
             if (!isnan(t)) {
                 currentTempC = t;
             }
-            Serial.printf("[Thermal] sample: %.1f C | fan %s | cooldown %s\n",
-                          (double)currentTempC,
-                          fanOn ? "ON " : "off",
-                          txCooldownActive ? "active" : "off");
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
                        "%.1f C | fan %s | cooldown %s",
                        (double)currentTempC,
@@ -166,7 +160,6 @@ namespace THERMAL_Utils {
         overTempFlag = (currentTempC >= TEMP_WARN_C);
 
         if (currentTempC >= TEMP_SHUTDOWN_C) {
-            Serial.printf("[Thermal] OVER-TEMP SHUTDOWN at %.1f C\n", (double)currentTempC);
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Thermal",
                        "Over-temp shutdown at %.1f C", (double)currentTempC);
             POWER_Utils::shutdown();
@@ -177,7 +170,6 @@ namespace THERMAL_Utils {
     }
 
     void onTxStart() {
-        Serial.printf("[Thermal] TX start — fan on\n");
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal", "TX start");
         setFan(true, "TX start");
     }
@@ -185,7 +177,6 @@ namespace THERMAL_Utils {
     void onTxEnd() {
         txEndMs          = millis();
         txCooldownActive = true;
-        Serial.printf("[Thermal] TX end — cooldown %us\n", (unsigned)(TX_COOLDOWN_MS / 1000UL));
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Thermal",
                    "TX end — cooldown %us", (unsigned)(TX_COOLDOWN_MS / 1000UL));
     }

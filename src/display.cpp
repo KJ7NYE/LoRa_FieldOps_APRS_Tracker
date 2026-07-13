@@ -14,6 +14,9 @@
 // ── Headless / no-display build ──────────────────────────────────────────────
 #include <Arduino.h>
 #include "display.h"
+#include "logger.h"
+
+extern logging::Logger logger;
 
 void displaySetup() {}
 void displayToggle(bool) {}
@@ -30,7 +33,7 @@ void displayAPMode(const String&, const String&) {}
 
 void bootStatus(const char* step) {
     if (!step) return;
-    Serial.print(F("[boot ")); Serial.print(millis()); Serial.print(F("ms] ")); Serial.println(step);
+    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Boot", "%lums %s", millis(), step);
 }
 
 #else  // HAS_DISPLAY defined
@@ -79,10 +82,12 @@ void displayEcoTick(bool ecoMode, unsigned long timeoutMs) {
 #include <SPI.h>
 #include "display.h"
 #include "configuration.h"
+#include "logger.h"
 
 // BSP secondary SPI bus (NRF_SPIM2) wired to ST7789_SDA/SCK on P1.9/P1.8.
 extern SPIClass SPI1;
 extern Configuration Config;
+extern logging::Logger logger;
 static Adafruit_ST7789 tft(&SPI1, TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
 namespace {
@@ -139,7 +144,7 @@ void displayToggle(bool on) {
 
 void bootStatus(const char* step) {
     if (!step) return;
-    Serial.print(F("[boot ")); Serial.print(millis()); Serial.print(F("ms] ")); Serial.println(step);
+    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Boot", "%lums %s", millis(), step);
     if (!_tftReady) return;
     constexpr int STATUS_Y = 90;   // 2× font: below startup content
     constexpr int STATUS_H = 18;   // text size 2 = 16px + 2px margin
@@ -425,7 +430,7 @@ void displaySetInvert(bool invert) {
 
 void bootStatus(const char* step) {
     if (!step) return;
-    Serial.print(F("[boot ")); Serial.print(millis()); Serial.print(F("ms] ")); Serial.println(step);
+    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Boot", "%lums %s", millis(), step);
 }
 
 void startupScreen(const String& versionDate) {

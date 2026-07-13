@@ -63,7 +63,7 @@ namespace DeviceRoleUtils {
     bool validateRoleForPlatform(DeviceRole role) {
         #ifdef ARDUINO_ARCH_NRF52
             if (role == ROLE_IGATE) {
-                Serial.println("ERROR: iGate role not supported on nRF52 (no WiFi)");
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "DeviceRole", "iGate role not supported on nRF52 (no WiFi)");
                 return false;
             }
         #endif
@@ -72,14 +72,13 @@ namespace DeviceRoleUtils {
 
     void initializeRole(DeviceRole role) {
         if (!validateRoleForPlatform(role)) {
-            Serial.println("WARN: Invalid role for this platform, defaulting to Tracker");
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "DeviceRole", "Invalid role for this platform, defaulting to Tracker");
             Config.deviceRole = ROLE_TRACKER;
             Config.writeFile();
             return;
         }
 
-        Serial.print("INFO: Initializing device role: ");
-        Serial.println(getRoleString(role));
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "DeviceRole", "Initializing device role: %s", getRoleString(role));
 
         switch (role) {
             case ROLE_TRACKER:
@@ -94,7 +93,7 @@ namespace DeviceRoleUtils {
                 initializeDigipeater();
                 break;
             default:
-                Serial.println("ERROR: Unknown device role");
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "DeviceRole", "Unknown device role");
                 break;
         }
 
@@ -102,7 +101,7 @@ namespace DeviceRoleUtils {
     }
 
     void initializeTracker() {
-        Serial.println("INFO: Tracker mode: GPS + smart beaconing enabled, messaging active");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "DeviceRole", "Tracker mode: GPS + smart beaconing enabled, messaging active");
         bootStatus("Tracker");
         #ifdef HAS_WIFI
         initializeWiFiSTA();
@@ -110,7 +109,7 @@ namespace DeviceRoleUtils {
     }
 
     void initializeDigipeater() {
-        Serial.println("INFO: Digipeater mode: RF relaying enabled, beaconing disabled");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "DeviceRole", "Digipeater mode: RF relaying enabled, beaconing disabled");
         bootStatus("Digipeater");
         #ifdef HAS_WIFI
         initializeWiFiSTA();
