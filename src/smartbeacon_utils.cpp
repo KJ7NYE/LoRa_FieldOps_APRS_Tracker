@@ -18,6 +18,9 @@
 
 #include "smartbeacon_utils.h"
 #include "configuration.h"
+#include "logger.h"
+
+extern logging::Logger logger;
 
 extern Configuration    Config;
 extern Beacon           *currentBeacon;
@@ -51,7 +54,7 @@ namespace SMARTBEACON_Utils {
 
     void checkSettings(byte index) {
         if (index >= SMARTBEACON_PROFILE_COUNT) {
-            Serial.printf("warn: smartBeaconSetting %u out of range, clamping to 0\n", index);
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "SmartBeacon", "smartBeaconSetting %u out of range, clamping to 0", index);
             index = 0;
         }
         if (smartBeaconSettingsIndex != index) {

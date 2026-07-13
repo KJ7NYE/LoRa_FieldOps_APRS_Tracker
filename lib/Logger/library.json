@@ -1,0 +1,17 @@
+{
+    "name": "Logger",
+    "version": "1.0.0",
+    "description": "Minimal serial logger shared by ESP32 and nRF52 builds. Produces identical [LEVEL][Module] text output on every platform.",
+    "keywords": "logging, logger, serial",
+    "authors": [
+        {
+            "name": "KJ7NYE",
+            "maintainer": true
+        }
+    ],
+    "license": "GPL-3.0",
+    "dependencies": {},
+    "frameworks": ["arduino"],
+    "platforms": ["espressif32", "nordicnrf52"],
+    "headers": "logger.h"
+}
