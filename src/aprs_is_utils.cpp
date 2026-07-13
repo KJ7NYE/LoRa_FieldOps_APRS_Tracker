@@ -182,11 +182,48 @@ namespace APRS_IS_Utils {
         if (!aprsIsClient.connected()) return;
         if (packet.indexOf("NOGATE") >= 0) return;
 
-        // Dedup: skip if same originating callsign + payload was uploaded within 30 s.
-        // Filters duplicates that arrive via multiple digi paths (e.g. direct + via KG7XXX).
         int colonIdx = packet.indexOf(":");
         if (colonIdx < 3) return;
-        String sender  = packet.substring(0, packet.indexOf(">"));
+        int arrowIdx = packet.indexOf(">");
+        if (arrowIdx <= 0 || arrowIdx > colonIdx) return;
+
+        // ── Reject IS→RF rebroadcast echoes ─────────────────────────────────
+        // A remote iGate that gates APRS-IS traffic back onto RF re-originates
+        // the frame with its OWN iGate tocall and a fresh WIDEn-N path, and —
+        // unlike a proper third-party gate — strips the TCPIP marker, so the
+        // echo is indistinguishable from a brand-new RF beacon.  If we gate it,
+        // the station lands on APRS-IS twice (once from our direct RX, once from
+        // the echo).  The content dedup below cannot catch it: the round-trip
+        // through APRS-IS (line-based text) and back out the remote LoRa TX
+        // perturbs ≥1 byte of a compressed position, changing the djb2 hash.
+        // Drop the echo up front when any of the following holds:
+        //   1. Destination tocall is a known LoRa-iGate tocall — a real tracker
+        //      never beacons with an iGate tocall, so this is unambiguously an
+        //      echo (e.g. CA2RXU LoRa_APRS_iGate transmits with "APLRG1").
+        //   2. Frame carries a "TCPIP" marker → it originated from APRS-IS.
+        //   3. Frame is a third-party packet (info field begins with '}').
+        // (1) is the primary signal for the misconfigured-neighbor case; (2)/(3)
+        // mirror the checks the IS→RF path already applies in listenAPRSIS().
+        static const char* const IGATE_ECHO_TOCALLS[] = { "APLRG1" };
+        int    sepIdx  = packet.indexOf(",", arrowIdx);          // end of tocall = first ','
+        if (sepIdx < 0 || sepIdx > colonIdx) sepIdx = colonIdx;  // ... or the ':' if no path
+        String toCall  = packet.substring(arrowIdx + 1, sepIdx);
+        bool   isEcho  = false;
+        for (const char* t : IGATE_ECHO_TOCALLS)
+            if (toCall == t) { isEcho = true; break; }
+        if (!isEcho && packet.indexOf("TCPIP") != -1)     isEcho = true;
+        if (!isEcho && packet.charAt(colonIdx + 1) == '}') isEcho = true;
+        if (isEcho) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS",
+                       "Skip IS->RF echo (rebroadcast): %s", packet.c_str());
+            LogBuffer::pushf(LogBuffer::TYPE_INFO, "Skip IS->RF echo: %s",
+                             packet.substring(0, colonIdx).c_str());
+            return;
+        }
+
+        // Dedup: skip if same originating callsign + payload was uploaded within 30 s.
+        // Filters duplicates that arrive via multiple digi paths (e.g. direct + via KG7XXX).
+        String sender  = packet.substring(0, arrowIdx);
         String payload = packet.substring(colonIdx);
         if (!igIsNew(sender, payload)) {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS",
