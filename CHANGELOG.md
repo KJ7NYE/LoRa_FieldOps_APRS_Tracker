@@ -9,6 +9,24 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-07-11 — iGate: stop re-gating remote IS→RF rebroadcast echoes (duplicate uploads)
+
+A nearby station appeared on APRS-IS twice, both `qAR,<ouriGate>`: once from our direct RX of the
+tracker's beacon, and again ~1–2 s later when a distant iGate (running CA2RXU's LoRa_APRS_iGate)
+re-transmitted the same packet from APRS-IS back onto RF — rewritten with its own iGate tocall
+(`APLRG1`), a fresh `WIDE1-1,WIDE2-1` path, and no `TCPIP` marker, making the echo look like a
+brand-new RF beacon. The existing content dedup couldn't collapse the two because the round-trip
+through APRS-IS and back out the remote LoRa TX perturbs a byte of the compressed position field,
+changing its hash. `processLoRaPacket()` now drops IS→RF echoes up front — recognizing a known
+iGate tocall, a `TCPIP` marker, or a third-party (`}`) info field — before the dedup/upload step,
+so each beacon is gated exactly once. Also affected the whole echo firehose, not just one station.
+
+Files changed:
+
+- [src/aprs_is_utils.cpp](src/aprs_is_utils.cpp) — echo guard at the top of `processLoRaPacket()`
+
+---
+
 ## 2026-07-07 — heltec_v3_433_aprs: fix permanently dark OLED by targeting V3.2 hardware only
 
 `vext_ctrl_ON()`/`OFF()` in `power_utils.cpp` drove `VEXT_CTRL` HIGH-for-on for `HELTEC_V3_433_APRS`, matching the original Heltec WiFi LoRa 32 V3 polarity. Heltec's V3.2 revision inverts this (LOW = peripherals on). On true V3.2 silkscreen boards — which is what's actually sold and what this variant now exclusively targets — the OLED's VEXT rail was never powered, so the display stayed dark in every mode (boot, running, TX) regardless of display/eco-mode/invert settings. Confirmed on two separate V3.2 units.
