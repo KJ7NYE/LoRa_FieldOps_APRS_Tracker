@@ -20,6 +20,7 @@
 #include <esp_timer.h>
 #include <Update.h>
 #include <vector>
+#include "board_pinout.h"
 #include "configuration.h"
 #include "web_utils.h"
 #include "wifi_utils.h"
@@ -237,7 +238,15 @@ namespace WEB_Utils {
         Config.loraTypes[0].spreadingFactor = getParamIntSafe   ("lora.0.spreadingFactor", Config.loraTypes[0].spreadingFactor);
         Config.loraTypes[0].codingRate4     = getParamIntSafe   ("lora.0.codingRate4",     Config.loraTypes[0].codingRate4);
         Config.loraTypes[0].signalBandwidth = getParamIntSafe   ("lora.0.signalBandwidth", Config.loraTypes[0].signalBandwidth);
-        Config.loraTypes[0].power           = getParamIntSafe   ("lora.0.power",           Config.loraTypes[0].power);
+        // Board-specific safety ceiling: the T-Beam 1W's HAS_1W_LORA path
+        // drives an external 30 dBm PA with no headroom check from RadioLib
+        // (see LoRa_Utils::applyOutputPower()), so cap saved values here too —
+        // a direct POST to this endpoint bypasses the config UI's dropdown.
+        #ifdef HAS_1W_LORA
+        Config.loraTypes[0].power           = constrain(getParamIntSafe("lora.0.power", Config.loraTypes[0].power), 2, 20);
+        #else
+        Config.loraTypes[0].power           = constrain(getParamIntSafe("lora.0.power", Config.loraTypes[0].power), 2, 22);
+        #endif
 
         //  Battery
         Config.battery.sendVoltage              = request->hasParam("battery.sendVoltage", true);

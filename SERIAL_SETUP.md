@@ -133,7 +133,20 @@ plan.
 | `lora sf <7..12>`        | Spreading factor.                 |
 | `lora bw <Hz>`           | Signal bandwidth in hertz.        |
 | `lora cr <5..8>`         | Coding rate denominator.          |
-| `lora power <dBm>`       | TX power.                         |
+| `lora power <dBm>`       | TX power. Clamped to 2-20 on `HAS_1W_LORA` boards (T-Beam 1W, LoRanger V1), 2-22 elsewhere. |
+
+Actual RF output for a given `power` setting depends on the board: T114/V3.2
+are bare SX1262 (chip output = setting + 2 dBm, clamped at 22 dBm); the
+T-Beam 1W drives an external 30 dBm (1 W) PA. Only `power 20` on the T-Beam
+1W (&rarr; 30 dBm/1 W) is a verified datasheet figure — intermediate T-Beam
+1W values below are approximate.
+
+| Setting | T114 / V3.2 actual output | T-Beam 1W actual output |
+|---|---|---|
+| 6 dBm  | 8 dBm (~6 mW)    | ~16 dBm (~40 mW), approx. |
+| 12 dBm | 14 dBm (~25 mW)  | ~22 dBm (~158 mW), approx. |
+| 18 dBm | 20 dBm (~100 mW) | ~28 dBm (~631 mW), approx. |
+| 20 dBm | 22 dBm (~158 mW) | 30 dBm (1 W) — datasheet-validated max |
 
 ### Display
 
@@ -317,7 +330,7 @@ beacon callsign KJ7NYE-7
 beacon symbol [
 beacon overlay /
 beacon comment LoRanger V1 KJ7NYE
-lora power 22
+lora power 20
 beaconpath WIDE1-1
 save
 exit
