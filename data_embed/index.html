@@ -317,10 +317,29 @@
                                                 </select>
                                             </div>
                                             <div class="col-md-2">
-                                                <label class="form-label" for="lora.0.power">TX power</label>
-                                                <input type="number" class="form-control" id="lora.0.power" name="lora.0.power" min="2" max="22" />
+                                                <label class="form-label" for="lora.0.power">TX power (dBm)</label>
+                                                <select class="form-select" id="lora.0.power" name="lora.0.power">
+                                                    <option value="6">6 dBm</option>
+                                                    <option value="12">12 dBm</option>
+                                                    <option value="18">18 dBm</option>
+                                                    <option value="20">20 dBm (max)</option>
+                                                </select>
                                             </div>
                                         </div>
+                                        <div class="form-text mt-2">
+                                            Actual RF output depends on your board — see table below. Only 20 dBm on the T-Beam 1W (&rarr; 30 dBm / 1&nbsp;W) is a verified datasheet figure; other T-Beam 1W values are approximate.
+                                        </div>
+                                        <table class="table table-sm table-bordered mt-1" style="max-width: 520px;">
+                                            <thead>
+                                                <tr><th>Setting</th><th>T114 / V3.2 output</th><th>T-Beam 1W output</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>6 dBm</td><td>8 dBm (~6 mW)</td><td>~16 dBm (~40 mW), approx.</td></tr>
+                                                <tr><td>12 dBm</td><td>14 dBm (~25 mW)</td><td>~22 dBm (~158 mW), approx.</td></tr>
+                                                <tr><td>18 dBm</td><td>20 dBm (~100 mW)</td><td>~28 dBm (~631 mW), approx.</td></tr>
+                                                <tr><td>20 dBm</td><td>22 dBm (~158 mW)</td><td>30 dBm (1 W) &mdash; datasheet-validated max</td></tr>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>

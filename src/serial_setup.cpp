@@ -13,6 +13,7 @@
 #include <SPIFFS.h>
 #include <logger.h>
 #include "serial_setup.h"
+#include "board_pinout.h"
 #include "configuration.h"
 #include "display.h"
 #include "smartbeacon_utils.h"
@@ -454,7 +455,15 @@ namespace SERIAL_Setup {
             ok("cr = " + String(l.codingRate4));
         } else if (sub == "power") {
             if (n < 3) { err("power <dBm>"); return; }
-            l.power = tk[2].toInt();
+            // Board-specific safety ceiling: the T-Beam 1W's HAS_1W_LORA path
+            // drives an external 30 dBm PA with no headroom check from RadioLib
+            // (see LoRa_Utils::applyOutputPower()), so cap CLI input here too —
+            // typing a value bypasses the config UI's curated dropdown.
+            #ifdef HAS_1W_LORA
+            l.power = constrain(tk[2].toInt(), 2, 20);
+            #else
+            l.power = constrain(tk[2].toInt(), 2, 22);
+            #endif
             ok("power = " + String(l.power));
         } else {
             err("unknown lora subcommand: " + sub);

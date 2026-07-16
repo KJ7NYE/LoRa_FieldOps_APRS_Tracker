@@ -75,6 +75,39 @@ namespace LoRa_Utils {
         operationDone = true;
     }
 
+    // Applies currentLoRaType->power to the radio for the active chip family,
+    // clamping per-family to the driver's valid range (bare SX126x) or the
+    // external PA's documented-safe input level (HAS_1W_LORA). Shared by
+    // setup() and changeFreq() so the two call sites can't drift out of sync.
+    int applyOutputPower() {
+        int state = RADIOLIB_ERR_NONE;
+        #ifdef HAS_1W_LORA
+            // Ebyte E22 400M30S (SX1262) / 900M30S / E220 400M30S (LLCC68) driving
+            // an external 30 dBm (1 W) PA. Chip-level drive is only validated up
+            // to 20 dBm (-> ~30 dBm/1W rated PA output via the module's internal
+            // LNA). RadioLib's own range check won't catch an over-drive here
+            // (22 dBm is still chip-legal), so clamp defensively — a stale/corrupt
+            // config or a user-typed CLI value must not push the PA past its
+            // documented operating point.
+            int8_t clampedPower = constrain(currentLoRaType->power, 2, 20);
+            state = radio.setOutputPower(clampedPower);
+            radio.setCurrentLimit(140); // to be validated (100 , 120, 140)?
+        #elif defined(HAS_SX1268) || defined(HAS_SX1262)
+            // SX1262 valid range is -9..+22 dBm. The +2 offset is upstream's
+            // user-friendly bump (config 20 -> chip 22). If the on-flash
+            // config has a value outside the safe band, the call returns
+            // -13 (INVALID_OUTPUT_POWER) and aborts the whole init. Clamp
+            // here so a stale or corrupt config can't brick startup.
+            int8_t clampedPower = constrain((int)currentLoRaType->power + 2, -9, 22);
+            state = radio.setOutputPower(clampedPower);
+            radio.setCurrentLimit(140);
+        #elif defined(HAS_SX1278) || defined(HAS_SX1276)
+            state = radio.setOutputPower(currentLoRaType->power);
+            radio.setCurrentLimit(100); // to be validated (80 , 100)?
+        #endif
+        return state;
+    }
+
     void changeFreq() {
         // Single LoRa profile — nothing to cycle.
         // Apply current profile settings (in case they changed via CLI/web).
@@ -84,12 +117,7 @@ namespace LoRa_Utils {
         float signalBandwidth = currentLoRaType->signalBandwidth / 1000.0f;
         radio.setBandwidth(signalBandwidth);
         radio.setCodingRate(currentLoRaType->codingRate4);
-        #if (defined(HAS_SX1268) || defined(HAS_SX1262)) && !defined(HAS_1W_LORA)
-            radio.setOutputPower(currentLoRaType->power + 2);
-        #endif
-        #if defined(HAS_SX1278) || defined(HAS_SX1276) || defined(HAS_1W_LORA)
-            radio.setOutputPower(currentLoRaType->power);
-        #endif
+        applyOutputPower();
 
         String currentLoRainfo = "LoRa / Freq: ";
         currentLoRainfo += String(currentLoRaType->frequency);
@@ -156,33 +184,7 @@ namespace LoRa_Utils {
             radio.setRfSwitchPins(RADIO_RXEN, RADIOLIB_NC);
         #endif
 
-        #ifdef HAS_1W_LORA  // Ebyte E22 400M30S (SX1268) / 900M30S (SX1262) / Ebyte E220 400M30S (LLCC68)
-            state = radio.setOutputPower(currentLoRaType->power); // max value 20 (when 20dB in setup 30dB in output as 400M30S has Low Noise Amp)
-            radio.setCurrentLimit(140); // to be validated (100 , 120, 140)?
-        #endif
-
-        #if (defined(HAS_SX1268) || defined(HAS_SX1262)) && !defined(HAS_1W_LORA)
-            // SX1262 valid range is -9..+22 dBm. The +2 offset is upstream's
-            // user-friendly bump (config 20 -> chip 22). If the on-flash
-            // config has a value outside the safe band, the call returns
-            // -13 (INVALID_OUTPUT_POWER) and aborts the whole init. Clamp
-            // here so a stale or corrupt config can't brick startup.
-            int8_t requestedPower = currentLoRaType->power + 2;
-            int8_t clampedPower   = requestedPower;
-            if (clampedPower > 22)  clampedPower = 22;
-            if (clampedPower < -9)  clampedPower = -9;
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "LoRa",
-                       "cfg power=%d, requested=%d, clamped=%d",
-                       (int)currentLoRaType->power,
-                       (int)requestedPower, (int)clampedPower);
-            state = radio.setOutputPower(clampedPower);
-            radio.setCurrentLimit(140);
-        #endif
-
-        #if defined(HAS_SX1278) || defined(HAS_SX1276)
-            state = radio.setOutputPower(currentLoRaType->power);
-            radio.setCurrentLimit(100); // to be validated (80 , 100)?
-        #endif
+        state = applyOutputPower();
 
         #if defined(HAS_SX1262) || defined(HAS_SX1268) || defined(HAS_LLCC68)
             radio.setRxBoostedGainMode(true);
