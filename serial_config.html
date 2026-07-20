@@ -1851,54 +1851,103 @@ function renderConfig() {
       body.appendChild(row);
     }
     body.appendChild(mkBool('WiFi STA enabled', wifiSTA.enabled, v => sendCmd(`wifista ${boolStr(v)}`)));
-    // SSID row, with an inline Scan button + datalist picker
+    // Network list -- up to 5 entries, tried in priority (list) order. Each row
+    // is a SSID (+ Scan + Delete) followed by a password field (reusing the
+    // existing mkPassword helper for its show/hide toggle). Add/remove mutate
+    // the device's indexed list via `wifista add`/`wifista remove <i>`, then
+    // re-fetch the whole config (readConfig()) so on-screen indices never drift
+    // from the device's actual vector.
     {
-      const row = document.createElement('div');
-      row.className = 'field-row';
-      const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = 'SSID';
-      const ctl = document.createElement('div'); ctl.className = 'field-control'; ctl.style.cssText = 'display:flex;gap:0.4rem';
-      const ssidInp = document.createElement('input');
-      ssidInp.type = 'text'; ssidInp.className = 'form-control form-control-sm';
-      ssidInp.value = wifiSTA.ssid || ''; ssidInp.placeholder = 'SSID (or type manually for hidden networks)';
-      ssidInp.setAttribute('list', 'wifiStaSsidList');
-      const dl = document.createElement('datalist');
-      dl.id = 'wifiStaSsidList';
-      const scanBtn = document.createElement('button');
-      scanBtn.className = 'btn btn-sm btn-outline-secondary'; scanBtn.type = 'button';
-      scanBtn.textContent = 'Scan';
-      scanBtn.addEventListener('click', async () => {
-        scanBtn.disabled = true;
-        const prevText = scanBtn.textContent;
-        scanBtn.textContent = 'Scanning…';
-        try {
-          const resp = await sendCmd('wifista scan');
-          dl.innerHTML = '';
-          const lines = resp.split('\n').filter(l => l.includes('wifiSTA.scan:'));
-          lines.forEach(l => {
-            const m = /ssid=(.+)$/.exec(l.trim());
-            const rssiM = /rssi=(-?\d+)/.exec(l);
-            if (m) {
-              const o = document.createElement('option');
-              o.value = m[1];
-              o.label = rssiM ? (m[1] + ' (' + rssiM[1] + ' dBm)') : m[1];
-              dl.appendChild(o);
-            }
-          });
-          if (lines.length === 0) logErr('No networks found');
-        } catch (e) {
-          logErr('Scan failed: ' + e.message);
-        }
-        scanBtn.disabled = false;
-        scanBtn.textContent = prevText;
+      const networks = wifiSTA.networks || [];
+      body.appendChild(mkInfo('Up to 5 networks, tried in order top to bottom. Stays connected until the link drops.'));
+
+      networks.forEach((net, i) => {
+        const netWrap = document.createElement('div');
+        netWrap.style.cssText = 'border:1px solid var(--border-color,#3a3f4b);border-radius:6px;padding:0.6rem;margin-bottom:0.6rem';
+
+        const row = document.createElement('div');
+        row.className = 'field-row';
+        const lbl = document.createElement('div'); lbl.className = 'field-label'; lbl.textContent = `SSID ${i + 1}`;
+        const ctl = document.createElement('div'); ctl.className = 'field-control'; ctl.style.cssText = 'display:flex;gap:0.4rem';
+        const ssidInp = document.createElement('input');
+        ssidInp.type = 'text'; ssidInp.className = 'form-control form-control-sm';
+        ssidInp.value = net.ssid || ''; ssidInp.placeholder = 'SSID';
+        ssidInp.setAttribute('list', 'wifiStaSsidList' + i);
+        const dl = document.createElement('datalist');
+        dl.id = 'wifiStaSsidList' + i;
+        const scanBtn = document.createElement('button');
+        scanBtn.className = 'btn btn-sm btn-outline-secondary'; scanBtn.type = 'button';
+        scanBtn.textContent = 'Scan';
+        scanBtn.addEventListener('click', async () => {
+          scanBtn.disabled = true;
+          const prevText = scanBtn.textContent;
+          scanBtn.textContent = 'Scanning…';
+          try {
+            const resp = await sendCmd('wifista scan');
+            dl.innerHTML = '';
+            const lines = resp.split('\n').filter(l => l.includes('wifiSTA.scan:'));
+            lines.forEach(l => {
+              const m = /ssid=(.+)$/.exec(l.trim());
+              const rssiM = /rssi=(-?\d+)/.exec(l);
+              if (m) {
+                const o = document.createElement('option');
+                o.value = m[1];
+                o.label = rssiM ? (m[1] + ' (' + rssiM[1] + ' dBm)') : m[1];
+                dl.appendChild(o);
+              }
+            });
+            if (lines.length === 0) logErr('No networks found');
+          } catch (e) {
+            logErr('Scan failed: ' + e.message);
+          }
+          scanBtn.disabled = false;
+          scanBtn.textContent = prevText;
+        });
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-sm btn-outline-danger'; delBtn.type = 'button';
+        delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', async () => {
+          delBtn.disabled = true;
+          try {
+            await sendCmd(`wifista remove ${i}`);
+            await readConfig();
+          } catch (e) {
+            logErr('Remove failed: ' + e.message);
+            delBtn.disabled = false;
+          }
+        });
+        ssidInp.addEventListener('change', () => { markDirty(ssidInp); sendCmd(`wifista ssid ${i} ${ssidInp.value}`); });
+        ctl.appendChild(ssidInp); ctl.appendChild(dl); ctl.appendChild(scanBtn); ctl.appendChild(delBtn);
+        row.appendChild(lbl); row.appendChild(ctl);
+        netWrap.appendChild(row);
+
+        netWrap.appendChild(mkPassword(`Password ${i + 1}`, net.password, v => sendCmd(`wifista password ${i} ${v}`)));
+
+        body.appendChild(netWrap);
       });
-      ssidInp.addEventListener('change', () => { markDirty(ssidInp); sendCmd(`wifista ssid ${ssidInp.value}`); });
-      ctl.appendChild(ssidInp); ctl.appendChild(dl); ctl.appendChild(scanBtn);
-      row.appendChild(lbl); row.appendChild(ctl);
-      body.appendChild(row);
+
+      const addRow = document.createElement('div');
+      addRow.style.cssText = 'margin-top:0.4rem';
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn btn-sm btn-outline-secondary';
+      addBtn.type = 'button';
+      addBtn.textContent = '+ Add network';
+      addBtn.disabled = networks.length >= 5;
+      addBtn.addEventListener('click', async () => {
+        const ssid = prompt('New network SSID:');
+        if (!ssid) return;
+        addBtn.disabled = true;
+        try {
+          await sendCmd(`wifista add ${ssid}`);
+          await readConfig();
+        } catch (e) {
+          logErr('Add network failed: ' + e.message);
+          addBtn.disabled = false;
+        }
+      });
+      addRow.appendChild(addBtn);
+      body.appendChild(addRow);
     }
-    // Password row -- reuses the existing mkPassword helper (already used for
-    // the AP password above), which gets the show/hide toggle for free.
-    body.appendChild(mkPassword('Password', wifiSTA.password, v => sendCmd(`wifista password ${v}`)));
 
     body.appendChild(mkGroupTitle('APRS-IS'));
     // ── Live APRS-IS connection indicator ────────────────────────────────────

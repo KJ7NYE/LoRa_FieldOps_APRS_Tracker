@@ -46,11 +46,18 @@ enum GPSSource {
     GPS_NONE     = 2   // no position source; no beacons (pure TNC/relay)
 };
 
-class WiFiSTA {
+static constexpr uint8_t MAX_WIFI_NETWORKS = 5;
+
+class WiFiNetwork {
 public:
-    bool    enabled;
     String  ssid;
     String  password;
+};
+
+class WiFiSTA {
+public:
+    bool                     enabled;
+    std::vector<WiFiNetwork> networks;   // 0..MAX_WIFI_NETWORKS entries, priority = list order
 };
 
 class WiFiAP {

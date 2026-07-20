@@ -99,9 +99,9 @@ function loadSettings(s) {
     setVal('wifiAP.password', wap.password ?? '1234567890');
 
     const wsta = s.wifiSTA ?? {};
-    setVal('wifiSTA.enabled',  wsta.enabled  ?? false);
-    setVal('wifiSTA.ssid',     wsta.ssid     ?? '');
-    setVal('wifiSTA.password', wsta.password ?? '');
+    setVal('wifiSTA.enabled', wsta.enabled ?? false);
+    wifiNetworks = (wsta.networks ?? []).map(n => ({ ssid: n.ssid ?? '', password: n.password ?? '' }));
+    renderWifiNetworks();
     if (wsta.enabled) startWifiStaPolling(); else stopWifiStaPolling();
 
     const ais = s.aprsIS ?? {};
@@ -195,6 +195,7 @@ document.getElementById('configForm')?.addEventListener('submit', async function
     const saveModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('saveModal'));
     saveModal.show();
     try {
+        syncWifiNetworksToForm();
         const fd = new FormData(this);
         const res = await fetch('/configuration.json', { method: 'POST', body: fd });
         if (!res.ok) throw new Error('Save failed: HTTP ' + res.status);
@@ -394,36 +395,159 @@ document.getElementById('wifiSTA.enabled')?.addEventListener('change', function(
     if (this.checked) startWifiStaPolling(); else stopWifiStaPolling();
 });
 
-document.getElementById('wifiStaPassToggle')?.addEventListener('click', function() {
-    const inp = document.getElementById('wifiSTA.password');
-    if (!inp) return;
-    inp.type = inp.type === 'password' ? 'text' : 'password';
+// ── WiFi STA networks (up to 5, priority = list order) ──────────────────────
+
+let wifiNetworks = [];   // working copy: [{ssid, password}, ...]
+
+function renderWifiNetworks() {
+    const list = document.getElementById('wifiNetworksList');
+    if (!list) return;
+    list.innerHTML = '';
+    wifiNetworks.forEach((net, i) => {
+        const row = document.createElement('div');
+        row.className = 'row g-2 align-items-end mb-2 wifi-net-row';
+        row.dataset.index = i;
+
+        const ssidCol = document.createElement('div');
+        ssidCol.className = 'col-md-5';
+        const ssidLabel = document.createElement('label');
+        ssidLabel.className = 'form-label';
+        ssidLabel.textContent = 'SSID ' + (i + 1);
+        const ssidGroup = document.createElement('div');
+        ssidGroup.className = 'input-group';
+        const ssidInput = document.createElement('input');
+        ssidInput.type = 'text';
+        ssidInput.className = 'form-control wifi-net-ssid';
+        ssidInput.placeholder = 'SSID';
+        ssidInput.value = net.ssid;
+        ssidInput.setAttribute('list', 'wifiStaSsidList' + i);
+        const datalist = document.createElement('datalist');
+        datalist.id = 'wifiStaSsidList' + i;
+        const scanBtn = document.createElement('button');
+        scanBtn.type = 'button';
+        scanBtn.className = 'btn btn-outline-secondary wifi-net-scan';
+        scanBtn.textContent = 'Scan';
+        ssidGroup.append(ssidInput, datalist, scanBtn);
+        ssidCol.append(ssidLabel, ssidGroup);
+
+        const passCol = document.createElement('div');
+        passCol.className = 'col-md-5';
+        const passLabel = document.createElement('label');
+        passLabel.className = 'form-label';
+        passLabel.textContent = 'Password ' + (i + 1);
+        const passGroup = document.createElement('div');
+        passGroup.className = 'input-group';
+        const passInput = document.createElement('input');
+        passInput.type = 'password';
+        passInput.className = 'form-control wifi-net-password';
+        passInput.placeholder = 'Password';
+        passInput.value = net.password;
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'btn btn-outline-secondary wifi-net-toggle';
+        toggleBtn.textContent = 'Show';
+        passGroup.append(passInput, toggleBtn);
+        passCol.append(passLabel, passGroup);
+
+        const delCol = document.createElement('div');
+        delCol.className = 'col-md-2';
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn-outline-danger wifi-net-remove';
+        delBtn.textContent = 'Delete';
+        delCol.appendChild(delBtn);
+
+        row.append(ssidCol, passCol, delCol);
+        list.appendChild(row);
+    });
+    const addBtn = document.getElementById('wifiStaAddBtn');
+    if (addBtn) addBtn.disabled = wifiNetworks.length >= 5;
+}
+
+// Pulls current DOM input values back into wifiNetworks[] before any
+// add/remove/save operation re-renders or serializes the list.
+function syncWifiNetworksFromDom() {
+    document.querySelectorAll('#wifiNetworksList .wifi-net-row').forEach(row => {
+        const i = parseInt(row.dataset.index, 10);
+        if (!wifiNetworks[i]) return;
+        wifiNetworks[i].ssid     = row.querySelector('.wifi-net-ssid').value;
+        wifiNetworks[i].password = row.querySelector('.wifi-net-password').value;
+    });
+}
+
+// Dynamically-created rows are re-rendered on every add/remove, so they can't
+// carry stable indexed name= attributes for native FormData serialization.
+// Mirror wifiNetworks[] into hidden inputs (dot-indexed, matching this
+// project's beacons.0.*/lora.0.* convention) right before submit instead.
+function syncWifiNetworksToForm() {
+    syncWifiNetworksFromDom();
+    const hidden = document.getElementById('wifiNetworksHidden');
+    if (!hidden) return;
+    hidden.innerHTML = '';
+    wifiNetworks.forEach((net, i) => {
+        const ssidInp = document.createElement('input');
+        ssidInp.type = 'hidden';
+        ssidInp.name = 'wifiSTA.networks.' + i + '.ssid';
+        ssidInp.value = net.ssid;
+        const passInp = document.createElement('input');
+        passInp.type = 'hidden';
+        passInp.name = 'wifiSTA.networks.' + i + '.password';
+        passInp.value = net.password;
+        hidden.append(ssidInp, passInp);
+    });
+    setVal('wifiSTA.networksCount', wifiNetworks.length);
+}
+
+document.getElementById('wifiStaAddBtn')?.addEventListener('click', function() {
+    if (wifiNetworks.length >= 5) return;
+    syncWifiNetworksFromDom();
+    wifiNetworks.push({ ssid: '', password: '' });
+    renderWifiNetworks();
 });
 
-document.getElementById('wifiStaScanBtn')?.addEventListener('click', async function() {
-    const btn = this;
-    const dl  = document.getElementById('wifiStaSsidList');
-    if (!dl) return;
-    btn.disabled = true;
-    const prevText = btn.textContent;
-    btn.textContent = 'Scanning…';
-    try {
-        const res = await fetch('/wifi-scan.json', { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const nets = await res.json();
-        dl.innerHTML = '';
-        nets.forEach(nw => {
-            const o = document.createElement('option');
-            o.value = nw.ssid;
-            o.label = nw.ssid + ' (' + nw.rssi + ' dBm' + (nw.secure ? '' : ', open') + ')';
-            dl.appendChild(o);
-        });
-        if (nets.length === 0) showToast('No networks found');
-    } catch (e) {
-        showToast('Scan failed: ' + e.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = prevText;
+// Event delegation: rows are re-created on every render, so bind once on the
+// container rather than per-row.
+document.getElementById('wifiNetworksList')?.addEventListener('click', async function(e) {
+    const row = e.target.closest('.wifi-net-row');
+    if (!row) return;
+    const i = parseInt(row.dataset.index, 10);
+
+    if (e.target.classList.contains('wifi-net-remove')) {
+        syncWifiNetworksFromDom();
+        wifiNetworks.splice(i, 1);
+        renderWifiNetworks();
+        return;
+    }
+    if (e.target.classList.contains('wifi-net-toggle')) {
+        const inp = row.querySelector('.wifi-net-password');
+        if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
+        return;
+    }
+    if (e.target.classList.contains('wifi-net-scan')) {
+        const btn = e.target;
+        const dl  = row.querySelector('datalist');
+        if (!dl) return;
+        btn.disabled = true;
+        const prevText = btn.textContent;
+        btn.textContent = 'Scanning…';
+        try {
+            const res = await fetch('/wifi-scan.json', { signal: AbortSignal.timeout(8000) });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const nets = await res.json();
+            dl.innerHTML = '';
+            nets.forEach(nw => {
+                const o = document.createElement('option');
+                o.value = nw.ssid;
+                o.label = nw.ssid + ' (' + nw.rssi + ' dBm' + (nw.secure ? '' : ', open') + ')';
+                dl.appendChild(o);
+            });
+            if (nets.length === 0) showToast('No networks found');
+        } catch (err) {
+            showToast('Scan failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = prevText;
+        }
     }
 });
 

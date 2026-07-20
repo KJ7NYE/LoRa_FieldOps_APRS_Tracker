@@ -584,20 +584,12 @@
                                                     <label class="form-check-label" for="wifiSTA.enabled">Connect to existing network</label>
                                                 </div>
                                             </div>
-                                            <div class="col-md-5">
-                                                <label class="form-label" for="wifiSTA.ssid">SSID</label>
-                                                <div class="input-group">
-                                                    <input type="text" class="form-control" id="wifiSTA.ssid" name="wifiSTA.ssid" placeholder="SSID (or type manually for hidden networks)" list="wifiStaSsidList" />
-                                                    <datalist id="wifiStaSsidList"></datalist>
-                                                    <button type="button" class="btn btn-outline-secondary" id="wifiStaScanBtn">Scan</button>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-5">
-                                                <label class="form-label" for="wifiSTA.password">Password</label>
-                                                <div class="input-group">
-                                                    <input type="password" class="form-control" id="wifiSTA.password" name="wifiSTA.password" placeholder="Password" />
-                                                    <button type="button" class="btn btn-outline-secondary" id="wifiStaPassToggle" title="Toggle visibility">Show</button>
-                                                </div>
+                                            <div class="col-12">
+                                                <div id="wifiNetworksList"></div>
+                                                <div id="wifiNetworksHidden"></div>
+                                                <input type="hidden" id="wifiSTA.networksCount" name="wifiSTA.networksCount" value="0" />
+                                                <button type="button" class="btn btn-sm btn-outline-secondary mt-1" id="wifiStaAddBtn">+ Add network</button>
+                                                <small class="d-block text-muted mt-1">Up to 5 networks, tried in order top to bottom. The device stays on whichever one it connects to until that link drops.</small>
                                             </div>
 
                                             <!-- APRS-IS (shown when role = iGate) -->

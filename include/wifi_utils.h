@@ -49,14 +49,21 @@ namespace WIFI_Utils {
     // Returns immediately (no AP started) if neither trigger is active.
     void checkIfWiFiAP(bool buttonHeld);
 
-    // Connect to STA (infrastructure) network using Config.wifiSTA credentials.
+    // Connect to STA (infrastructure) network, trying Config.wifiSTA.networks
+    // starting from the highest-priority (index 0) populated slot.
     // Blocks up to 10 s; logs result. Returns true on successful association.
     // Use only at boot where a one-time blocking wait is acceptable.
     bool connectSTA();
 
-    // Non-blocking: kick off WiFi association and return immediately.
-    // Caller must poll isSTAConnected() each loop to detect success or timeout.
-    void beginSTAConnect();
+    // Non-blocking: kick off WiFi association to Config.wifiSTA.networks[index]
+    // and return immediately. No-op (returns false) if index is out of range
+    // or that slot's ssid is empty. Caller must poll isSTAConnected() each
+    // loop to detect success or timeout.
+    bool beginSTAConnect(size_t index);
+
+    // Returns the lowest index >= fromIndex (wrapping to 0 once) whose slot
+    // has a non-empty ssid, or -1 if no configured slot has one.
+    int nextConfiguredNetwork(size_t fromIndex);
 
     // True when the station interface is associated and has an IP.
     bool isSTAConnected();
