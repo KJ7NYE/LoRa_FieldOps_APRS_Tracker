@@ -133,7 +133,7 @@ namespace DeviceRoleUtils {
     }
 
     void initializeWiFiSTA() {
-        if (!Config.wifiSTA.enabled || Config.wifiSTA.ssid.length() == 0) return;
+        if (!Config.wifiSTA.enabled || Config.wifiSTA.networks.empty()) return;
 
         WIFI_Utils::connectSTA();
 
@@ -145,7 +145,7 @@ namespace DeviceRoleUtils {
     void initializeIGate() {
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Role", "iGate mode: APRS-IS relay enabled");
 
-        if (Config.wifiSTA.enabled && Config.wifiSTA.ssid.length() > 0) {
+        if (Config.wifiSTA.enabled && !Config.wifiSTA.networks.empty()) {
             WIFI_Utils::connectSTA();
         } else {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Role", "WiFi STA not configured — iGate will not reach APRS-IS");
@@ -220,25 +220,49 @@ namespace DeviceRoleUtils {
 
     #ifdef HAS_WIFI
     // Non-blocking WiFi reconnect state machine shared by Tracker and Digipeater roles.
-    // Calls beginSTAConnect() once per WIFI_RETRY_INTERVAL_MS; polls isSTAConnected()
-    // each loop iteration; gives up after WIFI_CONNECT_TIMEOUT_MS and waits for the
-    // next interval.  Never blocks the main loop.
+    // Cycles through Config.wifiSTA.networks in priority (list) order: tries the
+    // slot at currentNetworkIndex for up to WIFI_CONNECT_TIMEOUT_MS, and on failure
+    // advances immediately to the next populated slot (no inter-slot cooldown).
+    // Once every populated slot has been tried in a pass, WIFI_RETRY_INTERVAL_MS
+    // cooldown applies before restarting from slot 0 -- a full worst-case pass
+    // (5 slots x 15s + one 30s cooldown ~= 105s) lands in the same "couple of
+    // minutes" ballpark as the previous single-SSID retry cadence.
+    //
+    // Sticky: once connected, stays on currentNetworkIndex and does not hunt for
+    // a higher-priority slot. Only resumes the cycle (from slot 0) the instant the
+    // connection actually drops -- see the wasConnected edge-detect below.
     static bool     wifiConnecting          = false;
     static uint32_t wifiConnectTimestamp    = 0;   // start of current attempt OR end of last attempt
+    static size_t   currentNetworkIndex     = 0;   // slot currently being tried / last connected to
+    static bool     wasConnected            = false;
 
     static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS  = 15000UL;  // per-attempt window
-    static constexpr uint32_t WIFI_RETRY_INTERVAL_MS   = 30000UL;  // cooldown between attempts
+    static constexpr uint32_t WIFI_RETRY_INTERVAL_MS   = 30000UL;  // cooldown before restarting from slot 0
 
     // Returns true on the loop iteration that WiFi first becomes connected.
     static bool tickWiFiReconnect() {
-        if (WIFI_Utils::isSTAConnected()) {
+        // A live serial-CLI `wifista remove` doesn't reboot, so the vector can
+        // shrink out from under a stale index between ticks -- guard defensively.
+        if (currentNetworkIndex >= Config.wifiSTA.networks.size()) currentNetworkIndex = 0;
+
+        bool connectedNow = WIFI_Utils::isSTAConnected();
+        if (wasConnected && !connectedNow) {
+            // Connection just dropped -- restart the priority cycle from slot 0
+            // immediately rather than waiting out any stale cooldown.
+            currentNetworkIndex = 0;
+            wifiConnectTimestamp = 0;
+            wifiConnecting = false;
+        }
+        wasConnected = connectedNow;
+
+        if (connectedNow) {
             if (wifiConnecting) {
                 wifiConnecting = false;
                 logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Reconnected — IP: %s",
                            WiFi.localIP().toString().c_str());
                 return true;   // caller can react to the transition
             }
-            return false;
+            return false;   // sticky: stay put, don't hunt for a higher-priority slot
         }
 
         // Not connected.
@@ -246,15 +270,36 @@ namespace DeviceRoleUtils {
             if (millis() - wifiConnectTimestamp > WIFI_CONNECT_TIMEOUT_MS) {
                 wifiConnecting = false;
                 WiFi.disconnect(true);
-                wifiConnectTimestamp = millis();   // start cooldown
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi",
-                           "Connect attempt timed out, retrying in %us", WIFI_RETRY_INTERVAL_MS / 1000);
+
+                int next = WIFI_Utils::nextConfiguredNetwork(currentNetworkIndex + 1);
+                if (next < 0 || (size_t)next <= currentNetworkIndex) {
+                    // No configured networks, or wrapped back to/before where this
+                    // pass started -- a full pass failed, apply the cooldown.
+                    currentNetworkIndex = 0;
+                    wifiConnectTimestamp = millis();   // start cooldown
+                    logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi",
+                               "Exhausted configured networks, retrying in %us", WIFI_RETRY_INTERVAL_MS / 1000);
+                } else {
+                    // Advance immediately to the next populated slot in this pass.
+                    currentNetworkIndex = (size_t)next;
+                    if (WIFI_Utils::beginSTAConnect(currentNetworkIndex)) {
+                        wifiConnectTimestamp = millis();
+                        wifiConnecting = true;
+                    } else {
+                        wifiConnectTimestamp = millis();   // shouldn't happen; cool down defensively
+                    }
+                }
             }
         } else {
             if (millis() - wifiConnectTimestamp >= WIFI_RETRY_INTERVAL_MS) {
-                WIFI_Utils::beginSTAConnect();
-                wifiConnectTimestamp = millis();
-                wifiConnecting = true;
+                int idx = WIFI_Utils::nextConfiguredNetwork(currentNetworkIndex);
+                if (idx >= 0 && WIFI_Utils::beginSTAConnect((size_t)idx)) {
+                    currentNetworkIndex = (size_t)idx;
+                    wifiConnectTimestamp = millis();
+                    wifiConnecting = true;
+                } else {
+                    wifiConnectTimestamp = millis();   // nothing configured; keep cooling down
+                }
             }
         }
         return false;

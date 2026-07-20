@@ -91,8 +91,20 @@ namespace WIFI_Utils {
         return (int)out.size();
     }
 
-    void beginSTAConnect() {
-        if (Config.wifiSTA.ssid.length() == 0) return;
+    int nextConfiguredNetwork(size_t fromIndex) {
+        size_t count = Config.wifiSTA.networks.size();
+        if (count == 0) return -1;
+        for (size_t i = 0; i < count; i++) {
+            size_t idx = (fromIndex + i) % count;
+            if (Config.wifiSTA.networks[idx].ssid.length() > 0) return (int)idx;
+        }
+        return -1;
+    }
+
+    bool beginSTAConnect(size_t index) {
+        if (index >= Config.wifiSTA.networks.size()) return false;
+        const WiFiNetwork& net = Config.wifiSTA.networks[index];
+        if (net.ssid.length() == 0) return false;
 
         // Build DHCP hostname: CALLSIGN-last4ofMAC  (e.g. "KJ7NYE-7-A1B2")
         // Must be set after WIFI_STA mode but before WiFi.begin().
@@ -105,24 +117,27 @@ namespace WIFI_Utils {
         WiFi.setHostname(hostname);
 
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi",
-                   "Connecting to '%s' as '%s' (async)...",
-                   Config.wifiSTA.ssid.c_str(), hostname);
-        WiFi.begin(Config.wifiSTA.ssid.c_str(), Config.wifiSTA.password.c_str());
+                   "Connecting to '%s' (slot %u) as '%s' (async)...",
+                   net.ssid.c_str(), (unsigned)index, hostname);
+        WiFi.begin(net.ssid.c_str(), net.password.c_str());
+        return true;
     }
 
     bool connectSTA() {
-        if (Config.wifiSTA.ssid.length() == 0) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi", "STA SSID not configured");
+        int idx = nextConfiguredNetwork(0);
+        if (idx < 0) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "WiFi", "No STA networks configured");
             return false;
         }
-        beginSTAConnect();
+        beginSTAConnect((size_t)idx);
 
         uint32_t t0 = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - t0 < 10000UL) {
             delay(500);
         }
         if (WiFi.status() == WL_CONNECTED) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Connected, IP: %s", WiFi.localIP().toString().c_str());
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WiFi", "Connected to '%s', IP: %s",
+                       Config.wifiSTA.networks[idx].ssid.c_str(), WiFi.localIP().toString().c_str());
             bootStatus("WiFi STA connected");
             return true;
         }

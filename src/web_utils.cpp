@@ -266,10 +266,25 @@ namespace WEB_Utils {
         Config.fixedPosition.longitude  = getParamDoubleSafe("fixedPosition.longitude", Config.fixedPosition.longitude);
         Config.fixedPosition.elevation  = getParamFloatSafe ("fixedPosition.elevation", Config.fixedPosition.elevation);
 
-        //  WiFi STA (for iGate mode)
-        Config.wifiSTA.enabled  = request->hasParam("wifiSTA.enabled", true);
-        Config.wifiSTA.ssid     = getParamStringSafe("wifiSTA.ssid",     Config.wifiSTA.ssid);
-        Config.wifiSTA.password = getParamStringSafe("wifiSTA.password", Config.wifiSTA.password);
+        //  WiFi STA (for iGate mode) -- up to MAX_WIFI_NETWORKS networks, tried in
+        //  list order. AsyncWebServer has no "enumerate params by prefix" API, so
+        //  the form sends an explicit count alongside indexed wifiSTA.networks.<i>.*
+        //  fields; never trust the client-sent count, always clamp server-side.
+        Config.wifiSTA.enabled = request->hasParam("wifiSTA.enabled", true);
+        {
+            int count = getParamIntSafe("wifiSTA.networksCount", 0);
+            count = constrain(count, 0, (int)MAX_WIFI_NETWORKS);
+            std::vector<WiFiNetwork> nets;
+            for (int i = 0; i < count; i++) {
+                WiFiNetwork net;
+                net.ssid     = getParamStringSafe("wifiSTA.networks." + String(i) + ".ssid", "");
+                net.password = getParamStringSafe("wifiSTA.networks." + String(i) + ".password", "");
+                net.ssid.trim();
+                if (net.ssid.length() == 0) continue;   // drop blank rows silently
+                nets.push_back(net);
+            }
+            Config.wifiSTA.networks = nets;
+        }
 
         //  APRS-IS
         Config.aprsIS.server   = getParamStringSafe("aprsIS.server",   Config.aprsIS.server);

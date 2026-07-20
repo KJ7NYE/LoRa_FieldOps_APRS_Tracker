@@ -211,8 +211,11 @@ extension.
 | `fixed longitude <dd.dddddd>`                 | Fixed-position longitude.                  |
 | `fixed elevation <m>`                         | Fixed-position elevation in meters.        |
 | `wifista on\|off`                             | Enable/disable WiFi station mode (iGate uplink). |
-| `wifista ssid <text>`                         | WiFi STA SSID.                             |
-| `wifista password <text>`                     | WiFi STA password.                         |
+| `wifista add <ssid...>`                       | Append a network (up to 5, tried in list order); set its password separately. |
+| `wifista remove <index>`                      | Delete the network at `<index>` (0-based; later entries shift down). |
+| `wifista ssid <index> <ssid...>`              | Change the SSID of an existing network.    |
+| `wifista password <index> <text>`             | Change the password of an existing network. |
+| `wifista list`                                | List all configured networks (masked passwords). |
 | `aprsiss server <host>`                       | APRS-IS server hostname.                   |
 | `aprsiss port <n>`                            | APRS-IS server port.                       |
 | `aprsiss passcode <code>`                     | APRS-IS passcode override (leave unset to auto-compute from callsign). |

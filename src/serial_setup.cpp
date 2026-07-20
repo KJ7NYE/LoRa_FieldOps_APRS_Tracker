@@ -167,9 +167,12 @@ namespace SERIAL_Setup {
         Serial.println(F("  role set <tracker|igate|digipeater>"));
         Serial.println(F("  role gps <internal|fixed|none>"));
         Serial.println(F("  fixed latitude <dd.dddddd>  longitude <dd.dddddd>  elevation <m>"));
-        Serial.println(F("  wifista on|off              ssid <text>            password <text>"));
-        Serial.println(F("  wifista scan                (2-4s blocking scan; lists nearby SSIDs)"));
-        Serial.println(F("  wifista status              (prints wifiSTA.connected=true/false)"));
+        Serial.println(F("  wifista on|off"));
+        Serial.println(F("  wifista add <ssid...>        (appends a network, max 5; set password next)"));
+        Serial.println(F("  wifista remove <index>       ssid <index> <ssid...>  password <index> <text>"));
+        Serial.println(F("  wifista list                 (show all configured networks, masked passwords)"));
+        Serial.println(F("  wifista scan                 (2-4s blocking scan; lists nearby SSIDs)"));
+        Serial.println(F("  wifista status               (prints wifiSTA.connected=true/false)"));
         Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
         Serial.println(F("  aprsiss filter <filter>     aprsiss status"));
         Serial.println(F("  aprsiss downlink on|off     (gate IS messages to a locally-heard station back to RF)"));
@@ -320,6 +323,11 @@ namespace SERIAL_Setup {
         if (section == "" || section == "wifi") {
             hdr("wifi");
             kv("password  ", maskSecret(Config.wifiAP.password));
+            kv("sta.enabled", Config.wifiSTA.enabled ? "true" : "false");
+            for (size_t i = 0; i < Config.wifiSTA.networks.size(); i++) {
+                Serial.println("  sta.networks[" + String(i) + "] ssid=" + Config.wifiSTA.networks[i].ssid +
+                                " password=" + maskSecret(Config.wifiSTA.networks[i].password));
+            }
         }
         if (section == "" || section == "other") {
             hdr("other");
@@ -793,18 +801,51 @@ namespace SERIAL_Setup {
     }
 
     static void cmdWifiSta(String* tk, int n, const String& line) {
-        if (n < 2) { err("wifista <on|off|ssid|password|scan|status>"); return; }
+        if (n < 2) { err("wifista <on|off|add|remove|ssid|password|list|scan|status>"); return; }
         const String& sub = tk[1];
         if (sub == "on" || sub == "off" || sub == "true" || sub == "false") {
             applyBool(tk[1], Config.wifiSTA.enabled, "wifiSTA.enabled");
+        } else if (sub == "add") {
+            if (n < 3) { err("wifista add <ssid...>"); return; }
+            if (Config.wifiSTA.networks.size() >= MAX_WIFI_NETWORKS) {
+                err("wifista: max " + String(MAX_WIFI_NETWORKS) + " networks");
+                return;
+            }
+            WiFiNetwork net;
+            net.ssid = restOfLine(line, 2);
+            net.ssid.trim();
+            if (net.ssid.length() == 0) { err("wifista add: ssid required"); return; }
+            Config.wifiSTA.networks.push_back(net);
+            ok("wifiSTA.networks[" + String(Config.wifiSTA.networks.size() - 1) + "].ssid = " + net.ssid +
+               "  (set password next: wifista password " + String(Config.wifiSTA.networks.size() - 1) + " <text>)");
+        } else if (sub == "remove") {
+            if (n < 3) { err("wifista remove <index>"); return; }
+            int idx = tk[2].toInt();
+            if (idx < 0 || (size_t)idx >= Config.wifiSTA.networks.size()) { err("wifista remove: index out of range"); return; }
+            Config.wifiSTA.networks.erase(Config.wifiSTA.networks.begin() + idx);
+            ok("wifiSTA.networks[" + String(idx) + "] removed");
         } else if (sub == "ssid") {
-            if (n < 3) { err("wifista ssid <ssid>"); return; }
-            Config.wifiSTA.ssid = restOfLine(line, 2);
-            ok("wifiSTA.ssid = " + Config.wifiSTA.ssid);
+            if (n < 4) { err("wifista ssid <index> <ssid...>"); return; }
+            int idx = tk[2].toInt();
+            if (idx < 0 || (size_t)idx >= Config.wifiSTA.networks.size()) { err("wifista ssid: index out of range"); return; }
+            Config.wifiSTA.networks[idx].ssid = restOfLine(line, 3);
+            ok("wifiSTA.networks[" + String(idx) + "].ssid = " + Config.wifiSTA.networks[idx].ssid);
         } else if (sub == "password") {
-            if (n < 3) { err("wifista password <text>"); return; }
-            Config.wifiSTA.password = restOfLine(line, 2);
-            ok("wifiSTA.password updated");
+            if (n < 4) { err("wifista password <index> <text>"); return; }
+            int idx = tk[2].toInt();
+            if (idx < 0 || (size_t)idx >= Config.wifiSTA.networks.size()) { err("wifista password: index out of range"); return; }
+            Config.wifiSTA.networks[idx].password = restOfLine(line, 3);
+            ok("wifiSTA.networks[" + String(idx) + "].password updated");
+        } else if (sub == "list") {
+            Serial.println("wifiSTA.enabled=" + String(Config.wifiSTA.enabled ? "true" : "false"));
+            if (Config.wifiSTA.networks.empty()) {
+                Serial.println("wifiSTA.networks: (none)");
+            } else {
+                for (size_t i = 0; i < Config.wifiSTA.networks.size(); i++) {
+                    Serial.println("wifiSTA.networks[" + String(i) + "]: ssid=" + Config.wifiSTA.networks[i].ssid +
+                                    " password=" + maskSecret(Config.wifiSTA.networks[i].password));
+                }
+            }
         } else if (sub == "scan") {
             #ifdef HAS_WIFI
                 // BLOCKING: scanNetworks() stalls the entire main loop for

@@ -117,8 +117,12 @@ bool Configuration::writeFile() {
         data["customSmartBeacon"]["turnSlope"]      = customSmartBeacon.turnSlope;
 
         data["wifiSTA"]["enabled"]                  = wifiSTA.enabled;
-        data["wifiSTA"]["ssid"]                     = wifiSTA.ssid;
-        data["wifiSTA"]["password"]                 = wifiSTA.password;
+        JsonArray wifiNetworksOut = data["wifiSTA"]["networks"].to<JsonArray>();
+        for (auto& net : wifiSTA.networks) {
+            JsonObject netObj = wifiNetworksOut.add<JsonObject>();
+            netObj["ssid"]     = net.ssid;
+            netObj["password"] = net.password;
+        }
 
         data["deviceRole"]                          = (int)deviceRole;
         data["gpsSource"]                           = (int)gpsSource;
@@ -197,6 +201,7 @@ bool Configuration::readFile() {
         // otherwise append to the already-seeded vectors instead of replacing.
         beacons.clear();
         loraTypes.clear();
+        wifiSTA.networks.clear();
 
         if (data["wifiAP"]["password"].isNull()) needsRewrite = true;
         wifiAP.password             = data["wifiAP"]["password"] | "1234567890";
@@ -312,12 +317,33 @@ bool Configuration::readFile() {
         customSmartBeacon.turnSlope      = data["customSmartBeacon"]["turnSlope"]      | 60;
         SMARTBEACON_Utils::setCustomValues(customSmartBeacon);
 
-        if (data["wifiSTA"]["enabled"].isNull() ||
-            data["wifiSTA"]["ssid"].isNull() ||
-            data["wifiSTA"]["password"].isNull()) needsRewrite = true;
-        wifiSTA.enabled                 = data["wifiSTA"]["enabled"] | false;
-        wifiSTA.ssid                    = data["wifiSTA"]["ssid"] | "";
-        wifiSTA.password                = data["wifiSTA"]["password"] | "";
+        wifiSTA.enabled = data["wifiSTA"]["enabled"] | false;
+        JsonArray wifiNetworksArray = data["wifiSTA"]["networks"];
+        if (!wifiNetworksArray.isNull()) {
+            // Current-format config.
+            if (data["wifiSTA"]["enabled"].isNull()) needsRewrite = true;
+            for (JsonObject netObj : wifiNetworksArray) {
+                if (wifiSTA.networks.size() >= MAX_WIFI_NETWORKS) break;
+                WiFiNetwork net;
+                net.ssid     = netObj["ssid"]     | "";
+                net.password = netObj["password"] | "";
+                if (net.ssid.length() == 0) continue;   // drop blank entries defensively
+                wifiSTA.networks.push_back(net);
+            }
+        } else if (!data["wifiSTA"]["ssid"].isNull() || !data["wifiSTA"]["password"].isNull()) {
+            // Legacy single-SSID format -- migrate ssid/password into networks[0].
+            String legacySsid     = data["wifiSTA"]["ssid"]     | "";
+            String legacyPassword = data["wifiSTA"]["password"] | "";
+            if (legacySsid.length() > 0) {
+                WiFiNetwork net;
+                net.ssid     = legacySsid;
+                net.password = legacyPassword;
+                wifiSTA.networks.push_back(net);
+            }
+            needsRewrite = true;   // rewrite once to drop the legacy keys on disk
+        } else {
+            needsRewrite = true;   // no wifiSTA section at all -- normalize to current schema
+        }
 
         if (data["deviceRole"].isNull() ||
             data["gpsSource"].isNull()) needsRewrite = true;
@@ -440,8 +466,7 @@ void Configuration::setDefaultValues() {
     SMARTBEACON_Utils::setCustomValues(customSmartBeacon);
 
     wifiSTA.enabled                 = false;
-    wifiSTA.ssid                    = "";
-    wifiSTA.password                = "";
+    wifiSTA.networks.clear();
 
     deviceRole                      = ROLE_TRACKER;
     gpsSource                       = GPS_INTERNAL;
