@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 LilyGo T-Beam 1W (Firmware Update)",
-  "version": "v1.1.9",
+  "version": "v1.2.0",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
