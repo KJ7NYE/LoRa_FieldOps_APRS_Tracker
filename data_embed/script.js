@@ -67,6 +67,47 @@ function updateVisibility() {
 document.getElementById('deviceRole')?.addEventListener('change', updateVisibility);
 document.getElementById('gpsSource')?.addEventListener('change', updateVisibility);
 
+// ── Fixed position: pull lat/lon/elev from the browser's own location ────────
+// Note: most browsers only expose Geolocation on secure origins (HTTPS or
+// localhost); the AP config page is served over plain HTTP at 192.168.4.1, so
+// this may be blocked depending on browser/OS — status text explains why.
+(function initBrowserLocationButton() {
+    const btn    = document.getElementById('useBrowserLocationBtn');
+    const status = document.getElementById('useBrowserLocationStatus');
+    if (!btn) return;
+
+    if (!navigator.geolocation) {
+        btn.disabled = true;
+        status.textContent = 'Geolocation not available in this browser.';
+        return;
+    }
+
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        status.textContent = 'Requesting location…';
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                const lat = pos.coords.latitude.toFixed(6);
+                const lon = pos.coords.longitude.toFixed(6);
+                setVal('fixedPosition.latitude', lat);
+                setVal('fixedPosition.longitude', lon);
+                if (pos.coords.altitude != null) {
+                    setVal('fixedPosition.elevation', pos.coords.altitude.toFixed(1));
+                }
+                const acc = pos.coords.accuracy != null ? ` (±${Math.round(pos.coords.accuracy)}m)` : '';
+                status.textContent = `Filled from browser location${acc}. Remember to Save.`;
+                showToast('Location filled — review and Save to apply.');
+                btn.disabled = false;
+            },
+            function (err) {
+                status.textContent = 'Location denied or unavailable: ' + err.message;
+                btn.disabled = false;
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+    });
+})();
+
 // ── Load settings from JSON ───────────────────────────────────────────────────
 
 function loadSettings(s) {
