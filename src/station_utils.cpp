@@ -252,11 +252,53 @@ namespace STATION_Utils {
 
     // ── Beacon TX ─────────────────────────────────────────────────────────────
 
+    // Transmit a bare APRS status packet (no position) and update the shared
+    // beacon-timer state. Shared by sendStatusBeacon() and the no-fix fallback
+    // in sendBeacon() below.
+    static void transmitStatusPacket(String statusText) {
+        const Beacon& b = Config.beacons[0];
+        #ifdef FAN_CTRL_PIN
+        if (THERMAL_Utils::isOverTemp()) {
+            statusText += " !OVERTEMP";
+        }
+        #endif
+        String packet = APRSPacketLib::generateStatusPacket(b.callsign, "APLRT1", Config.beaconPath, statusText);
+        {
+            int selfColon = packet.indexOf(":");
+            String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;
+            isInHashBuffer(b.callsign, selfPayload);
+        }
+        LoRa_Utils::sendNewPacket(packet);   // displayTx() fires inside sendNewPacket
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Beacon", "Status TX: %s", packet.c_str());
+        #ifdef HAS_WIFI
+        if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
+        #endif
+        forwardToKissClients(packet);
+        lastTxTime = millis();
+        sendUpdate = false;   // prevent a pending auto-beacon from firing immediately after
+    }
+
     void sendBeacon(bool forceComment) {
         double beaconLat = 0, beaconLng = 0;
         float  beaconElev = 0;
         if (!GPS_Utils::getCurrentLocation(beaconLat, beaconLng, beaconElev)) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Beacon", "No position — skipping beacon");
+            // iGate / Digipeater still want to advertise their presence on the network
+            // even without a fix yet (cold-start indoors, no satellites, GPS_FIXED left
+            // at 0,0) — fall back to a status packet instead of skipping entirely.
+            // Tracker is excluded (a positionless beacon is not useful for a mobile
+            // station) and GPS_NONE is excluded (operator explicitly wants no beaconing
+            // from this device at all).
+            bool advertiseWithoutFix = (Config.deviceRole == ROLE_IGATE || Config.deviceRole == ROLE_DIGIPEATER)
+                                        && Config.gpsSource != GPS_NONE;
+            if (advertiseWithoutFix) {
+                const Beacon& b = Config.beacons[0];
+                String statusText = (b.status.length() > 0) ? b.status : b.comment;
+                if (statusText.length() > 0) statusText += " ";
+                statusText += "No GPS Fix";
+                transmitStatusPacket(statusText);
+            } else {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Beacon", "No position — skipping beacon");
+            }
             return;
         }
 
@@ -379,26 +421,7 @@ namespace STATION_Utils {
         }
         // Use generateStatusPacket so that path handling (WIDE-only, DIRECT=no-path) is
         // consistent with all other beacon types; avoids a dangling comma when path is empty.
-        String statusText = b.status;
-        #ifdef FAN_CTRL_PIN
-        if (THERMAL_Utils::isOverTemp()) {
-            statusText += " !OVERTEMP";
-        }
-        #endif
-        String packet = APRSPacketLib::generateStatusPacket(b.callsign, "APLRT1", Config.beaconPath, statusText);
-        {
-            int selfColon = packet.indexOf(":");
-            String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;
-            isInHashBuffer(b.callsign, selfPayload);
-        }
-        LoRa_Utils::sendNewPacket(packet);   // displayTx() fires inside sendNewPacket
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Beacon", "Status TX: %s", packet.c_str());
-        #ifdef HAS_WIFI
-        if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
-        #endif
-        forwardToKissClients(packet);
-        lastTxTime = millis();
-        sendUpdate = false;   // prevent a pending auto-beacon from firing immediately after
+        transmitStatusPacket(b.status);
     }
 
     // Send position beacon with comment forced in, without resetting the beacon
