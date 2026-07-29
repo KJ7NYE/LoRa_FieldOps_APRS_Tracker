@@ -11,7 +11,6 @@
 #include <APRSPacketLib.h>
 #include "configuration.h"
 #include "digi_utils.h"
-#include "lora_utils.h"
 #include "station_utils.h"
 #include "logger.h"
 #include "log_buffer.h"
@@ -109,8 +108,11 @@ namespace DIGI_Utils {
 
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Digi", "Repeating: %s", repeated.c_str());
         LogBuffer::pushf(LogBuffer::TYPE_DIG, "Relay: %s", repeated.c_str());
-        delay(200);  // brief gap to avoid TX collision
-        LoRa_Utils::sendNewPacket(repeated);
+        // Queued through the shared output buffer (same path as query/ack TX)
+        // rather than sent directly — avoids blocking the main loop with a raw
+        // delay() and lets one scheduler own the inter-packet TX gap so a
+        // digipeat can't collide with a queued ack.
+        STATION_Utils::addToOutputPacketBuffer(repeated);
     }
 
 } // namespace DIGI_Utils
