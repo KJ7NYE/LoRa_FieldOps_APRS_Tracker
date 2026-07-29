@@ -64,6 +64,12 @@ static constexpr uint32_t  OUT_DELAY_MS           = 200;   // normal inter-packe
 static constexpr uint32_t  OUT_DELAY_AFTER_ACK_MS = 2000;  // give receiver time to re-arm RX after an ACK
 static bool                lastOutWasAck = false;
 
+// Caps memory use if a burst of distinct stations (digipeat traffic, or many
+// simultaneous queries) queues faster than the 200 ms TX gap can drain it.
+// 20 slots is generous for a genuine burst on a channel this slow while still
+// bounding the queue instead of letting it grow unbounded.
+static constexpr size_t    MAX_OUT_QUEUE = 20;
+
 namespace STATION_Utils {
 
     // Mirror a raw TNC2-format packet (no RSSI prefix) out to every attached
@@ -90,6 +96,14 @@ namespace STATION_Utils {
     }
 
     void addToOutputPacketBuffer(const String& packet) {
+        if (outBuffer.size() >= MAX_OUT_QUEUE) {
+            // Drop the oldest entry — it's the least likely to still be useful
+            // (the digi/query dedup windows are seconds wide) — rather than let
+            // an unbounded queue grow during a burst.
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "TXQueue",
+                       "Output queue full (%u), dropping oldest", (unsigned)MAX_OUT_QUEUE);
+            outBuffer.pop();
+        }
         outBuffer.push(packet);
     }
 

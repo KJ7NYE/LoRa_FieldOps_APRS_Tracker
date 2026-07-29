@@ -31,8 +31,10 @@ namespace STATION_Utils {
     // Must use uncompressed format per APRS spec — sent on its own timer.
     void sendPHGBeacon();
 
-    // Queue a packet for LoRa TX (used by digi and iGate downlink).
-    // Packets are dequeued and sent by processOutputPacketBuffer().
+    // Queue a packet for LoRa TX (used by digi repeats, query/ack replies, and
+    // iGate downlink). Packets are dequeued and sent by processOutputPacketBuffer().
+    // Bounded to a fixed capacity — see MAX_OUT_QUEUE in station_utils.cpp — oldest
+    // entry is dropped if a burst fills the queue faster than it can drain.
     void addToOutputPacketBuffer(const String& packet);
 
     void processOutputPacketBuffer();

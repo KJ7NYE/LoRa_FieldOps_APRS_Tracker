@@ -29,6 +29,13 @@ static uint32_t     lastConnectTry  = 0;
 static const uint32_t RECONNECT_MS  = 30000UL;   // retry interval
 static bool         _needsBeacon    = false;      // set true after each successful connect
 
+// Post-login verification is polled non-blockingly across loop iterations
+// (see tickVerify()) instead of spin-waiting inside connect() — see comments
+// there for why.
+static bool         awaitingVerify    = false;
+static uint32_t      verifyStartTime  = 0;
+static const uint32_t VERIFY_TIMEOUT_MS = 5000UL;
+
 // ── iGate upload dedup ────────────────────────────────────────────────────
 // Prevents uploading both the direct copy and digipeated copies of the same
 // frame (same originating callsign + payload, different digi path).
@@ -91,17 +98,14 @@ namespace APRS_IS_Utils {
 
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS", "Connecting to %s:%d ...", server.c_str(), port);
 
-        // 3 attempts, 3 s TCP SYN timeout each, 1 s between tries.
-        // Worst-case blocking: ~13 s (vs. ~25 s with the old 5-attempt / platform-default path).
-        uint8_t attempts = 0;
-        while (!aprsIsClient.connect(server.c_str(), port, 3000) && attempts < 3) {
-            delay(1000);
-            attempts++;
-        }
-
-        if (!aprsIsClient.connected()) {
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "APRS-IS", "Connection failed after %d attempts", attempts);
-            LogBuffer::pushf(LogBuffer::TYPE_NET, "APRS-IS connect failed after %d attempts", attempts);
+        // Single bounded attempt (~3 s TCP SYN timeout). checkConnection()'s 30 s
+        // cooldown already drives the retry cadence, so no in-call retry loop is
+        // needed here — the old 3-attempt loop (with 1 s sleeps between tries)
+        // used to block the entire main loop for up to ~13 s per reconnect,
+        // during which incoming LoRa packets were never polled.
+        if (!aprsIsClient.connect(server.c_str(), port, 3000)) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "APRS-IS", "Connection attempt failed");
+            LogBuffer::pushf(LogBuffer::TYPE_NET, "APRS-IS connect failed");
             return;
         }
 
@@ -118,29 +122,55 @@ namespace APRS_IS_Utils {
         }
         upload(login);
 
-        // Verify passcode (server echoes "#" lines; look for "verified")
-        uint32_t t0 = millis();
-        while (millis() - t0 < 3000) {
-            if (aprsIsClient.available()) {
-                String line = aprsIsClient.readStringUntil('\n');
-                line.trim();
-                if (line.startsWith("#")) {
-                    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS", "%s", line.c_str());
-                    passcodeValid = (line.indexOf("verified") != -1);
-                    if (passcodeValid) break;
+        // Passcode verification (server echoes "#" lines; look for "verified")
+        // is polled non-blockingly from checkConnection() via tickVerify() on
+        // subsequent loop iterations, rather than spin-waiting here.
+        passcodeValid   = false;
+        awaitingVerify  = true;
+        verifyStartTime = millis();
+    }
+
+    // Non-blocking poll for the post-login "#" banner lines, run once per loop
+    // iteration from checkConnection() while awaitingVerify is set. Only "#"
+    // (comment) lines are inspected here — real APRS-IS traffic doesn't arrive
+    // until after login completes in practice, matching the previous blocking
+    // implementation's behavior. Finishes (clears awaitingVerify) as soon as a
+    // "verified" banner is seen, or after VERIFY_TIMEOUT_MS with no verification
+    // (falls back to Rx-only / qAO uploads, same as the old timeout path).
+    static void tickVerify() {
+        if (!awaitingVerify) return;
+
+        if (!aprsIsClient.connected()) {
+            awaitingVerify = false;   // socket dropped mid-handshake
+            return;
+        }
+
+        while (aprsIsClient.available()) {
+            String line = aprsIsClient.readStringUntil('\n');
+            line.trim();
+            if (line.startsWith("#")) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS", "%s", line.c_str());
+                if (line.indexOf("verified") != -1) {
+                    passcodeValid = true;
+                    break;
                 }
             }
         }
 
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS", "Connected. Passcode %s",
-                   passcodeValid ? "VALID" : "INVALID (Rx only)");
-        LogBuffer::pushf(LogBuffer::TYPE_NET, "APRS-IS connected (%s)",
-                         passcodeValid ? "validated" : "rx-only");
-        _needsBeacon = true;   // signal caller to send an immediate self-beacon
+        if (passcodeValid || (millis() - verifyStartTime) > VERIFY_TIMEOUT_MS) {
+            awaitingVerify = false;
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS", "Connected. Passcode %s",
+                       passcodeValid ? "VALID" : "INVALID (Rx only)");
+            LogBuffer::pushf(LogBuffer::TYPE_NET, "APRS-IS connected (%s)",
+                             passcodeValid ? "validated" : "rx-only");
+            _needsBeacon = true;   // signal caller to send an immediate self-beacon
+        }
     }
 
     void checkConnection() {
+        tickVerify();   // non-blocking; only acts while awaitingVerify is set
         if (aprsIsClient.connected()) return;
+        awaitingVerify = false;   // stale wait state if the socket dropped
         if (millis() - lastConnectTry < RECONNECT_MS) return;
         lastConnectTry = millis();
         connect();
