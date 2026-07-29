@@ -1,6 +1,6 @@
 {
-  "version": "v1.2.0",
-  "published": "2026-07-20",
+  "version": "v1.2.1",
+  "published": "2026-07-29",
   "repo": "KJ7NYE/LoRa_FieldOps_APRS_Tracker",
   "targets": [
     {
