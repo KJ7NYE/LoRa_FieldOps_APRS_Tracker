@@ -163,6 +163,10 @@
   'use strict';
 
   const MANIFESTS_URL = './manifests/targets.json';
+  // Remembers the last board flashed in this browser so repeat visits (e.g.
+  // flashing several boards of the same model, or coming back for a new
+  // release) don't require re-picking it from the dropdown every time.
+  const LAST_TARGET_KEY = 'loraFieldOps.lastFlashTarget';
 
   const elLoading     = document.getElementById('loading-msg');
   const elSelectRow   = document.getElementById('select-row');
@@ -243,6 +247,14 @@
     });
 
     elSelectRow.style.display = '';
+
+    // Preselect the last board flashed in this browser, if it still exists.
+    let remembered = null;
+    try { remembered = localStorage.getItem(LAST_TARGET_KEY); } catch {}
+    if (remembered && data.targets.some(t => t.id === remembered)) {
+      elSelect.value = remembered;
+      elSelect.dispatchEvent(new Event('change'));
+    }
   }
 
   // ── Target selection change ────────────────────────────────────────────
@@ -259,6 +271,8 @@
 
     const target = targetsData.targets.find(t => t.id === id);
     if (!target) return;
+
+    try { localStorage.setItem(LAST_TARGET_KEY, id); } catch {}
 
     // Description
     if (target.description) {

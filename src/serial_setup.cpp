@@ -1029,6 +1029,7 @@ namespace SERIAL_Setup {
         else if (cmd == "tcpkiss")  cmdTcpKiss(tk, n);
         else if (cmd == "version") {
             Serial.println("version.date=" FIRMWARE_VERSION_DATE);
+            Serial.println("version.board=" BOARD_ENV_ID);
         }
         #ifdef ARDUINO_ARCH_NRF52
         else if (cmd == "otadfu") {
