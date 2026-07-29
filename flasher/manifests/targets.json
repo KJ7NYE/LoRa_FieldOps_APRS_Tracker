@@ -1,5 +1,5 @@
 {
-  "version": "v1.2.1",
+  "version": "v1.2.2",
   "published": "2026-07-29",
   "repo": "KJ7NYE/LoRa_FieldOps_APRS_Tracker",
   "targets": [
@@ -42,6 +42,14 @@
       "description": "KJ7NYE LoRanger V1 \u2014 ESP32-S3, E22-400M30S (SX1262), ATGM336H GPS. Headless (no display).",
       "manifest": "LoRanger_V1.json",
       "update_manifest": "LoRanger_V1_update.json"
+    },
+    {
+      "id": "heltec_wireless_tracker_433_aprs",
+      "label": "Heltec Wireless Tracker",
+      "chip": "ESP32-S3",
+      "description": "Heltec Wireless Tracker V1.1 \u2014 ESP32-S3, SX1262, onboard UC6580 GNSS, 0.96\" ST7735 TFT, WiFi/BLE.",
+      "manifest": "heltec_wireless_tracker_433_aprs.json",
+      "update_manifest": "heltec_wireless_tracker_433_aprs_update.json"
     },
     {
       "id": "heltec_t114",

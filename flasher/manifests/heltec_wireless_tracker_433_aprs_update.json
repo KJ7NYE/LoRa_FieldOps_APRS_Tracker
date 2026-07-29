@@ -1,0 +1,15 @@
+{
+  "name": "LoRa FieldOps \u2014 Heltec Wireless Tracker (Firmware Update)",
+  "version": "v1.2.2",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/heltec_wireless_tracker_433_aprs_firmware.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}
