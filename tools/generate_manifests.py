@@ -47,6 +47,12 @@ ESP_TARGETS = [
         "chip":  "ESP32-S3",
         "desc":  "KJ7NYE LoRanger V1 — ESP32-S3, E22-400M30S (SX1262), ATGM336H GPS. Headless (no display).",
     },
+    {
+        "id":    "heltec_wireless_tracker_433_aprs",
+        "label": "Heltec Wireless Tracker",
+        "chip":  "ESP32-S3",
+        "desc":  "Heltec Wireless Tracker V1.1 — ESP32-S3, SX1262, onboard UC6580 GNSS, 0.96\" ST7735 TFT, WiFi/BLE.",
+    },
 ]
 
 NRF_TARGET = {

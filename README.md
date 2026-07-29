@@ -15,7 +15,7 @@ Derived from [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/Lo
 
 ## Install / Flash Firmware
 
-### ESP32 boards (Heltec V3.2, T-Beam, T-Beam 1W, T3, LoRanger V1)
+### ESP32 boards (Heltec V3.2, T-Beam, T-Beam 1W, T3, LoRanger V1, Wireless Tracker)
 
 Two release assets are published per ESP32 board:
 
@@ -84,6 +84,7 @@ Install explicitly.
 | **LilyGo T-Beam 1W** | ESP32-S3 | SX1262 (1 W) | onboard GNSS (WAKE_UP) | SH1106 OLED | ✅ | ✅ NimBLE |
 | **LilyGo T3 V1.6** | ESP32 | SX1278 | None (fixed position) | SSD1306 OLED | ✅ | ✅ NimBLE |
 | **LoRanger V1** (KJ7NYE) | ESP32-S3 | EBYTE E22-400 (SX1262) | ATGM336H (onboard) | None (headless) | ✅ | ✅ NimBLE |
+| **Heltec Wireless Tracker V1.1** | ESP32-S3 | SX1262 | UC6580 (onboard) | ST7735 0.96" TFT | ✅ | ✅ NimBLE |
 
 ---
 
@@ -199,6 +200,7 @@ pio run -e heltec_t114 -t uploadfs
 | `tbeam_433_1w_aprs` | LilyGo T-Beam 1W |
 | `lilygo_t3_433_aprs` | LilyGo T3 V1.6 |
 | `LoRanger_V1` | LoRanger V1 (KJ7NYE) |
+| `heltec_wireless_tracker_433_aprs` | Heltec Wireless Tracker V1.1 |
 
 ---
 
@@ -463,6 +465,7 @@ variants/             Per-board pin definitions and PlatformIO environments
   tbeam_433_1w_aprs/  ESP32-S3 + SX1262 1W + GPS + SH1106
   lilygo_t3_433_aprs/ ESP32 + OLED
   LoRanger_V1/        ESP32-S3 + SX1262 (headless)
+  heltec_wireless_tracker_433_aprs/  ESP32-S3 + SX1262 + GNSS + ST7735 TFT
 variants_bsp/         BSP-level variant overrides (T114 nRF52 BSP)
 data/                 Default config JSON (flashed to filesystem)
 data_embed/           Web UI assets (gzip-embedded in firmware)

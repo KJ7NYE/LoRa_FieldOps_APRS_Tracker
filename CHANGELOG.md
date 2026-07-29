@@ -9,6 +9,28 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-07-29 — Add Heltec Wireless Tracker (433 MHz) support
+
+New `heltec_wireless_tracker_433_aprs` PlatformIO environment for the Heltec Wireless Tracker V1.1
+(ESP32-S3FN8, SX1262, onboard UC6580 GNSS, 0.96" 160×80 ST7735 TFT). This board's support in
+`display.cpp`/`power_utils.cpp`/`battery_utils.cpp` (gated on `HELTEC_WIRELESS_TRACKER`) was already
+present from upstream but never had a wired-up PlatformIO environment in this fork — this change adds
+the variant's `board_pinout.h` + `platformio.ini` (TFT_eSPI compile-time config, native-USB monitor
+settings, 8 MB OTA partitions) and threads the new target through CI, the web flasher, and the serial
+config tool. Pin map cross-verified against upstream's own `heltec_wireless_tracker` variant and the
+Zephyr `heltec_wireless_tracker` board support package.
+
+Files changed:
+
+- [variants/heltec_wireless_tracker_433_aprs/board_pinout.h](variants/heltec_wireless_tracker_433_aprs/board_pinout.h), [variants/heltec_wireless_tracker_433_aprs/platformio.ini](variants/heltec_wireless_tracker_433_aprs/platformio.ini) — new variant
+- [platformio.ini](platformio.ini) — add to `default_envs`
+- [.github/workflows/commit.yml](.github/workflows/commit.yml), [.github/workflows/flasher.yml](.github/workflows/flasher.yml) — add to CI build matrices
+- [tools/generate_manifests.py](tools/generate_manifests.py) — add to web-flasher manifest generator
+- [serial_config.html](serial_config.html) — add to board dropdown + chip-family map
+- [README.md](README.md), [CLAUDE.md](CLAUDE.md) — hardware tables
+
+---
+
 ## 2026-07-11 — iGate: stop re-gating remote IS→RF rebroadcast echoes (duplicate uploads)
 
 A nearby station appeared on APRS-IS twice, both `qAR,<ouriGate>`: once from our direct RX of the
