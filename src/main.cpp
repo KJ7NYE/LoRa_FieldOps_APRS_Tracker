@@ -77,6 +77,13 @@ bool     sendUpdate         = true;
 #ifdef BUTTON_PIN
 static uint32_t btnPressTime = 0;
 static bool     btnActive    = false;
+// On boards where BUTTON_PIN doubles as the ESP32 BOOT strap (GPIO0), a host
+// serial tool that parks DTR/RTS in the wrong combination can pull the pin
+// low for an entire session, which reads here as a single very long button
+// hold. A human doesn't hold the button this long, so releases held at or
+// beyond this threshold are treated as a stuck/host-driven line, not input,
+// and are ignored rather than triggering AP mode.
+static const uint32_t BTN_STUCK_THRESHOLD_MS = 30000;
 #endif
 
 extern bool     disableGPS;
@@ -216,12 +223,15 @@ void loop() {
             uint32_t held = millis() - btnPressTime;
             btnActive = false;
             displayActivity();   // any button release wakes the display
+            if (held >= BTN_STUCK_THRESHOLD_MS) {
+                // Stuck line, not a real press — see BTN_STUCK_THRESHOLD_MS comment above.
+            }
             #ifdef HAS_WIFI
-            if (held >= 8000) {
+            else if (held >= 8000) {
                 WIFI_Utils::checkIfWiFiAP(true);   // blocking; reboots after idle timeout
-            } else
+            }
             #endif
-            if (held >= 3000) {
+            else if (held >= 3000) {
                 STATION_Utils::sendStatusBeacon();
             } else if (held >= 50) {
                 STATION_Utils::sendBeacon();
