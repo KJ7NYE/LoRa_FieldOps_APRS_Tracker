@@ -149,14 +149,22 @@ void setup() {
         THERMAL_Utils::setup();
     #endif
 
+    // Serial CLI/KISS must init on every board, not just WiFi-capable ones —
+    // it's the only config path on WiFi-less boards like the T114. Previously
+    // this call lived inside the HAS_WIFI block below, so SERIAL_Setup::setup()
+    // (which prints the "[KISS TNC] Type 'setup'..." banner and suppresses the
+    // logger to keep it off the USB serial port) never ran on the T114, silently
+    // breaking serial_config.html/CLI access on that board.
+    bootStatus("Serial CLI");
+    SERIAL_Setup::setup();
+
     #ifdef HAS_WIFI
         // AP mode is triggered at runtime (8 s hold) or automatically on first boot
         // (NOCALL callsign). Boot-time button detection was removed because GPIO0
         // (the USR button on Heltec V3 / LoRanger V1) doubles as the ESP32 BOOT pin:
         // holding it low during reset enters ROM download mode before firmware runs.
         bootStatus("WiFi AP check");
-        SERIAL_Setup::setup();          // must run before checkIfWiFiAP — AP mode blocks forever
-        WIFI_Utils::checkIfWiFiAP(false);
+        WIFI_Utils::checkIfWiFiAP(false);          // must run after SERIAL_Setup::setup() above — AP mode blocks forever
         if (Config.deviceRole != ROLE_IGATE && !Config.wifiSTA.enabled) {
             WiFi.mode(WIFI_OFF);
         }
