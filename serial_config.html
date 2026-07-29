@@ -343,12 +343,17 @@ let reader      = null;
 let connected   = false;
 let serialMode  = 'kiss';   // 'kiss' | 'setup' | 'log'
 
-// Boot-detect plumbing: boards with DTR→EN wiring (CP210x, CH9102) reset on port
-// open. The firmware needs several seconds to boot before it can respond to 'setup'.
-// _bootActivityResolve fires on the first incoming byte; _kissReadyResolve fires
-// when the KISS-ready banner ([KISS TNC] Type …) appears after a device reset.
+// Boot-detect plumbing: opening the port toggles DTR/RTS, which pulses EN on
+// CP210x/CH9102 bridges and resets the board. The firmware needs several
+// seconds to boot before it can respond to 'setup'. _bootActivityResolve fires
+// on the first incoming byte; _kissReadyResolve fires when the KISS-ready
+// banner ([KISS TNC] Type …) appears after a device reset.
 let _bootActivityResolve = null;
 let _kissReadyResolve    = null;
+// True once a 'waiting for download' ROM banner has triggered one auto-reset
+// this connect session — prevents looping if the board is stuck in download
+// mode for a reason a single EN pulse can't fix (e.g. PRG physically held).
+let _downloadModeSeen = false;
 
 // ─────────────────────────────────────────────
 //  2. App state
@@ -568,10 +573,63 @@ function onData(text) {
     updateModeButtons();
     // Signal boot complete so _waitForBootComplete() can unblock connectSerial().
     if (_kissReadyResolve) _kissReadyResolve();
+  } else if (bannerBuf.includes('waiting for download')) {
+    // ROM bootloader is sitting in download mode — GPIO0 was sampled low at
+    // reset. With signals now parked neutral this should be rare (only a
+    // reset that raced port-open before the first setSignals() landed, or the
+    // PRG button physically held), but recover automatically rather than
+    // leaving the user stuck.
+    bannerBuf = '';
+    _recoverFromDownloadMode();
   }
 
   streamBuf += text;
   _checkPrompt();
+}
+
+// Pulses EN (RTS) low while GPIO0 (DTR) stays released/high, then releases EN —
+// a clean reset that samples GPIO0 high, i.e. a normal boot rather than
+// re-entering the ROM bootloader. Runs once per connect session. No-op on
+// native-USB boards (T-Beam 1W, LoRanger): RTS isn't wired to anything there,
+// so if one of those ever lands here it's from a real BOOT-strap hold and the
+// user needs to intervene physically — handled by the "seen" hint below.
+async function _recoverFromDownloadMode() {
+  if (_downloadModeSeen) {
+    logErr('Device still in download mode — press RST on the board or check the USB cable.');
+    return;
+  }
+  _downloadModeSeen = true;
+  logInfo('Device is in ROM download mode — resetting automatically…');
+  try {
+    await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+    await _delay(100);
+    await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+  } catch (e) {
+    logErr('Auto-reset failed: ' + e.message);
+  }
+}
+
+// True if the attached USB device is Espressif's own silicon (native USB-CDC /
+// USB-Serial-JTAG on ESP32-S3) rather than an external USB-UART bridge chip
+// (CP210x, CH9102/CH340, FTDI). Espressif's USB vendor ID is 0x303A.
+//
+// This distinction matters because of the ESP32 auto-program circuit
+// (documented by Espressif's esptool "Boot Mode Selection" docs and the
+// ESP32 DevKitC schematic): on boards with a bridge chip, DTR and RTS are
+// active-low control lines wired through two transistors to GPIO0 and EN
+// respectively —
+//   DTR RTS | EN(reset)   GPIO0(boot strap / USR button on some boards)
+//   off off | high (run)  high (released)      <- neutral, what we want here
+//   off on  | low  (reset)high
+//   on  off | high (run)  low  (held)          <- today's bug: held the whole session
+//   on  on  | low  (reset)low                  <- worse: chip stuck in reset
+// Native Espressif silicon has no such wiring (confirmed in this repo's
+// tbeam_433_1w_aprs / LoRanger_V1 platformio.ini comments — "no USB-UART
+// bridge... asserting DTR won't cause spurious resets"), so DTR can and must
+// stay asserted there for the CDC TX-flush gate (tud_cdc_connected()).
+function _isNativeEspressifUsb(p) {
+  const info = (typeof p.getInfo === 'function') ? p.getInfo() : null;
+  return !!(info && info.usbVendorId === 0x303A);
 }
 
 // ─────────────────────────────────────────────
@@ -582,9 +640,13 @@ async function connectSerial() {
     port = await navigator.serial.requestPort();
     setStatus('connecting', 'Opening port…');
     await port.open({ baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none' });
-    // Assert DTR so native-USB CDC boards (T-Beam 1W, LoRanger) flush their TX
-    // buffer. Harmless on CP210x/CH9102 boards (DTR wired to EN → run/active state).
-    await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+    // Park signals for whichever chip is actually attached — see _isNativeEspressifUsb()
+    // for the truth table and why bridge boards and native-USB boards need opposite
+    // treatment here.
+    await port.setSignals(_isNativeEspressifUsb(port)
+      ? { dataTerminalReady: true,  requestToSend: false }   // native: DTR needed for CDC TX flush, RTS unused
+      : { dataTerminalReady: false, requestToSend: false }); // bridge: fully released, EN/GPIO0 both high
+    _downloadModeSeen = false;
     connected  = true;
     serialMode = 'kiss';   // device defaults to KISS TNC on boot
     writer = port.writable.getWriter();
@@ -654,7 +716,13 @@ async function _cleanup() {
   // and both locks must be released before port.close() can succeed.
   try { if (reader) { await reader.cancel(); reader.releaseLock(); } } catch {}
   try { if (writer) { await writer.close(); writer.releaseLock(); } } catch {}
-  try { if (port)   { await port.close(); } }                          catch {}
+  // Fully release both lines before closing. Our own connect-time states are
+  // either (false,false) [bridge chip] or (true,false) [native USB] — neither
+  // passes through the (false DTR, true RTS) combination that pulls EN low on
+  // bridge boards, so a single combined call is safe here (see
+  // _isNativeEspressifUsb() above for the full truth table).
+  try { if (port) { await port.setSignals({ dataTerminalReady: false, requestToSend: false }); } } catch {}
+  try { if (port) { await port.close(); } }                          catch {}
   port = writer = reader = null;
   setConnectedControls(false);
   updateModeButtons();

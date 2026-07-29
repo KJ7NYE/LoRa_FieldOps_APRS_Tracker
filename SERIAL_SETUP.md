@@ -275,6 +275,46 @@ save
 exit
 ```
 
+### USB Serial Connection Quirks (DTR/RTS)
+
+On boards with a USB-UART bridge chip (Heltec V3.2's CP2102N, T-Beam's
+CP210x/CH340, LilyGo T3's CH340), the host's DTR and RTS control lines are
+wired through the standard ESP32 auto-program circuit to the chip's GPIO0
+(BOOT strap — also `BUTTON_PIN` on boards where the USR button shares that
+pin) and EN (reset) pins respectively. Both signals are active-low, and the
+combination matters:
+
+| DTR | RTS | EN (reset) | GPIO0 (BOOT strap / USR button) |
+|-----|-----|------------|----------------------------------|
+| off | off | high — running | high — released (**neutral**) |
+| off | on  | low — held in reset | high |
+| on  | off | high — running | low — held |
+| on  | on  | low — held in reset | low |
+
+A serial terminal that parks DTR asserted (a common default, since some
+boards need it for other reasons) holds GPIO0 low for the entire session. On
+boards where GPIO0 doubles as the USR button, the firmware sees this as one
+continuous button press; releasing it on disconnect looks like a very long
+hold and can trigger AP mode (see WiFi AP Behavior above). It also means any
+reset that happens while connected (RST button, power-up, a CLI `reboot`)
+samples GPIO0 low and drops the board into the ROM download bootloader
+(`waiting for download...`) instead of booting the firmware.
+
+`serial_config.html` avoids this by detecting the attached USB device's
+vendor ID (`port.getInfo().usbVendorId`) and choosing signals accordingly:
+both lines deasserted for bridge-chip boards (the neutral row above), or DTR
+asserted only for boards with Espressif's native USB silicon (T-Beam 1W,
+LoRanger V1), which have no such wiring and need DTR asserted for their
+CDC serial output to flush. If the page ever detects the ROM download banner
+mid-session, it automatically pulses EN (RTS) once to reset the board back
+into a normal boot; a second occurrence means something else is holding the
+strap (e.g. the PRG button physically held) and needs a manual RST press.
+
+As defense in depth against any other serial tool that gets this wrong, the
+firmware itself ignores button releases held for 30 seconds or longer —
+long enough that no human press could reach it, but short enough not to
+interfere with the legitimate 8-second AP-mode hold.
+
 ### Password Masking
 
 By default, `wifi.password` and other secret fields show as `***` in `show`
