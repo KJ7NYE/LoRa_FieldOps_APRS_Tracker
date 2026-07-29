@@ -34,8 +34,9 @@ There are no automated tests — the CI workflow (`.github/workflows/commit.yml`
 | `tbeam_433_1w_aprs` | ESP32-S3 | SX1262 (1 W) | onboard GNSS | SH1106 OLED | WiFi + NimBLE |
 | `lilygo_t3_433_aprs` | ESP32 | SX1278 | None | SSD1306 OLED | WiFi + NimBLE |
 | `LoRanger_V1` | ESP32-S3 | SX1262 (E22-400M30S) | ATGM336H (onboard) | None (headless) | WiFi + NimBLE |
+| `heltec_wireless_tracker_433_aprs` | ESP32-S3 (FN8, no PSRAM) | SX1262 | UC6580 (onboard) | ST7735 0.96" 160x80 TFT (TFT_eSPI) | WiFi + NimBLE |
 
-Capability flags (defined per environment in `common_settings.ini`): `HAS_WIFI`, `HAS_NIMBLE`, `HAS_WEB_UI`, `HAS_DISPLAY`, `HAS_BT_CLASSIC`, `HAS_TFT_ST7789`. Platform macros: `HELTEC_T114`, `HELTEC_V3_433_APRS`, `TTGO_T_Beam_V1_2_433_APRS`, `TTGO_T_BEAM_1W`, `LORANGER_V1`.
+Capability flags (defined per environment in `common_settings.ini`): `HAS_WIFI`, `HAS_NIMBLE`, `HAS_WEB_UI`, `HAS_DISPLAY`, `HAS_BT_CLASSIC`, `HAS_TFT_ST7789`. Platform macros: `HELTEC_T114`, `HELTEC_V3_433_APRS`, `TTGO_T_Beam_V1_2_433_APRS`, `TTGO_T_BEAM_1W`, `LORANGER_V1`, `HELTEC_WIRELESS_TRACKER`.
 
 ## Architecture
 
