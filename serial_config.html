@@ -255,6 +255,7 @@
             <option value="LoRanger_V1">KJ7NYE LoRanger V1 (ESP32-S3)</option>
             <option value="heltec_t114">Heltec T114 / LoRanger nRF (nRF52840)</option>
           </select>
+          <div id="flash-board-desc" class="form-text text-muted d-none" style="font-size:0.8rem"></div>
         </div>
 
         <!-- Flash mode selector (ESP32 targets only) -->
@@ -277,9 +278,9 @@
         </div>
 
         <!-- Connected-port warning -->
-        <div id="flash-port-warning" class="alert alert-danger py-2 d-none" style="font-size:0.85rem">
-          <strong>Config connection is active.</strong> Disconnect from the device first before flashing,
-          so the serial port is free for esptool-js.
+        <div id="flash-port-warning" class="alert alert-danger py-2 d-none d-flex align-items-center justify-content-between gap-2" style="font-size:0.85rem">
+          <span><strong>Config connection is active.</strong> The serial port must be free before flashing.</span>
+          <button id="btn-flash-disconnect" type="button" class="btn btn-sm btn-outline-light flex-shrink-0">Disconnect Now</button>
         </div>
 
         <!-- nRF52 instructions -->
@@ -355,6 +356,13 @@ let _kissReadyResolve    = null;
 // ─────────────────────────────────────────────
 let config         = null;   // parsed JSON from last export
 let showSecretsOn  = false;
+
+// Populated from the 'version' CLI response on every connect. Lets the Flash
+// Firmware modal auto-select the right board instead of requiring a manual
+// pick, and lets it compare the connected firmware against the latest release.
+let detectedBoardId  = null;
+let detectedFwVersion = null;
+const LAST_FLASH_BOARD_KEY = 'loraFieldOps.lastFlashBoard';
 
 // ─────────────────────────────────────────────
 //  3. Console helpers
@@ -767,13 +775,21 @@ async function switchToMode(target) {
 //  10. Read config via export
 // ─────────────────────────────────────────────
 async function readConfig() {
-  // Query firmware version date (parseable response: version.date=YYYY-MM-DD)
+  // Query firmware version (parseable response: version.date=<git-describe>, version.board=<env id>)
   const vResp = await sendCmd('version');
   const vMatch = vResp.match(/version\.date=(\S+)/);
   if (vMatch) {
+    detectedFwVersion = vMatch[1];
     const el = document.getElementById('fw-version');
     el.textContent = 'fw ' + vMatch[1];
     el.style.display = '';
+  }
+  // Older firmware builds won't emit version.board — detectedBoardId just stays
+  // null and the flash modal falls back to the last board picked manually.
+  const bMatch = vResp.match(/version\.board=(\S+)/);
+  if (bMatch && bMatch[1] !== 'unknown') {
+    detectedBoardId = bMatch[1];
+    try { localStorage.setItem(LAST_FLASH_BOARD_KEY, detectedBoardId); } catch {}
   }
 
   logInfo('Reading config via export…');
@@ -2127,11 +2143,12 @@ document.getElementById('btn-clear-con').addEventListener('click', () => { conso
 //  combined) at offset 0x0. nRF52 targets offer UF2 drag-and-drop instead.
 // ─────────────────────────────────────────────
 
-const FLASH_RELEASES_API  = 'https://api.github.com/repos/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest';
-// Manifests and firmware are served from GitHub Pages (CORS-safe).
-// github.com release download URLs redirect without CORS headers and are blocked by the browser.
+// Manifests, firmware, and the targets.json index are all served from GitHub
+// Pages (CORS-safe, no rate limit) — the same static index the standalone
+// flasher (flasher/index.html) reads from, so both stay in sync automatically.
 const FLASH_MANIFEST_BASE = 'https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/manifests';
 const FLASH_UF2_BASE      = 'https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware';
+const FLASH_TARGETS_URL   = `${FLASH_MANIFEST_BASE}/targets.json`;
 
 // Board env name → chip family (nrf52 uses UF2 drag-and-drop, others use esp-web-tools)
 const FLASH_BOARDS = {
@@ -2143,24 +2160,39 @@ const FLASH_BOARDS = {
   'heltec_t114':        'nrf52',
 };
 
+let _fTargetsData = null;   // cached targets.json, keyed by fetch below
+
 // DOM refs for the modal
 const _fModal      = document.getElementById('flashModal');
 const _fBoardSel   = document.getElementById('flash-board-sel');
+const _fBoardDesc  = document.getElementById('flash-board-desc');
 const _fInstallBtn = document.getElementById('flash-install-btn');
 const _fUf2Btn     = document.getElementById('flash-btn-uf2');
 const _fRelText    = document.getElementById('flash-release-text');
 const _fNrfInfo    = document.getElementById('flash-nrf-info');
 const _fEspInfo    = document.getElementById('flash-esp-info');
 const _fPortWarn   = document.getElementById('flash-port-warning');
+const _fDisconnBtn = document.getElementById('btn-flash-disconnect');
 const _fModeGroup  = document.getElementById('flash-mode-group');
 const _fModeFactory = document.getElementById('flash-mode-factory');
 const _fModeUpdate  = document.getElementById('flash-mode-update');
 
+// Reset transient UI, but leave the board selector alone — the caller decides
+// whether to clear it or preselect a detected/remembered board.
 function _flashResetUI() {
-  _fBoardSel.value = '';
   [_fInstallBtn, _fUf2Btn, _fNrfInfo, _fEspInfo, _fPortWarn, _fModeGroup].forEach(el => el.classList.add('d-none'));
   _fInstallBtn.removeAttribute('manifest');
+  _fBoardDesc.classList.add('d-none');
 }
+
+// One-click fix for the "config connection is active" warning — disconnects
+// the serial port without closing the modal or losing the board selection,
+// so the user doesn't have to close the modal, hunt for Disconnect, then
+// reopen and re-pick their board.
+_fDisconnBtn.addEventListener('click', async () => {
+  await disconnectSerial();
+  _fPortWarn.classList.add('d-none');
+});
 
 // Update the install button's manifest to match the selected flash mode
 function _flashUpdateManifest(env) {
@@ -2175,25 +2207,42 @@ document.querySelectorAll('input[name="flashMode"]').forEach(radio => {
   });
 });
 
-// Show the latest release tag/date in the modal banner
+// Show the latest release tag/date in the modal banner, then auto-select the
+// board: prefer the board the connected device just told us it is
+// (detectedBoardId, from the 'version' command), falling back to whatever
+// board was last picked in this browser (localStorage). This is the common
+// case — updating firmware on the device you're already configuring — and
+// skips the "select your board" step entirely.
 _fModal.addEventListener('show.bs.modal', async () => {
   _flashResetUI();
+  _fBoardSel.value = '';
   _fRelText.textContent = 'Loading latest release…';
   try {
-    const resp = await fetch(FLASH_RELEASES_API);
-    if (!resp.ok) throw new Error('GitHub API returned HTTP ' + resp.status);
-    const data = await resp.json();
-    const tag  = data.tag_name || '';
-    const date = data.published_at
-      ? new Date(data.published_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })
+    const resp = await fetch(FLASH_TARGETS_URL, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    _fTargetsData = await resp.json();
+    const tag  = _fTargetsData.version || '';
+    const date = _fTargetsData.published || '';
+    let compare = '';
+    if (detectedFwVersion && tag) {
+      compare = (detectedFwVersion === tag)
+        ? ' &nbsp;<span class="text-success">✓ connected device is up to date</span>'
+        : ` &nbsp;<span class="text-warning">⬆ connected device is on ${detectedFwVersion}</span>`;
+    }
+    const link = _fTargetsData.repo
+      ? ` &nbsp;<a href="https://github.com/${_fTargetsData.repo}/releases/tag/${tag}" target="_blank" rel="noopener" style="font-size:0.8rem">view on GitHub</a>`
       : '';
-    _fRelText.innerHTML =
-      'Release <strong>' + tag + '</strong>' +
-      (date ? ' &mdash; ' + date : '') +
-      ' &nbsp;<a href="' + data.html_url + '" target="_blank" rel="noopener" style="font-size:0.8rem">' +
-      'view on GitHub</a>';
+    _fRelText.innerHTML = 'Latest release <strong>' + tag + '</strong>' +
+      (date ? ' &mdash; ' + date : '') + compare + link;
   } catch (e) {
+    _fTargetsData = null;
     _fRelText.textContent = '⚠ Could not load release info: ' + e.message;
+  }
+
+  const preselect = detectedBoardId || (() => { try { return localStorage.getItem(LAST_FLASH_BOARD_KEY); } catch { return null; } })();
+  if (preselect && [..._fBoardSel.options].some(o => o.value === preselect)) {
+    _fBoardSel.value = preselect;
+    _fBoardSel.dispatchEvent(new Event('change'));
   }
 });
 
@@ -2202,8 +2251,17 @@ _fBoardSel.addEventListener('change', () => {
   const env = _fBoardSel.value;
   [_fInstallBtn, _fUf2Btn, _fNrfInfo, _fEspInfo, _fPortWarn, _fModeGroup].forEach(el => el.classList.add('d-none'));
   _fInstallBtn.removeAttribute('manifest');
+  _fBoardDesc.classList.add('d-none');
 
   if (!env) return;
+
+  try { localStorage.setItem(LAST_FLASH_BOARD_KEY, env); } catch {}
+
+  const targetMeta = _fTargetsData?.targets?.find(t => t.id === env);
+  if (targetMeta?.description) {
+    _fBoardDesc.textContent = targetMeta.description;
+    _fBoardDesc.classList.remove('d-none');
+  }
 
   if (FLASH_BOARDS[env] === 'nrf52') {
     _fNrfInfo.classList.remove('d-none');
