@@ -6,12 +6,8 @@
       "chipFamily": "ESP32-S3",
       "parts": [
         {
-          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/boot_app0.bin",
-          "offset": 57344
-        },
-        {
-          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/LoRanger_V1_firmware.bin",
-          "offset": 65536
+          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/LoRanger_V1_ota_update.bin",
+          "offset": 0
         }
       ]
     }
