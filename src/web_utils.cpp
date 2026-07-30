@@ -98,7 +98,9 @@ namespace WEB_Utils {
 
     void handleWifiStaStatus(AsyncWebServerRequest *request) {
         bool up = WIFI_Utils::isSTAConnected();
-        request->send(200, "application/json", up ? "{\"connected\":true}" : "{\"connected\":false}");
+        String json = up ? "{\"connected\":true,\"ip\":\"" + WiFi.localIP().toString() + "\"}"
+                          : "{\"connected\":false}";
+        request->send(200, "application/json", json);
     }
 
     // Blocking (~2-4s): runs a synchronous WiFi scan inside the AsyncTCP

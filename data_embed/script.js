@@ -402,7 +402,7 @@ async function checkWifiStaStatus() {
         const d = await res.json();
         if (d.connected) {
             led.style.background = '#28a745';
-            txt.textContent = 'connected';
+            txt.textContent = d.ip ? `connected (${d.ip})` : 'connected';
             txt.className = 'text-success small';
         } else {
             led.style.background = '#dc3545';
