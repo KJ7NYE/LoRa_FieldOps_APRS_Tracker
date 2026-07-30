@@ -127,6 +127,10 @@ void setup() {
     digipeaterActive = (Config.digiMode != DIGI_OFF);
     bluetoothActive  = Config.bluetooth.active;
 
+    // Armed first, before anything that could hang (radio/GPS/display init,
+    // first-boot AP config) — see POWER_Utils::watchdogSetup() for why.
+    POWER_Utils::watchdogSetup();
+
     POWER_Utils::setup();
     displaySetup();
     bootStatus("power OK");
@@ -211,6 +215,9 @@ void setup() {
 
 
 void loop() {
+    // ── Watchdog ──────────────────────────────────────────────────────
+    POWER_Utils::feedWatchdog();
+
     // ── LED heartbeat / TX / RX indicator ──────────────────────────────
     LED_Utils::tick();
 

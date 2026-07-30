@@ -24,6 +24,7 @@
 #include "web_utils.h"
 #include "display.h"
 #include "serial_setup.h"
+#include "power_utils.h"
 
 extern      Configuration       Config;
 extern      logging::Logger     logger;
@@ -168,6 +169,11 @@ namespace WIFI_Utils {
         uint32_t noClientsTime = 0;
 
         while (true) {
+            // This loop can legitimately run far longer than the main-loop
+            // watchdog timeout (a user can sit in the config web UI for
+            // minutes) — feed it directly since main loop() isn't running.
+            POWER_Utils::feedWatchdog();
+
             // Poll serial CLI so USB config works while AP mode is blocking.
             uint32_t tick = millis();
             while (millis() - tick < 500) {

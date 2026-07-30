@@ -17,6 +17,11 @@
  */
 
 #include <SPI.h>
+#ifdef ARDUINO_ARCH_NRF52
+#include <nrf_wdt.h>
+#else
+#include <esp_task_wdt.h>
+#endif
 
 #include "configuration.h"
 #include "battery_utils.h"
@@ -498,6 +503,41 @@ namespace POWER_Utils {
                 esp_sleep_enable_timer_wakeup(1000000ULL * DEEP_SLEEP_TIME_SEC);
                 esp_deep_sleep_start();
             #endif
+        #endif
+    }
+
+    // ── Watchdog ─────────────────────────────────────────────────────────────
+    // Protects the whole runtime (setup() through loop()) with a hardware
+    // watchdog, reset from a single feed point per main-loop iteration (plus
+    // the AP-config blocking loop, which feeds it directly — see
+    // WIFI_Utils::checkIfWiFiAP). Modeled on Meshtastic's esp_task_wdt /
+    // nrfx_wdt pattern, which exists specifically to recover from exactly this
+    // class of bug: RadioLib's SX126x::launchMode() waits for the SX126x BUSY
+    // line to drop after keying TX ("PA ramp up done") in an unbounded loop
+    // with no timeout of its own. Under healthy hardware that's ~200us; if
+    // BUSY ever sticks high, radio.transmit() hangs forever and nothing short
+    // of a hardware reset recovers. RadioLib 7.6.0 and the current 7.7.1 both
+    // still have this gap.
+    static constexpr uint32_t WATCHDOG_TIMEOUT_SEC = 20;
+
+    void watchdogSetup() {
+        #ifdef ARDUINO_ARCH_NRF52
+            nrf_wdt_behaviour_set(NRF_WDT, NRF_WDT_BEHAVIOUR_PAUSE_SLEEP_HALT);
+            nrf_wdt_reload_value_set(NRF_WDT, WATCHDOG_TIMEOUT_SEC * 32768UL);
+            nrf_wdt_reload_request_enable(NRF_WDT, NRF_WDT_RR0);
+            nrf_wdt_task_trigger(NRF_WDT, NRF_WDT_TASK_START);
+        #else
+            esp_task_wdt_init(WATCHDOG_TIMEOUT_SEC, true);
+            esp_task_wdt_add(NULL);
+        #endif
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Watchdog", "Armed, %lu s timeout", (unsigned long)WATCHDOG_TIMEOUT_SEC);
+    }
+
+    void feedWatchdog() {
+        #ifdef ARDUINO_ARCH_NRF52
+            nrf_wdt_reload_request_set(NRF_WDT, NRF_WDT_RR0);
+        #else
+            esp_task_wdt_reset();
         #endif
     }
 

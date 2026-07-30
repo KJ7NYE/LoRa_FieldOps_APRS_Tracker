@@ -57,6 +57,9 @@ namespace POWER_Utils {
     void lowerCpuFrequency();
     void shutdown();
 
+    void watchdogSetup();
+    void feedWatchdog();
+
 }
 
 #endif
