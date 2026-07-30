@@ -25,6 +25,7 @@
 #include "version.h"
 #ifdef HAS_WIFI
 #include <vector>
+#include <WiFi.h>
 #include "aprs_is_utils.h"
 #include "wifi_utils.h"
 #endif
@@ -172,7 +173,7 @@ namespace SERIAL_Setup {
         Serial.println(F("  wifista remove <index>       ssid <index> <ssid...>  password <index> <text>"));
         Serial.println(F("  wifista list                 (show all configured networks, masked passwords)"));
         Serial.println(F("  wifista scan                 (2-4s blocking scan; lists nearby SSIDs)"));
-        Serial.println(F("  wifista status               (prints wifiSTA.connected=true/false)"));
+        Serial.println(F("  wifista status               (prints wifiSTA.connected=true/false, +ip= when connected)"));
         Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
         Serial.println(F("  aprsiss filter <filter>     aprsiss status"));
         Serial.println(F("  aprsiss downlink on|off     (gate IS messages to a locally-heard station back to RF)"));
@@ -868,7 +869,10 @@ namespace SERIAL_Setup {
             #endif
         } else if (sub == "status") {
             #ifdef HAS_WIFI
-                Serial.println(WIFI_Utils::isSTAConnected() ? "wifiSTA.connected=true" : "wifiSTA.connected=false");
+                bool connected = WIFI_Utils::isSTAConnected();
+                String line = connected ? "wifiSTA.connected=true" : "wifiSTA.connected=false";
+                if (connected) line += " ip=" + WiFi.localIP().toString();
+                Serial.println(line);
             #else
                 Serial.println("wifiSTA.connected=false");
             #endif
