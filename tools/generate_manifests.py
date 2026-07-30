@@ -171,6 +171,23 @@ for t in ESP_TARGETS:
     update_manifest = {
         "name":    f"LoRa FieldOps — {t['label']} (Firmware Update)",
         "version": tag,
+        # esp-web-tools defaults to a SILENT FULL-CHIP ERASE before install for any
+        # device that doesn't implement the Improv Serial protocol (ours don't) —
+        # see install-dialog.ts's _renderDashboardNoImprov(): "Default is to erase
+        # a device that does not support Improv Serial". That erase (esploader's
+        # eraseFlash(), a whole-chip wipe) runs before writeFlash() and is
+        # completely independent of this manifest's parts/offsets — it has been
+        # silently wiping SPIFFS (and everything else) on every "Firmware Update"
+        # flash regardless of which bytes were actually written, on every board,
+        # since forever. It only became visible once the invalid-header boot
+        # failure above was fixed and boot got far enough to try mounting the
+        # now-blank SPIFFS. Setting new_install_prompt_erase makes esp-web-tools
+        # ask instead of silently erasing, with the erase checkbox unchecked by
+        # default — i.e. "preserve configuration" now actually preserves it.
+        # Left off the factory manifest deliberately: Fresh Install already
+        # rewrites every byte of the chip, so an erase-or-not prompt there would
+        # just be friction with no behavioral difference.
+        "new_install_prompt_erase": True,
         "builds": [{
             "chipFamily": t["chip"],
             "parts": update_parts,
