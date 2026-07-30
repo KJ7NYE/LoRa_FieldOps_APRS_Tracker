@@ -9,6 +9,31 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-07-30 — Serial config tool: WiFi STA "Add network" modal + IP-on-connect
+
+The WiFi STA "Add network" flow in the serial config tool only asked for an SSID via a bare
+`prompt()` — no way to set a password inline — and Scan was a per-row control, so it only appeared
+once a network slot already existed. Replaced both with a single modal (`openAddNetworkModal()`,
+built with `bootstrap.Modal` to match the existing Flash Firmware modal's pattern): it scans
+automatically on open, shows nearby networks as a clickable list (SSID, signal, lock icon), and lets
+you set SSID + password together before committing. Selecting a scan result pre-fills the SSID and
+jumps focus to Password; "Enter network manually" skips straight to a blank form for hidden networks.
+Per-row Scan buttons/datalists were removed since scanning no longer needs an existing slot to attach
+to.
+
+Also added the device's IP address to the "WiFi STA connected" status line (both the serial config
+tool and the web config UI), since knowing you're connected without knowing the address it landed on
+wasn't very actionable.
+
+Files changed:
+
+- [src/serial_setup.cpp](src/serial_setup.cpp) — `wifista status` now prints `ip=<addr>` when connected
+- [src/web_utils.cpp](src/web_utils.cpp) — `/wifi-sta-status.json` now includes `"ip"` when connected
+- [serial_config.html](serial_config.html) — new Add Network modal; status line shows IP
+- [data_embed/script.js](data_embed/script.js) — status line shows IP
+
+---
+
 ## 2026-07-29 — Add Heltec Wireless Tracker (433 MHz) support
 
 New `heltec_wireless_tracker_433_aprs` PlatformIO environment for the Heltec Wireless Tracker V1.1
