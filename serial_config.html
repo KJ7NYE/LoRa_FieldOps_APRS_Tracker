@@ -2021,8 +2021,14 @@ function renderConfig() {
         delBtn.addEventListener('click', async () => {
           delBtn.disabled = true;
           try {
-            await sendCmd(`wifista remove ${i}`);
-            await readConfig();
+            // `wifista remove` only mutates the device's live (unsaved) config --
+            // re-fetching via readConfig()/export would read back the still-on-disk
+            // copy and silently undo this row on screen, desyncing indices for any
+            // further add/remove until a Save. Patch local state instead.
+            const resp = await sendCmd(`wifista remove ${i}`);
+            if (/^ERR:/m.test(resp)) { logErr(resp.trim()); delBtn.disabled = false; return; }
+            config.wifiSTA.networks.splice(i, 1);
+            renderConfig();
           } catch (e) {
             logErr('Remove failed: ' + e.message);
             delBtn.disabled = false;
@@ -2050,8 +2056,13 @@ function renderConfig() {
         if (!ssid) return;
         addBtn.disabled = true;
         try {
-          await sendCmd(`wifista add ${ssid}`);
-          await readConfig();
+          // Same reasoning as the delete handler above: patch local state and
+          // re-render rather than round-tripping through export (on-disk, unsaved).
+          const resp = await sendCmd(`wifista add ${ssid}`);
+          if (/^ERR:/m.test(resp)) { logErr(resp.trim()); addBtn.disabled = false; return; }
+          config.wifiSTA.networks = config.wifiSTA.networks || [];
+          config.wifiSTA.networks.push({ ssid, password: '' });
+          renderConfig();
         } catch (e) {
           logErr('Add network failed: ' + e.message);
           addBtn.disabled = false;
