@@ -25,42 +25,55 @@ jobs:
             fail-fast: false
             matrix:
                 target:
-                    # ESP32 targets — merged factory binary for Web Serial flashing
+                    # ESP32 targets — merged factory binary for Web Serial flashing.
+                    # ota_partitions: true marks boards on partitions_8mb_ota.csv (a real
+                    # dual-slot app0/app1 OTA table) — these also get a merged
+                    # "_ota_update.bin" (bootloader+partitions+otadata+firmware, no SPIFFS)
+                    # for the preserve-config "Firmware Update" manifest. Flashing that as
+                    # several separate manifest parts instead (what this used to do) hits a
+                    # documented esp-web-tools bug on ESP32-S3 — see the "Assemble ESP32 OTA
+                    # update binary" step below.
                     - name: heltec_v3_433_aprs
                       chip: esp32s3
                       flash_size: 8MB
                       flash_mode: dio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
+                      ota_partitions: true
 
                     - name: tbeam_433_aprs
                       chip: esp32
                       flash_size: 4MB
                       flash_mode: dio
                       spiffs_offset: "0x310000"   # huge_app.csv (firmware too large for dual OTA slots)
+                      ota_partitions: false
 
                     - name: tbeam_433_1w_aprs
                       chip: esp32s3
                       flash_size: 8MB
                       flash_mode: dio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
+                      ota_partitions: true
 
                     - name: lilygo_t3_433_aprs
                       chip: esp32
                       flash_size: 4MB
                       flash_mode: dio
                       spiffs_offset: "0x310000"   # huge_app.csv (firmware too large for dual OTA slots)
+                      ota_partitions: false
 
                     - name: LoRanger_V1
                       chip: esp32s3
                       flash_size: 8MB
                       flash_mode: qio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
+                      ota_partitions: true
 
                     - name: heltec_wireless_tracker_433_aprs
                       chip: esp32s3
                       flash_size: 8MB
                       flash_mode: dio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
+                      ota_partitions: true
 
                     # nRF52 target — UF2 drag-and-drop (no Web Serial support)
                     - name: heltec_t114
@@ -130,6 +143,43 @@ jobs:
                       "$SPIFFS" installer/firmware/spiffs.bin
                   fi
 
+            # boards on the dual-slot partitions_8mb_ota.csv table also get a merged
+            # "update" image (everything the factory image has, minus SPIFFS) for the
+            # preserve-config "Firmware Update" manifest. That manifest used to flash
+            # boot_app0.bin and firmware.bin as two separate parts at their own offsets;
+            # esp-web-tools has a documented bug where flashing multiple separate parts
+            # at different offsets produces "invalid header: 0xffffffff" on ESP32-S3
+            # (https://github.com/esphome/esp-web-tools/issues/377) even when the
+            # identical bytes flash and boot fine via esptool/PlatformIO directly. Merging
+            # into one binary and flashing it as a single part is that issue's own
+            # documented fix. This image intentionally stops before the SPIFFS offset —
+            # config is untouched, same as the old two-part approach.
+            - name: Assemble ESP32 OTA update binary
+              if: success() && matrix.target.chip != 'nrf52' && matrix.target.ota_partitions
+              run: |
+                  set -e
+                  CHIP="${{ matrix.target.chip }}"
+                  FLASH_MODE="${{ matrix.target.flash_mode }}"
+                  FLASH_SIZE="${{ matrix.target.flash_size }}"
+                  OUT="${{ matrix.target.name }}_ota_update.bin"
+
+                  if [ "$CHIP" = "esp32" ]; then
+                    esptool.py --chip esp32 merge_bin -o "$OUT" \
+                      --flash_mode "$FLASH_MODE" --flash_freq 40m --flash_size "$FLASH_SIZE" \
+                      0x1000   installer/firmware/bootloader.bin \
+                      0x8000   installer/firmware/partitions.bin \
+                      0xe000   installer/firmware/boot_app0.bin \
+                      0x10000  installer/firmware/firmware.bin
+                  elif [ "$CHIP" = "esp32s3" ]; then
+                    # ESP32-S3 bootloader starts at 0x0000, not 0x1000
+                    esptool.py --chip esp32s3 merge_bin -o "$OUT" \
+                      --flash_mode "$FLASH_MODE" --flash_size "$FLASH_SIZE" \
+                      0x0000   installer/firmware/bootloader.bin \
+                      0x8000   installer/firmware/partitions.bin \
+                      0xe000   installer/firmware/boot_app0.bin \
+                      0x10000  installer/firmware/firmware.bin
+                  fi
+
             - name: Upload ESP32 factory binary to release
               if: success() && matrix.target.chip != 'nrf52'
               env:
@@ -146,6 +196,12 @@ jobs:
                      ${{ matrix.target.name }}_firmware.bin
                   gh release upload "$RELEASE_TAG" \
                     "${{ matrix.target.name }}_firmware.bin" --clobber
+                  # OTA update binary: merged single-part image for the preserve-config
+                  # "Firmware Update" web flash — only built for dual-OTA-slot boards.
+                  if [ "${{ matrix.target.ota_partitions }}" = "true" ]; then
+                    gh release upload "$RELEASE_TAG" \
+                      "${{ matrix.target.name }}_ota_update.bin" --clobber
+                  fi
 
             # ── nRF52: UF2 drag-and-drop + BLE DFU zip ────────────────────
             - name: Prepare nRF52 UF2
@@ -204,6 +260,7 @@ jobs:
                     --repo KJ7NYE/LoRa_FieldOps_APRS_Tracker \
                     --pattern "*_web_factory.bin" \
                     --pattern "*_firmware.bin" \
+                    --pattern "*_ota_update.bin" \
                     --pattern "heltec_t114_firmware.uf2" \
                     --dir flasher/firmware \
                     --clobber

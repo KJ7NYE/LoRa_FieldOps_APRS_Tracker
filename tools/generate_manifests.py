@@ -140,29 +140,34 @@ for t in ESP_TARGETS:
         json.dump(manifest, f, indent=2)
     print(f"Wrote {path}")
 
-    # Update manifest: bare firmware binary at partition offset 0x10000.
-    # Leaves SPIFFS untouched so the user's configuration is preserved.
+    # Update manifest: leaves SPIFFS untouched so the user's configuration is preserved.
     #
     # Boards on partitions_8mb_ota.csv have two app slots (app0/app1) plus an
     # otadata partition at 0xe000 that tells the bootloader which one to boot.
-    # This manifest always writes app0 (the fixed 0x10000 offset below) but
-    # never otherwise touches otadata. If otadata was ever left pointing at
-    # app1 — e.g. from a single earlier use of the in-device web UI's OTA
-    # updater, which does properly flip slots via esp_ota_get_next_update_partition()
-    # — every future "Firmware Update" flash here would silently write the
-    # *inactive* slot: esp-web-tools reports success (the write to app0 really
-    # did succeed and verify), but the bootloader keeps trying to boot the
-    # untouched, blank app1 and prints "invalid header: 0xffffffff". Only a
-    # Fresh Install recovered from this, because the merged factory image
-    # includes boot_app0.bin at 0xe000 (see .github/workflows/flasher.yml's
-    # merge_bin step), which resets otadata to select app0.
-    # Including that same static boot_app0.bin here — identical on every
-    # build/board, so it's committed once rather than produced per-release —
-    # makes the update manifest self-consistent with the fixed offset it
-    # always writes to, regardless of any prior otadata state.
-    update_parts = [{"path": f"{base}/{t['id']}_firmware.bin", "offset": 65536}]
+    # A bare-firmware write to app0 alone depends on otadata already pointing
+    # there; a previous fix tried correcting that by also writing boot_app0.bin
+    # (resets otadata to select app0) as a second manifest part. That didn't
+    # hold up under field testing: esp-web-tools has a documented bug
+    # (https://github.com/esphome/esp-web-tools/issues/377) where flashing
+    # multiple separate parts at different offsets produces
+    # "invalid header: 0xffffffff" on ESP32-S3 even though the identical bytes
+    # flash and boot fine via esptool/PlatformIO directly — the same symptom
+    # this project hit, and the same chip family (all four ota_partitions
+    # boards are ESP32-S3). That issue's own fix is to merge everything into
+    # one binary and flash it as a single part, which is what
+    # {id}_ota_update.bin (built in .github/workflows/flasher.yml, mirroring
+    # the factory image's merge_bin recipe minus spiffs.bin) does: bootloader +
+    # partition table + otadata (selecting app0) + firmware, ending well before
+    # the SPIFFS offset. Single-part write, so it isn't subject to the
+    # multi-part bug, and otadata is still reset to app0 same as before.
+    #
+    # Boards without a dual-slot table (huge_app.csv) have only one app
+    # partition, so a bare firmware write at its fixed offset is unambiguous —
+    # no merge needed.
     if t.get("ota_partitions"):
-        update_parts.insert(0, {"path": f"{base}/boot_app0.bin", "offset": 57344})  # 0xe000
+        update_parts = [{"path": f"{base}/{t['id']}_ota_update.bin", "offset": 0}]
+    else:
+        update_parts = [{"path": f"{base}/{t['id']}_firmware.bin", "offset": 65536}]
     update_manifest = {
         "name":    f"LoRa FieldOps — {t['label']} (Firmware Update)",
         "version": tag,
