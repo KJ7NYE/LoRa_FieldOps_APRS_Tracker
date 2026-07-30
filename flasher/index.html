@@ -237,13 +237,24 @@
       elFooter.style.display = '';
     }
 
-    // Populate dropdown
+    // Populate dropdown, grouped by manufacturer. targets.json is already
+    // sorted by manufacturer (see tools/generate_manifests.py), so a new
+    // <optgroup> opens each time the value changes walking the array in order.
+    let currentGroup = null;
+    let currentGroupEl = null;
     data.targets.forEach(t => {
+      const groupLabel = t.manufacturer || 'Other';
+      if (groupLabel !== currentGroup) {
+        currentGroup = groupLabel;
+        currentGroupEl = document.createElement('optgroup');
+        currentGroupEl.label = groupLabel;
+        elSelect.appendChild(currentGroupEl);
+      }
       const opt = document.createElement('option');
       opt.value = t.id;
       const chipLabel = t.chip ? ` (${t.chip})` : '';
       opt.textContent = `${t.label}${chipLabel}`;
-      elSelect.appendChild(opt);
+      currentGroupEl.appendChild(opt);
     });
 
     elSelectRow.style.display = '';
