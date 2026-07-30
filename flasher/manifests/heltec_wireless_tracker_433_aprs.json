@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 Heltec Wireless Tracker",
-  "version": "v1.2.3",
+  "version": "v1.2.4",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
