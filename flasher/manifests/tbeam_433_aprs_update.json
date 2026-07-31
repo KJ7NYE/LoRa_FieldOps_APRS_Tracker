@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 TTGO T-Beam (Firmware Update)",
-  "version": "v1.2.7",
+  "version": "v1.2.8",
   "new_install_prompt_erase": true,
   "builds": [
     {

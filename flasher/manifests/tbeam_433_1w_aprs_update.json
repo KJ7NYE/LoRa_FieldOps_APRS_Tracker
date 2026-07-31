@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 LilyGo T-Beam 1W (Firmware Update)",
-  "version": "v1.2.7",
+  "version": "v1.2.8",
   "new_install_prompt_erase": true,
   "builds": [
     {
