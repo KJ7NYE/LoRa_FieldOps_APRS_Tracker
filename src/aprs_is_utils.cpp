@@ -15,6 +15,7 @@
 #include "configuration.h"
 #include "lora_utils.h"
 #include "station_utils.h"
+#include "query_utils.h"
 #include "display.h"
 #include "logger.h"
 #include "log_buffer.h"
@@ -47,6 +48,9 @@ static PacketDedup igDedup;
 static bool igIsNew(const String& sender, const String& payload) {
     return igDedup.isNew(sender, payload);
 }
+
+// Third-party packets actually uploaded since boot — for telemetry reporting.
+static uint32_t uploadedCount = 0;
 
 // Compute the standard APRS-IS passcode (Friedman algorithm) from a callsign.
 // Strips the SSID (everything after '-') before hashing.
@@ -273,8 +277,16 @@ namespace APRS_IS_Utils {
         uploadLine += stripStartingBytes(packet.substring(colonIdx));
 
         upload(uploadLine);
+        uploadedCount++;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS", "Uploaded: %s", uploadLine.c_str());
         LogBuffer::pushf(LogBuffer::TYPE_IGT, "IS: %s", uploadLine.c_str());
+    }
+
+    uint32_t getUploadedCount() { return uploadedCount; }
+
+    String getConnectionState() {
+        if (!aprsIsClient.connected()) return "DOWN";
+        return (passcodeValid && Config.aprsIS.downlinkEnabled) ? "RW" : "R";
     }
 
     // Stations heard directly (no digi hop) within this window are treated
@@ -293,14 +305,14 @@ namespace APRS_IS_Utils {
 
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS", "Rx: %s", line.c_str());
 
-            // Downlink requires an explicit opt-in plus a validated passcode —
-            // an unverified login already degrades RF->IS uploads to qAO, so
-            // it must not be allowed to originate new RF traffic either.
-            if (!Config.aprsIS.downlinkEnabled || !passcodeValid) continue;
-
-            // Filter out third-party or loopback packets.
-            // qAR/qAO = originated from RF — don't re-gate back to RF (avoids IS→RF→IS loops).
-            if (line.indexOf("TCPIP")  != -1) continue;
+            // Filter out loopback packets. qAR/qAO = originated from RF — don't
+            // re-gate back to RF (avoids IS→RF→IS loops). Note: a genuine
+            // client-originated message (the normal case — a human messaging
+            // an RF station via aprs.fi/an app/etc.) legitimately carries a
+            // "TCPIP*" marker in its path, so that marker must NOT be filtered
+            // here or downlink can never deliver real user messages. Third-party
+            // wrapped echoes (info field starting with '}') are already excluded
+            // below by the top-level ':'-after-colon message-format check.
             if (line.indexOf("NOGATE") != -1) continue;
             if (line.indexOf(",qAR,")  != -1) continue;
             if (line.indexOf(",qAO,")  != -1) continue;
@@ -309,7 +321,11 @@ namespace APRS_IS_Utils {
             if (arrowIdx <= 0) continue;
             const String& myCall = Config.beacons[0].callsign;
             String sender = line.substring(0, arrowIdx);
-            if (sender == myCall) continue;   // own packet
+            if (sender == myCall) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS",
+                           "Downlink skip: sender %s matches our own callsign", sender.c_str());
+                continue;
+            }
 
             // Per the APRS-IS IGate spec, only gate directed messages (not
             // general position/object/status traffic) from IS back to RF —
@@ -320,20 +336,62 @@ namespace APRS_IS_Utils {
             if (line.charAt(colonIdx + 1) != ':') continue;    // not a message packet
             if (line.charAt(colonIdx + 11) != ':') continue;   // malformed addressee field
 
-            // Don't gate if the sender has itself just been heard on RF —
-            // it's already local, so relaying its own message back doesn't
-            // help and risks a loop.
-            int senderHeardMin = STATION_Utils::minutesSinceHeard(sender);
-            if (senderHeardMin >= 0 && senderHeardMin < HEARD_WINDOW_MIN) continue;
-
             String addressee = line.substring(colonIdx + 2, colonIdx + 11);
             addressee.trim();
             addressee.toUpperCase();
 
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS",
+                       "Downlink candidate: %s -> %s", sender.c_str(), addressee.c_str());
+
+            // Addressed to this device itself (its own callsign, tactical
+            // name, or the APRS/IGATE broadcast aliases) — answer directly
+            // via QUERY_Utils rather than trying to relay to RF. This device
+            // can never satisfy the "addressee heard direct on RF" gate
+            // below for its own callsign (it doesn't hear its own TX), so
+            // without this branch a query sent to the iGate's own callsign
+            // over APRS-IS would be silently dropped. sendReply() (in
+            // query_utils.cpp) pushes the generated reply straight back to
+            // APRS-IS in addition to queuing it for RF, since this device
+            // can't self-gate its own RF reply either.
+            String tactical = Config.beacons[0].tacticalCallsign;
+            tactical.trim();
+            tactical.toUpperCase();
+            bool addressedToSelf = (addressee == myCall) ||
+                                   (tactical.length() > 0 && addressee == tactical) ||
+                                   (addressee == "APRS") || (addressee == "IGATE");
+            if (addressedToSelf) {
+                QUERY_Utils::processLoRaPacket(line);
+                continue;
+            }
+
+            // Everything below relays a message to a DIFFERENT RF station,
+            // which — unlike answering about ourselves above — requires an
+            // explicit opt-in plus a validated passcode: an unverified login
+            // already degrades RF->IS uploads to qAO, so it must not be
+            // allowed to originate new RF traffic addressed to a third
+            // station either.
+            if (!Config.aprsIS.downlinkEnabled || !passcodeValid) continue;
+
+            // Don't gate if the sender has itself just been heard on RF —
+            // it's already local, so relaying its own message back doesn't
+            // help and risks a loop.
+            int senderHeardMin = STATION_Utils::minutesSinceHeard(sender);
+            if (senderHeardMin >= 0 && senderHeardMin < HEARD_WINDOW_MIN) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS",
+                           "Downlink skip: sender %s already local (heard %dmin ago)",
+                           sender.c_str(), senderHeardMin);
+                continue;
+            }
+
             // Only gate if the addressee has actually been heard directly on
             // RF recently — otherwise there's no reason to believe the
             // message can reach them at all.
-            if (!STATION_Utils::wasHeardDirect(addressee, HEARD_WINDOW_MS)) continue;
+            if (!STATION_Utils::wasHeardDirect(addressee, HEARD_WINDOW_MS)) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS",
+                           "Downlink skip: addressee %s not heard direct within %dmin",
+                           addressee.c_str(), HEARD_WINDOW_MIN);
+                continue;
+            }
 
             // Extract the original destination (TOCALL) for the third-party wrap.
             int commaIdx = line.indexOf(",", arrowIdx);
@@ -359,6 +417,8 @@ namespace APRS_IS_Utils {
             txPacket += "*";
             txPacket += line.substring(colonIdx);
 
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS",
+                       "Downlink TX: %s", txPacket.c_str());
             LoRa_Utils::sendNewPacket(txPacket);
         }
     }

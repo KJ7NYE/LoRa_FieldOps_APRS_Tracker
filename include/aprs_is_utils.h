@@ -45,6 +45,17 @@ namespace APRS_IS_Utils {
     // Upload the iGate's own beacon directly and register it in the upload dedup.
     void    uploadSelfBeacon(const String& packet);
 
+    // Count of third-party packets actually uploaded to APRS-IS since boot
+    // (excludes self-beacons/self-replies — see uploadSelfBeacon()).
+    uint32_t getUploadedCount();
+
+    // Current APRS-IS link state as a short code for status/telemetry
+    // reporting: "RW" (connected, verified, downlink enabled — fully
+    // bidirectional), "R" (connected but unverified and/or downlink
+    // disabled — matches this codebase's existing "Rx only" terminology),
+    // or "DOWN" (no TCP session).
+    String  getConnectionState();
+
 }
 
 #endif // HAS_WIFI
