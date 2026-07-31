@@ -45,6 +45,7 @@
 #endif
 #ifndef ARDUINO_ARCH_NRF52
 #include <esp_ota_ops.h>
+#include <esp_system.h>
 #endif
 
 
@@ -113,6 +114,30 @@ void setup() {
         Serial.setRxBufferSize(16384);
     #endif
     Serial.begin(115200);
+
+    // First thing logged, before anything else can fail — lets the next
+    // serial session tell a watchdog panic (ESP_RST_TASK_WDT) apart from a
+    // brownout, power-on, or manual reset without having to catch the panic
+    // dump live.
+    #ifndef ARDUINO_ARCH_NRF52
+    {
+        const char* resetReasonStr;
+        switch (esp_reset_reason()) {
+            case ESP_RST_POWERON:  resetReasonStr = "power-on";        break;
+            case ESP_RST_EXT:      resetReasonStr = "external pin";    break;
+            case ESP_RST_SW:       resetReasonStr = "software/restart";break;
+            case ESP_RST_PANIC:    resetReasonStr = "panic";           break;
+            case ESP_RST_INT_WDT:  resetReasonStr = "interrupt WDT";   break;
+            case ESP_RST_TASK_WDT: resetReasonStr = "TASK WATCHDOG";   break;
+            case ESP_RST_WDT:      resetReasonStr = "other WDT";       break;
+            case ESP_RST_DEEPSLEEP:resetReasonStr = "deep sleep wake"; break;
+            case ESP_RST_BROWNOUT: resetReasonStr = "brownout";        break;
+            case ESP_RST_SDIO:     resetReasonStr = "SDIO";            break;
+            default:                resetReasonStr = "unknown";        break;
+        }
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Boot", "Reset reason: %s", resetReasonStr);
+    }
+    #endif
 
     #ifdef ARDUINO_ARCH_NRF52
         Config.init();

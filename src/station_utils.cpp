@@ -42,6 +42,9 @@ extern bool             bluetoothConnected;
 extern bool             sendUpdate;
 extern bool             gpsIsActive;
 
+// Declared in lora_utils.cpp
+extern uint32_t         lastRxActivityMs;
+
 
 // ── Globals defined in this TU ────────────────────────────────────────────────
 // smartBeaconActive is owned by smartbeacon_utils.cpp — extern here.
@@ -63,6 +66,20 @@ static uint32_t            lastOutTx = 0;
 static constexpr uint32_t  OUT_DELAY_MS           = 200;   // normal inter-packet gap
 static constexpr uint32_t  OUT_DELAY_AFTER_ACK_MS = 2000;  // give receiver time to re-arm RX after an ACK
 static bool                lastOutWasAck = false;
+
+// RadioLib's SX126x::launchMode() has an unbounded wait for the BUSY line to
+// drop after keying TX (see lora_utils.cpp sendNewPacket() call site notes).
+// Confirmed on-hardware (repeated live capture, see PR notes) to hang on
+// digipeat/ack TX fired shortly after an intervening RX event (success OR CRC
+// failure) — the pre-c432365 code accidentally avoided this via a blocking
+// delay(200) that froze loop() (and therefore receivePacket()) for the whole
+// pre-TX gap; the non-blocking queue removed that incidental protection. This
+// restores a quiet window since the *last RX activity* (not last TX) before
+// keying, without reintroducing a blocking delay(). oldestQueuedMs bounds how
+// long a busy channel can starve the queue out.
+static constexpr uint32_t  RX_QUIET_WINDOW_MS = 150;
+static constexpr uint32_t  MAX_QUEUE_WAIT_MS  = 4000;
+static uint32_t            oldestQueuedMs = 0;   // 0 = queue currently empty
 
 // Caps memory use if a burst of distinct stations (digipeat traffic, or many
 // simultaneous queries) queues faster than the 200 ms TX gap can drain it.
@@ -104,6 +121,7 @@ namespace STATION_Utils {
                        "Output queue full (%u), dropping oldest", (unsigned)MAX_OUT_QUEUE);
             outBuffer.pop();
         }
+        if (outBuffer.empty()) oldestQueuedMs = millis();
         outBuffer.push(packet);
     }
 
@@ -112,8 +130,16 @@ namespace STATION_Utils {
         uint32_t now = millis();
         uint32_t gap = lastOutWasAck ? OUT_DELAY_AFTER_ACK_MS : OUT_DELAY_MS;
         if (now - lastOutTx < gap) return;
+
+        // See RX_QUIET_WINDOW_MS comment above. Skipped once the queue has
+        // waited long enough that further delay risks starving it on a busy
+        // channel rather than protecting it.
+        bool waitedTooLong = (now - oldestQueuedMs) > MAX_QUEUE_WAIT_MS;
+        if (!waitedTooLong && (now - lastRxActivityMs) < RX_QUIET_WINDOW_MS) return;
+
         String pkt = outBuffer.front();
         outBuffer.pop();
+        if (outBuffer.empty()) oldestQueuedMs = 0;
         lastOutWasAck = (pkt.indexOf(":ack") >= 0);
         LoRa_Utils::sendNewPacket(pkt);
         lastOutTx = now;
