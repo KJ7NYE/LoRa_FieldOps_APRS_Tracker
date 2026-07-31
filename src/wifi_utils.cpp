@@ -134,6 +134,11 @@ namespace WIFI_Utils {
 
         uint32_t t0 = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - t0 < 10000UL) {
+            // Runs synchronously during setup() (before loop()'s per-iteration
+            // feed exists yet) — feed directly so an out-of-range/wrong-password
+            // AP doesn't burn the whole watchdog budget before the device ever
+            // reaches a stable, serial-responsive loop().
+            POWER_Utils::feedWatchdog();
             delay(500);
         }
         if (WiFi.status() == WL_CONNECTED) {

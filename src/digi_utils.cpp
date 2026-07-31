@@ -22,10 +22,15 @@ namespace DIGI_Utils {
 
     static DigiMode digiMode() { return Config.digiMode; }
 
-    static String buildPacket(const String& path, const String& packet) {
+    // commaIdx/colonIdx are the header-boundary offsets generateDigipeatedPacket()
+    // already computed from the parsed dest/path split — reused here rather than
+    // re-scanning the raw received `packet` for the first "," and ":". Scanning
+    // untrusted over-the-air bytes independently would let a corrupted frame
+    // with a stray "," or ":" ahead of the real path field make this slice the
+    // wrong boundary (self-beacon packets are always locally built and can't
+    // exhibit this — this is a digipeat-only exposure).
+    static String buildPacket(const String& path, const String& packet, int commaIdx, int colonIdx) {
         const String& myCall = Config.beacons[0].callsign;
-        int commaIdx = packet.indexOf(",");
-        int colonIdx = packet.indexOf(":");
 
         DigiMode mode = digiMode();
         String tempPath = path;
@@ -33,12 +38,18 @@ namespace DIGI_Utils {
         if (tempPath.indexOf("WIDE1-1") != -1 && mode >= DIGI_WIDE1) {
             if (tempPath.indexOf("WIDE1-1*") != -1) return "";  // alias already used
             tempPath.replace("WIDE1-1", myCall + "*");
+            // String::replace() silently no-ops on allocation failure (this is
+            // a growing replacement whenever myCall is longer than 2 chars —
+            // the common case). Don't transmit with the alias unstamped.
+            if (tempPath.indexOf(myCall) == -1) return "";
         } else if (tempPath.indexOf("WIDE2-") != -1 && mode == DIGI_WIDE1_WIDE2) {
             if (tempPath.indexOf("WIDE2-1*") != -1 || tempPath.indexOf("WIDE2-2*") != -1) return "";  // alias already consumed
             if (tempPath.indexOf("WIDE2-1") != -1) {
                 tempPath.replace("WIDE2-1", myCall + "*");
+                if (tempPath.indexOf(myCall) == -1) return "";
             } else if (tempPath.indexOf("WIDE2-2") != -1) {
                 tempPath.replace("WIDE2-2", myCall + "*,WIDE2-1");
+                if (tempPath.indexOf(myCall) == -1) return "";
             } else {
                 return "";
             }
@@ -72,7 +83,11 @@ namespace DIGI_Utils {
         if (mode == DIGI_WIDE1       && !hasWide1)             return "";
         if (mode == DIGI_WIDE1_WIDE2 && !hasWide1 && !hasWide2) return "";
 
-        return buildPacket(path, packet);
+        // Convert destAndPath's relative comma offset to an absolute offset
+        // into the original packet, so buildPacket() never has to re-scan
+        // the raw received bytes for header boundaries.
+        int absoluteCommaIdx = gtIdx + 1 + commaIdx;
+        return buildPacket(path, packet, absoluteCommaIdx, colonIdx);
     }
 
     void processLoRaPacket(const String& packet) {

@@ -8,6 +8,7 @@
  */
 
 #include "board_pinout.h"  // HAS_DISPLAY, HAS_TFT_ST7789, HAS_TFT must be in scope first
+#include "power_utils.h"   // feedWatchdog() — bootStatus() is the one checkpoint every setup() phase passes through
 
 #ifndef HAS_DISPLAY
 
@@ -33,6 +34,10 @@ void displayAPMode(const String&, const String&) {}
 
 void bootStatus(const char* step) {
     if (!step) return;
+    // Every setup() phase reports through here — feed the watchdog at each
+    // checkpoint so a single slow phase (e.g. WiFi STA out of range) can't
+    // burn the whole boot-time budget before loop()'s own feed exists.
+    POWER_Utils::feedWatchdog();
     logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Boot", "%lums %s", millis(), step);
 }
 
@@ -144,6 +149,10 @@ void displayToggle(bool on) {
 
 void bootStatus(const char* step) {
     if (!step) return;
+    // Every setup() phase reports through here — feed the watchdog at each
+    // checkpoint so a single slow phase (e.g. WiFi STA out of range) can't
+    // burn the whole boot-time budget before loop()'s own feed exists.
+    POWER_Utils::feedWatchdog();
     logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Boot", "%lums %s", millis(), step);
     if (!_tftReady) return;
     constexpr int STATUS_Y = 90;   // 2× font: below startup content
@@ -430,6 +439,10 @@ void displaySetInvert(bool invert) {
 
 void bootStatus(const char* step) {
     if (!step) return;
+    // Every setup() phase reports through here — feed the watchdog at each
+    // checkpoint so a single slow phase (e.g. WiFi STA out of range) can't
+    // burn the whole boot-time budget before loop()'s own feed exists.
+    POWER_Utils::feedWatchdog();
     logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Boot", "%lums %s", millis(), step);
 }
 

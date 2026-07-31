@@ -37,6 +37,10 @@ extern LoraType         *currentLoRaType;
 
 bool operationDone   = true;
 bool transmitFlag    = true;
+// millis() of the last time an RX-done interrupt was actually consumed
+// (successful read or CRC/decode failure) — see STATION_Utils::processOutputPacketBuffer()
+// for why a queued TX waits for a short quiet window since this timestamp.
+uint32_t lastRxActivityMs = 0;
 
 #if defined(HAS_SX1262)
     // On HELTEC_T114, variants_bsp/heltec_t114/variant.h sets PIN_SPI_MISO/MOSI/SCK
@@ -241,7 +245,15 @@ namespace LoRa_Utils {
         #ifdef FAN_CTRL_PIN
             THERMAL_Utils::onTxStart();
         #endif
+        // Diagnostic bracket: confirms execution actually reaches radio.transmit()
+        // rather than hanging in the display/LED/PTT calls above it.
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "LoRa Tx", "calling transmit(), len %d", newPacket.length());
         int state = radio.transmit("\x3c\xff\x01" + newPacket);
+        // Diagnostic bracket for an unresolved digipeat-only hang: confirms
+        // radio.transmit() actually returned rather than being stuck inside
+        // RadioLib. Pair with the "RX re-armed" log in receivePacket() below —
+        // whichever of the two never prints next pinpoints the hang location.
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "LoRa Tx", "transmit() returned, code %d", state);
         #ifdef FAN_CTRL_PIN
             THERMAL_Utils::onTxEnd();
         #endif
@@ -290,8 +302,18 @@ namespace LoRa_Utils {
                     digitalWrite(RADIO_RXEN, HIGH);
                 #endif
                 radio.startReceive();
+                // Diagnostic bracket, pairs with the "transmit() returned" log
+                // above — confirms the post-TX RX re-arm call itself returned.
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "LoRa Rx", "RX re-armed after TX");
                 transmitFlag = false;
             } else {
+                // Mark the radio as "just touched by RX" regardless of outcome
+                // (clean read or CRC/decode failure) — a queued digipeat/ack TX
+                // waits for this to go quiet before keying. Confirmed on-hardware:
+                // transmitting while the chip is still settling from a just-consumed
+                // RX-done interrupt triggers RadioLib's SX126x::launchMode() unbounded
+                // BUSY-wait hang (see STATION_Utils::processOutputPacketBuffer()).
+                lastRxActivityMs = millis();
                 int state = radio.readData(packet);
                 if (state == RADIOLIB_ERR_NONE) {
                     if(packet.length() != 0) {
