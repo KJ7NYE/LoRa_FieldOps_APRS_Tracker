@@ -11,7 +11,7 @@ namespace QUERY_Utils {
     // object name, if set) or broadcast to APRS/IGATE.
     //
     // Handles: ?APRS? ?APRSD ?APRSH ?APRSL ?APRSP ?APRSS ?APRST ?APRSV
-    //          ?PING? ?VER ?IGATE?
+    //          ?PING? ?VER ?IGATE? ?TELEM?
     //
     // Also ACKs plain (non-query) APRS messages addressed to our callsign or
     // tactical name — no automated reply, just the ack — since the tracker

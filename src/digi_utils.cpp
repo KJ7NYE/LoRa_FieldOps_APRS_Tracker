@@ -22,6 +22,10 @@ namespace DIGI_Utils {
 
     static DigiMode digiMode() { return Config.digiMode; }
 
+    static uint32_t repeatedCount = 0;
+
+    uint32_t getRepeatedCount() { return repeatedCount; }
+
     // commaIdx/colonIdx are the header-boundary offsets generateDigipeatedPacket()
     // already computed from the parsed dest/path split — reused here rather than
     // re-scanning the raw received `packet` for the first "," and ":". Scanning
@@ -121,6 +125,7 @@ namespace DIGI_Utils {
         String repeated = generateDigipeatedPacket(packet);
         if (repeated.length() == 0) return;
 
+        repeatedCount++;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Digi", "Repeating: %s", repeated.c_str());
         LogBuffer::pushf(LogBuffer::TYPE_DIG, "Relay: %s", repeated.c_str());
         // Queued through the shared output buffer (same path as query/ack TX)
