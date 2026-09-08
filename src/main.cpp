@@ -28,6 +28,7 @@
 #include "device_role.h"
 #include "digi_utils.h"
 #include "query_utils.h"
+#include "remote_cfg_utils.h"
 #include "version.h"
 #ifdef HAS_WIFI
 #include <WiFi.h>
@@ -308,6 +309,11 @@ void loop() {
         // Respond to directed and undirected APRS capability queries.
         QUERY_Utils::processLoRaPacket(packet);
     }
+
+    // Fire any deferred reboot requested by a remote-config write (role/gps
+    // changes only take effect after a restart) once its reply has had time
+    // to drain through the output packet buffer.
+    RemoteCfg_Utils::pollReboot();
 
     // ── BLE / BT inbound (KISS TX) ──────────────────────────────────────
     if (Config.bluetooth.active && bluetoothConnected) {

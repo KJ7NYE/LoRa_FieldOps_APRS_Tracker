@@ -1745,6 +1745,7 @@ function renderConfig() {
   const wifiSTA  = config.wifiSTA       || {};
   const aprsIS   = config.aprsIS        || {};
   const tcpKISS  = config.tcpKISS       || {};
+  const remoteCfg = config.remoteCfg    || {};
 
   mkSection(cont, 'role', '🌐 Device Role', body => {
     body.appendChild(mkGroupTitle('Role & GPS Source'));
@@ -2240,6 +2241,16 @@ function renderConfig() {
     body.appendChild(mkGroupTitle('TCP KISS Server'));
     body.appendChild(mkNumber('Port', tcpKISS.port, v => sendCmd(`tcpkiss port ${v}`), { min:1, max:65535 }));
     body.appendChild(mkInfo('TCP KISS server starts automatically when WiFi STA is connected. USB serial is always KISS TNC — type \'setup\' or \'log\' to switch modes.'));
+
+    body.appendChild(mkGroupTitle('Remote Configuration (CourseSentry)'));
+    body.appendChild(mkInfo('Lets a field-management system read and adjust a small set of parameters remotely over APRS directed messages (LoRa RF, and APRS-IS for iGate-role nodes). Off by default.'));
+    body.appendChild(mkBool('Enable remote read/write commands', remoteCfg.enabled ?? false,
+      v => sendCmd(`remotecfg ${boolStr(v)}`)));
+    body.appendChild(mkPassword('Unlock token (blank disables writes)', remoteCfg.token,
+      v => sendCmd(`remotecfg token ${v}`)));
+    body.appendChild(mkNumber('Write window (seconds)', remoteCfg.unlockWindowSec ?? 300,
+      v => sendCmd(`remotecfg window ${v}`), { min:60, max:3600 }));
+    body.appendChild(mkInfo('Sent in plaintext over RF/APRS-IS like all amateur radio traffic — treat this as site access control, not encryption. Set it only from this local UI, never remotely.'));
   });
 
 }

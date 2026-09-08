@@ -178,6 +178,8 @@ namespace SERIAL_Setup {
         Serial.println(F("  aprsiss filter <filter>     aprsiss status"));
         Serial.println(F("  aprsiss downlink on|off     (gate IS messages to a locally-heard station back to RF)"));
         Serial.println(F("  tcpkiss port <n>             (TCP KISS port, default 8001; server auto-starts with WiFi STA)"));
+        Serial.println(F("  remotecfg show|on|off        remotecfg token <secret>   remotecfg window <60-3600 sec>"));
+        Serial.println(F("                               (compact remote read/write over APRS messages -- see SERIAL_SETUP.md)"));
         Serial.println(F("\n-- transmit now (no timer reset) --"));
         Serial.println(F("  tx comment                 send position+comment immediately"));
         Serial.println(F("  tx status                  send status packet immediately"));
@@ -899,6 +901,33 @@ namespace SERIAL_Setup {
         else err("unknown aprsiss subcommand: " + sub);
     }
 
+    static void cmdRemoteCfg(String* tk, int n, const String& line) {
+        if (n < 2) { err("remotecfg <show|on|off|token|window>"); return; }
+        const String& sub = tk[1];
+        if (sub == "show") {
+            hdr("remote config (CourseSentry)");
+            kv("enabled        ", Config.remoteCfg.enabled);
+            kv("token          ", maskSecret(Config.remoteCfg.token));
+            kv("unlockWindowSec", Config.remoteCfg.unlockWindowSec);
+        } else if (sub == "on" || sub == "off") {
+            Config.remoteCfg.enabled = (sub == "on");
+            ok("remoteCfg.enabled = " + String(Config.remoteCfg.enabled ? "on" : "off"));
+        } else if (sub == "token") {
+            if (n < 3) { err("remotecfg token <value>  (empty value clears it, disabling Stage 2 writes)"); return; }
+            String v = restOfLine(line, 2);
+            Config.remoteCfg.token = v;
+            ok("remoteCfg.token updated");
+        } else if (sub == "window") {
+            if (n < 3) { err("remotecfg window <seconds>"); return; }
+            int secs = tk[2].toInt();
+            if (secs < 60 || secs > 3600) { err("remotecfg window must be 60-3600 seconds"); return; }
+            Config.remoteCfg.unlockWindowSec = secs;
+            ok("remoteCfg.unlockWindowSec = " + String(Config.remoteCfg.unlockWindowSec));
+        } else {
+            err("unknown remotecfg subcommand: " + sub);
+        }
+    }
+
     static void cmdTcpKiss(String* tk, int n) {
         if (n < 2) { err("tcpkiss port <n>"); return; }
         const String& sub = tk[1];
@@ -1031,6 +1060,7 @@ namespace SERIAL_Setup {
         else if (cmd == "wifista")  cmdWifiSta(tk, n, line);
         else if (cmd == "aprsiss")  cmdAprsIS(tk, n, line);
         else if (cmd == "tcpkiss")  cmdTcpKiss(tk, n);
+        else if (cmd == "remotecfg") cmdRemoteCfg(tk, n, line);
         else if (cmd == "version") {
             Serial.println("version.date=" FIRMWARE_VERSION_DATE);
             Serial.println("version.board=" BOARD_ENV_ID);

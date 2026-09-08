@@ -156,6 +156,11 @@ function loadSettings(s) {
     setVal('tcpKISS.enabled',       tk.enabled       ?? false);
     setVal('tcpKISS.port',          tk.port          ?? 8001);
 
+    const rcfg = s.remoteCfg ?? {};
+    setVal('remoteCfg.enabled',         rcfg.enabled         ?? false);
+    setVal('remoteCfg.token',           rcfg.token           ?? '');
+    setVal('remoteCfg.unlockWindowSec', rcfg.unlockWindowSec ?? 300);
+
     const lora = s.lora?.[0] ?? {};
     setVal('lora.0.frequency',      lora.frequency       ?? 433775000);
     setVal('lora.0.spreadingFactor',lora.spreadingFactor ?? 12);

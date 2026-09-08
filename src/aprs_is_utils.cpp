@@ -18,6 +18,7 @@
 #include "display.h"
 #include "logger.h"
 #include "log_buffer.h"
+#include "remote_cfg_utils.h"
 
 extern Configuration    Config;
 extern logging::Logger  logger;
@@ -46,6 +47,19 @@ static PacketDedup igDedup;
 
 static bool igIsNew(const String& sender, const String& payload) {
     return igDedup.isNew(sender, payload);
+}
+
+// Outgoing remote-config reply sequence number for the APRS-IS path.
+// Independent of query_utils.cpp's own counter (that one is `static` to its
+// translation unit) — message numbers only need to be unique per
+// conversation, not globally, so two small independent counters are simpler
+// than sharing one across an extern.
+static int remoteCfgMsgCounter = 1;
+
+static String nextRemoteCfgMsgNo() {
+    String n = String(remoteCfgMsgCounter++);
+    if (remoteCfgMsgCounter > 999) remoteCfgMsgCounter = 1;
+    return n;
 }
 
 // Compute the standard APRS-IS passcode (Friedman algorithm) from a callsign.
@@ -292,6 +306,68 @@ namespace APRS_IS_Utils {
             if (line.length() == 0 || line.startsWith("#")) continue;
 
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "APRS-IS", "Rx: %s", line.c_str());
+
+            // ── Remote-config commands addressed to our own callsign ────────
+            // Checked before the third-party-relay filters below (a directly
+            // injected client session — which is what CourseSentry's own IS
+            // login produces — commonly carries a TCPIP marker itself, so the
+            // TCPIP filter a few lines down would otherwise silently eat
+            // these) and before the downlinkEnabled/passcodeValid gate, since
+            // that flag governs relaying third-party traffic to RF, a
+            // different feature from answering a command sent directly to us.
+            // A message addressed to our own callsign was never eligible for
+            // the relay-to-RF logic anyway (we never appear in our own RF
+            // heard-log), so this also closes that pre-existing gap — such
+            // messages used to be silently dropped.
+            {
+                int arrowIdx = line.indexOf(">");
+                int colonIdx = (arrowIdx > 0) ? line.indexOf(":", arrowIdx) : -1;
+                bool isMsgPacket = arrowIdx > 0 && colonIdx >= 3 &&
+                    line.charAt(colonIdx + 1) == ':' && line.charAt(colonIdx + 11) == ':';
+
+                if (isMsgPacket) {
+                    const String& myCall = Config.beacons[0].callsign;
+                    String senderCS = line.substring(0, arrowIdx);
+                    String addressee = line.substring(colonIdx + 2, colonIdx + 11);
+                    addressee.trim();
+                    addressee.toUpperCase();
+
+                    if (addressee == myCall) {
+                        if (senderCS != myCall) {
+                            String payload = line.substring(colonIdx + 12);
+                            int brace = payload.indexOf('{');
+                            if (brace >= 0) payload = payload.substring(0, brace);
+                            payload.trim();
+
+                            if (RemoteCfg_Utils::isCommand(payload)) {
+                                // Writes over an unverified passcode aren't
+                                // trusted any more than any other non-RX
+                                // action in this file (processLoRaPacket
+                                // above downgrades an unverified session to
+                                // qAO for the same reason) -- reads are fine
+                                // either way.
+                                String upperPayload = payload; upperPayload.toUpperCase();
+                                bool isWrite = upperPayload.startsWith("CSU") || upperPayload.startsWith("CSW");
+
+                                String replyBody = (isWrite && !passcodeValid)
+                                    ? "CS ERR DISABLED"
+                                    : RemoteCfg_Utils::handleCommand(senderCS, payload);
+
+                                if (replyBody.length() > 0) {
+                                    String replyPkt = APRSPacketLib::generateMessagePacket(
+                                        myCall, "APLRT1", "", senderCS,
+                                        replyBody + "{" + nextRemoteCfgMsgNo() + "}");
+                                    upload(replyPkt);
+                                    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "RemoteCfg",
+                                        "IS command from %s: %s -> %s",
+                                        senderCS.c_str(), payload.c_str(), replyBody.c_str());
+                                }
+                            }
+                        }
+                        continue;   // own-callsign traffic never falls through to RF-relay logic
+                    }
+                }
+            }
 
             // Downlink requires an explicit opt-in plus a validated passcode —
             // an unverified login already degrades RF->IS uploads to qAO, so

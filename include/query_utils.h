@@ -14,8 +14,10 @@ namespace QUERY_Utils {
     //          ?PING? ?VER ?IGATE?
     //
     // Also ACKs plain (non-query) APRS messages addressed to our callsign or
-    // tactical name — no automated reply, just the ack — since the tracker
-    // cannot assume a KISS client is attached to do this instead.
+    // tactical name — no automated body reply, just the ack, since the
+    // tracker cannot assume a KISS client is attached to do this instead —
+    // except for remote-config commands (CSR/CSU/CSW), which are dispatched
+    // to RemoteCfg_Utils and get a reply carrying the requested data/result.
     //
     // Responses/acks are queued via STATION_Utils::addToOutputPacketBuffer().
     // Duplicate queries/messages from the same sender are suppressed for 60 s.

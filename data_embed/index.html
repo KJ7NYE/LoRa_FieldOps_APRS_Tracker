@@ -558,6 +558,37 @@
                                 </div>
                             </div>
 
+                            <!-- Remote Configuration (CourseSentry) -->
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#remoteCfgSection">
+                                        Remote Configuration (CourseSentry)
+                                    </button>
+                                </h2>
+                                <div id="remoteCfgSection" class="accordion-collapse collapse" data-bs-parent="#configAccordion">
+                                    <div class="accordion-body">
+                                        <p class="form-text mt-0">Lets a field-management system (e.g. CourseSentry) read and adjust a small set of parameters remotely over APRS directed messages (LoRa RF, and APRS-IS for iGate-role nodes). Off by default — a device stays locked down until enabled here.</p>
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="remoteCfg.enabled" name="remoteCfg.enabled" />
+                                                    <label class="form-check-label" for="remoteCfg.enabled">Enable remote read/write commands</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label" for="remoteCfg.token">Unlock token <span class="text-muted fw-normal small">(shared secret; blank disables writes)</span></label>
+                                                <input type="password" class="form-control" id="remoteCfg.token" name="remoteCfg.token" autocomplete="off" />
+                                                <div class="form-text">Sent in plaintext over RF/APRS-IS like all amateur radio traffic — treat this as site access control, not encryption. Set it only from this local UI, never remotely.</div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="remoteCfg.unlockWindowSec">Write window (seconds)</label>
+                                                <input type="number" class="form-control" id="remoteCfg.unlockWindowSec" name="remoteCfg.unlockWindowSec" min="60" max="3600" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- 10. WiFi -->
                             <div class="accordion-item">
                                 <h2 class="accordion-header">

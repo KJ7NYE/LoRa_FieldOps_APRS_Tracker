@@ -146,6 +146,10 @@ bool Configuration::writeFile() {
         data["phg"]["directivity"]                  = phg.directivity;
         data["phg"]["beaconRate"]                   = phg.beaconRate;
 
+        data["remoteCfg"]["enabled"]                = remoteCfg.enabled;
+        data["remoteCfg"]["token"]                  = remoteCfg.token;
+        data["remoteCfg"]["unlockWindowSec"]        = remoteCfg.unlockWindowSec;
+
         serializeJson(data, configFile);
         configFile.close();
         return true;
@@ -384,6 +388,13 @@ bool Configuration::readFile() {
         phg.directivity = data["phg"]["directivity"] | 0;
         phg.beaconRate  = data["phg"]["beaconRate"]  | 10;
 
+        if (data["remoteCfg"]["enabled"].isNull()          ||
+            data["remoteCfg"]["token"].isNull()             ||
+            data["remoteCfg"]["unlockWindowSec"].isNull()) needsRewrite = true;
+        remoteCfg.enabled          = data["remoteCfg"]["enabled"]          | false;
+        remoteCfg.token            = data["remoteCfg"]["token"]            | "";
+        remoteCfg.unlockWindowSec  = data["remoteCfg"]["unlockWindowSec"]  | 300;
+
         configFile.close();
 
         if (needsRewrite) {
@@ -489,6 +500,10 @@ void Configuration::setDefaultValues() {
     phg.gain        = 3;
     phg.directivity = 0;
     phg.beaconRate  = 10;
+
+    remoteCfg.enabled          = false;
+    remoteCfg.token            = "";
+    remoteCfg.unlockWindowSec  = 300;
 
     Serial.println("New Data Created... All is Written!");
 }
