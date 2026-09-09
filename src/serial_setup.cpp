@@ -189,7 +189,7 @@ namespace SERIAL_Setup {
         Serial.println(F("  beaconpath <DIRECT|WIDE1-1|WIDE1-1,WIDE2-1|WIDE1-1,WIDE2-2>"));
         Serial.println(F("  gps read                   print current GPS position (all sources)"));
         Serial.println(F("  sendspeed on|off             sendalt on|off"));
-        Serial.println(F("  nonsmartrate <min>"));
+        Serial.println(F("  nonsmartrate <sec>"));
         Serial.println(F("  commentafter <n>"));
         Serial.println();
     }
@@ -1039,7 +1039,7 @@ namespace SERIAL_Setup {
         }
         else if (cmd == "sendspeed")                { if (n >= 2) applyBool(tk[1], Config.sendSpeedCourse, "sendSpeedCourse"); else err("sendspeed on|off"); }
         else if (cmd == "sendalt")                  { if (n >= 2) applyBool(tk[1], Config.sendAltitude, "sendAltitude"); else err("sendalt on|off"); }
-        else if (cmd == "nonsmartrate")             { if (n >= 2) { Config.nonSmartBeaconRate = tk[1].toInt(); ok("nonSmartBeaconRate = " + String(Config.nonSmartBeaconRate)); } else err("nonsmartrate <min>"); }
+        else if (cmd == "nonsmartrate")             { if (n >= 2) { Config.nonSmartBeaconRate = tk[1].toInt(); ok("nonSmartBeaconRate = " + String(Config.nonSmartBeaconRate)); } else err("nonsmartrate <sec>"); }
         else if (cmd == "commentafter")             { if (n >= 2) { Config.sendCommentAfterXBeacons = tk[1].toInt(); ok("sendCommentAfterXBeacons = " + String(Config.sendCommentAfterXBeacons)); } else err("commentafter <n>"); }
         else if (cmd == "tx") {
             if (n < 2) { err("tx comment|status"); return; }

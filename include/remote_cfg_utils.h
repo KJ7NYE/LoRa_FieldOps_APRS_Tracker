@@ -18,7 +18,7 @@
 //   CSW RO=2,BR=20         -- Stage 2: write (only while unlocked, comma-separated key=value)
 //
 // Field codes: RO=deviceRole TC=tacticalCallsign SY=symbol(overlay+code)
-//              BP=beaconPath DM=digiMode BR=nonSmartBeaconRate GS=gpsSource
+//              BP=beaconPath DM=digiMode BR=nonSmartBeaconRate(seconds) GS=gpsSource
 //              LA=latitude LO=longitude EL=elevation
 //
 // This module is transport-agnostic: it never transmits anything itself.

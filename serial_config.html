@@ -1500,7 +1500,7 @@ function renderConfig() {
        {v:'WIDE1-1,WIDE2-1', l:'WIDE1-1,WIDE2-1  (2 hops)'},
        {v:'WIDE1-1,WIDE2-2', l:'WIDE1-1,WIDE2-2  (3 hops)'}],
       v => sendCmd(`beaconpath ${v}`)));
-    body.appendChild(mkNumber('Non-smart rate (min)', other.nonSmartBeaconRate, v => sendCmd(`nonsmartrate ${v}`)));
+    body.appendChild(mkNumber('Non-smart rate (sec)', other.nonSmartBeaconRateSec ?? other.nonSmartBeaconRate, v => sendCmd(`nonsmartrate ${v}`)));
   });
 
   // ── SmartBeacon Custom ───────────────────

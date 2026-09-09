@@ -238,7 +238,7 @@ extension.
 | `gps read`                       | Print the current GPS position from whichever source is active. |
 | `sendspeed on\|off`              | Include speed/course in beacons.                                |
 | `sendalt on\|off`                | Include altitude in beacons.                                    |
-| `nonsmartrate <min>`             | Beacon interval when SmartBeacon is off.                        |
+| `nonsmartrate <sec>`             | Beacon interval, in seconds, when SmartBeacon is off.            |
 | `commentafter <n>`               | Send beacon comment every Nth beacon.                            |
 
 ---
@@ -445,7 +445,7 @@ section → JSON path in `tracker_conf.json`:
 | `aprsiss`      | `aprsIS`               |
 | `tcpkiss`      | `tcpKISS`              |
 | `remotecfg`    | `remoteCfg`            |
-| `other`        | top-level scalars (`beaconPath`, `nonSmartBeaconRate`, `sendSpeedCourse`, `sendAltitude`, `digiMode`, `sendCommentAfterXBeacons`) |
+| `other`        | top-level scalars (`beaconPath`, `nonSmartBeaconRateSec`, `sendSpeedCourse`, `sendAltitude`, `digiMode`, `sendCommentAfterXBeacons`) |
 
 ---
 

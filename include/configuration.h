@@ -193,7 +193,7 @@ public:
 
     int     sendCommentAfterXBeacons;
     String  beaconPath;     // APRS path for OWN TX (e.g. WIDE1-1). Not used by the digi relay.
-    int     nonSmartBeaconRate;
+    int     nonSmartBeaconRate;    // seconds (JSON key "nonSmartBeaconRateSec"; legacy "nonSmartBeaconRate" was minutes)
     bool    sendAltitude;
     bool    sendSpeedCourse;
 

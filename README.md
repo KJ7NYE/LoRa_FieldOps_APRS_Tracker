@@ -235,7 +235,7 @@ Alternatively, use the serial config tool:
 | Status | Status text sent on long button press |
 | SmartBeacon | Adaptive rate based on speed/heading; profiles: Runner, Bike, Car, Jetboat, Custom |
 | Beacon TX path | `WIDE1-1` (1 hop) or `WIDE1-1,WIDE2-1` (2 hops) |
-| Non-smart rate | Fallback interval (minutes) when SmartBeacon is disabled |
+| Non-smart rate | Fallback interval (seconds) when SmartBeacon is disabled |
 
 ### Device Role
 | Setting | Description |
@@ -330,7 +330,7 @@ phg rate <min>                    interval between PHG beacons
 -- misc --
 gps read                          print current GPS position
 sendspeed on|off    sendalt on|off
-nonsmartrate <min>
+nonsmartrate <sec>
 commentafter <n>
 
 -- serial mode --

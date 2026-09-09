@@ -364,7 +364,7 @@ void loop() {
         // iGate and Digipeater roles handle their own periodic beaconing in
         // handleRoleSpecificTasks() above using the same lastTxTime reference.
         if (Config.deviceRole == ROLE_TRACKER &&
-            now - lastTxTime >= (uint32_t)Config.nonSmartBeaconRate * 60000UL) {
+            now - lastTxTime >= (uint32_t)Config.nonSmartBeaconRate * 1000UL) {
             STATION_Utils::sendBeacon();
         }
     }

@@ -81,7 +81,7 @@ namespace SMARTBEACON_Utils {
             if (speed <= 1) {
                 // GPS Doppler noise on a stationary device typically rounds to 0–1 km/h.
                 // Treat both as parked and use the configured non-smart rate.
-                txInterval = (uint32_t)Config.nonSmartBeaconRate * 60000UL;
+                txInterval = (uint32_t)Config.nonSmartBeaconRate * 1000UL;
             } else if (speed < currentSmartBeaconValues.slowSpeed) {
                 txInterval = currentSmartBeaconValues.slowRate * 1000;
             } else if (speed > currentSmartBeaconValues.fastSpeed) {
@@ -103,7 +103,7 @@ namespace SMARTBEACON_Utils {
     void checkFixedBeaconTime() {
         if (!smartBeaconActive) {
             uint32_t lastTxSmartBeacon = millis() - lastTxTime;
-            if (lastTxSmartBeacon >= Config.nonSmartBeaconRate * 60 * 1000) sendUpdate = true;
+            if (lastTxSmartBeacon >= (uint32_t)Config.nonSmartBeaconRate * 1000UL) sendUpdate = true;
         }
     }
 

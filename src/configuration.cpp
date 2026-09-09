@@ -104,7 +104,7 @@ bool Configuration::writeFile() {
 
         data["other"]["sendCommentAfterXBeacons"]   = sendCommentAfterXBeacons;
         data["other"]["beaconPath"]                 = beaconPath;
-        data["other"]["nonSmartBeaconRate"]         = nonSmartBeaconRate;
+        data["other"]["nonSmartBeaconRateSec"]      = nonSmartBeaconRate;
         data["other"]["sendAltitude"]               = sendAltitude;
         data["other"]["sendSpeedCourse"]            = sendSpeedCourse;
         data["other"]["digiMode"]                   = (int)digiMode;
@@ -286,7 +286,7 @@ bool Configuration::readFile() {
         ptt.io_pin                      = data["pttTrigger"]["io_pin"] | 4;
 
         if (data["other"]["sendCommentAfterXBeacons"].isNull() ||
-            data["other"]["nonSmartBeaconRate"].isNull() ||
+            data["other"]["nonSmartBeaconRateSec"].isNull() ||
             data["other"]["sendAltitude"].isNull() ||
             data["other"]["sendSpeedCourse"].isNull()) needsRewrite = true;
         sendCommentAfterXBeacons        = data["other"]["sendCommentAfterXBeacons"] | 10;
@@ -294,7 +294,10 @@ bool Configuration::readFile() {
         if      (!data["other"]["beaconPath"].isNull()) beaconPath = data["other"]["beaconPath"].as<String>();
         else if (!data["other"]["path"].isNull())       beaconPath = data["other"]["path"].as<String>();
         else                                          { beaconPath = "WIDE1-1"; needsRewrite = true; }
-        nonSmartBeaconRate              = data["other"]["nonSmartBeaconRate"] | 15;
+        // Backward compat: accept old "nonSmartBeaconRate" (minutes); new key "nonSmartBeaconRateSec" is seconds
+        if      (!data["other"]["nonSmartBeaconRateSec"].isNull()) nonSmartBeaconRate = data["other"]["nonSmartBeaconRateSec"] | 900;
+        else if (!data["other"]["nonSmartBeaconRate"].isNull())    { nonSmartBeaconRate = (int)(data["other"]["nonSmartBeaconRate"] | 15) * 60; needsRewrite = true; }
+        else                                                        { nonSmartBeaconRate = 900; needsRewrite = true; }
         sendAltitude                    = data["other"]["sendAltitude"] | true;
         sendSpeedCourse                 = data["other"]["sendSpeedCourse"] | true;
         // Backward compat: accept old bool "digipeating"; new field is "digiMode" (int)
@@ -468,7 +471,7 @@ void Configuration::setDefaultValues() {
 
     sendCommentAfterXBeacons        = 10;
     beaconPath                      = "WIDE1-1";
-    nonSmartBeaconRate              = 15;
+    nonSmartBeaconRate              = 900;
     sendAltitude                    = true;
     sendSpeedCourse                 = true;
     digiMode                        = DIGI_OFF;

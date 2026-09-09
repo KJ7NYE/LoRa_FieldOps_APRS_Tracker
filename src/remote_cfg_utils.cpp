@@ -239,7 +239,7 @@ namespace RemoteCfg_Utils {
         } else if (code == "BR") {
             if (!isAllDigits(value, false)) { outError = "BADVALUE BR"; return false; }
             int v = value.toInt();
-            if (v < 1 || v > 1440) { outError = "BADVALUE BR"; return false; }
+            if (v < 1 || v > 86400) { outError = "BADVALUE BR"; return false; }  // seconds, up to 24h
         } else if (code == "GS") {
             if (!isAllDigits(value, false)) { outError = "BADVALUE GS"; return false; }
             int v = value.toInt();
