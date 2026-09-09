@@ -429,6 +429,7 @@ Send as an APRS message addressed to the device's callsign (or its tactical call
 | `?APRSS` | Current status text from config |
 | `?APRST` or `?PING?` | Ping reply with device callsign |
 | `?APRSV` or `?VER` | Firmware version string |
+| `?TELEM?` | Infrastructure health snapshot: `TELEM BATT=<pct%\|NA> UP=<Xh Ym> IS=<RW\|R\|DOWN> RPT=<n> GATE=<n>` |
 
 ### Undirected queries
 
@@ -438,6 +439,20 @@ Send as an APRS message addressed to `APRS` or `IGATE`:
 |---|---|---|
 | `?APRS?` | `APRS` | Position beacon from all listening stations |
 | `?IGATE?` | `IGATE` | iGate-online confirmation *(iGate mode only)* |
+
+### `?TELEM?` field reference
+
+Intended for infrastructure monitoring (e.g. a course/event system polling field igates and digipeaters), directly or via the APRS-IS downlink:
+
+| Field | Meaning |
+|---|---|
+| `BATT` | Battery percentage (0-100), or `NA` on boards with no battery sense (e.g. `LoRanger_V1` running off DC power) |
+| `UP` | Uptime since boot: `<n>m` or `<n>h<n>m` |
+| `IS` | APRS-IS link state (iGate role only, else always `DOWN`): `RW` = connected, verified, downlink enabled (fully bidirectional); `R` = connected but unverified and/or downlink disabled ("Rx only" — uploads degrade to `qAO`, downlink messages are not gated to RF); `DOWN` = no APRS-IS session |
+| `RPT` | Packets actually digipeated since boot (0 if digipeating is off) |
+| `GATE` | Packets actually uploaded to APRS-IS since boot (iGate role only, else always 0) |
+
+All counters reset to 0 on reboot — pair with `UP` to distinguish "just booted" from "alive but not relaying anything."
 
 ### Anti-loop guard
 

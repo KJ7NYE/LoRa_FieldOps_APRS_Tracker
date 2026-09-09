@@ -62,6 +62,11 @@ namespace BATTERY_Utils {
         return batteryVoltage;
     }
 
+    int getBatteryPercent() {
+        if (!batteryConnected) return -1;
+        return getPercentVoltageBattery(batteryVoltage.toFloat()).toInt();
+    }
+
     float readBatteryVoltage() {
         #if defined(HAS_AXP192) || defined(HAS_AXP2101)
             return (PMU.getBattVoltage() / 1000.0);

@@ -21,6 +21,9 @@ namespace DIGI_Utils {
     // Returns "" if this packet should not be repeated.
     String generateDigipeatedPacket(const String& packet);
 
+    // Count of packets actually repeated (post-dedup) since boot.
+    uint32_t getRepeatedCount();
+
 }
 
 #endif

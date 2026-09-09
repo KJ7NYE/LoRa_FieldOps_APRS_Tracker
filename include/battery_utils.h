@@ -30,6 +30,10 @@ namespace BATTERY_Utils {
     void    obtainBatteryInfo();   // force a fresh ADC/PMU sample
     void    monitor();
 
+    // Cached battery percentage (0-100), or -1 if this board has no battery
+    // sense circuit / no battery is currently detected.
+    int     getBatteryPercent();
+
 }
 
 #endif
