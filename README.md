@@ -3,6 +3,8 @@
 ## [⚙️ Open Serial Configuration Tool](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/serial_config.html)
 > Configure your device over USB — no app install required. Works in Chrome and Edge.
 
+## [Android USB Configuration Tool](https://github.com/jeepnjonny/lora-fieldops-config-android/releases)
+> Configure your device over USB with an Android phone app.
 ---
 
 A multi-role LoRa APRS firmware for 433 MHz amateur radio operations. Supports tracker, iGate, and digipeater roles on a single configurable firmware build. Designed for field deployment at events, search and rescue operations, and remote area monitoring where cellular coverage is absent.
