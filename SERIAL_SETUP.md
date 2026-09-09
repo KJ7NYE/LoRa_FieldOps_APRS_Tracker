@@ -223,6 +223,10 @@ extension.
 | `aprsiss downlink on\|off`                    | Gate directed messages from APRS-IS back to RF (only to a station heard directly on RF in the last 30 min). |
 | `aprsiss status`                              | Print live APRS-IS connection status.      |
 | `tcpkiss port <n>`                            | TCP KISS server port (default 8001; server auto-starts once WiFi STA connects). |
+| `remotecfg show`                              | Print remote-config status (enabled, masked token, unlock window). |
+| `remotecfg on\|off`                           | Master switch for the remote read/write protocol (see below). Off by default. |
+| `remotecfg token <secret>`                    | Shared secret used to unlock Stage 2 (write) commands. Empty = writes always disabled. |
+| `remotecfg window <60-3600>`                  | Seconds a write window stays open after a successful unlock (default 300). |
 
 ### Other
 
@@ -234,7 +238,7 @@ extension.
 | `gps read`                       | Print the current GPS position from whichever source is active. |
 | `sendspeed on\|off`              | Include speed/course in beacons.                                |
 | `sendalt on\|off`                | Include altitude in beacons.                                    |
-| `nonsmartrate <min>`             | Beacon interval when SmartBeacon is off.                        |
+| `nonsmartrate <sec>`             | Beacon interval, in seconds, when SmartBeacon is off.            |
 | `commentafter <n>`               | Send beacon comment every Nth beacon.                            |
 
 ---
@@ -440,4 +444,38 @@ section → JSON path in `tracker_conf.json`:
 | `wifista`      | `wifiSTA`              |
 | `aprsiss`      | `aprsIS`               |
 | `tcpkiss`      | `tcpKISS`              |
-| `other`        | top-level scalars (`beaconPath`, `nonSmartBeaconRate`, `sendSpeedCourse`, `sendAltitude`, `digiMode`, `sendCommentAfterXBeacons`) |
+| `remotecfg`    | `remoteCfg`            |
+| `other`        | top-level scalars (`beaconPath`, `nonSmartBeaconRateSec`, `sendSpeedCourse`, `sendAltitude`, `digiMode`, `sendCommentAfterXBeacons`) |
+
+---
+
+## Remote Configuration Protocol (CourseSentry)
+
+When `remotecfg on` is set and a token is configured (`remotecfg token <secret>`),
+the device accepts a compact command protocol over ordinary directed APRS
+messages — both over LoRa RF and, for iGate-role nodes, over APRS-IS — letting
+a field-management system read and adjust a small allowlist of parameters
+without physical access. The feature is **off by default**; a device ships
+locked down until an operator explicitly enables it locally.
+
+Send a directed APRS message to the node's callsign (or its configured
+tactical name) with one of:
+
+| Command                     | Stage | Description |
+|------------------------------|-------|--------------|
+| `CSR`                        | 1 (read, no auth) | Full status read. |
+| `CSR <code>[,<code>...]`     | 1 (read, no auth) | Selective read of specific fields. |
+| `CSU <token>`                | 2 (unlock)         | Opens a timed write window (default 300s) if the token matches. |
+| `CSW <code>=<value>[,...]`   | 2 (write, requires an open window) | Writes one or more fields; validated atomically — any invalid field rejects the whole batch. |
+
+Field codes: `RO`=role, `TC`=tactical name, `SY`=symbol (2 chars: overlay+code),
+`BP`=beacon path, `DM`=digi mode, `BR`=beacon rate (minutes), `GS`=GPS source,
+`LA`/`LO`/`EL`=fixed latitude/longitude/elevation.
+
+Writing `RO` (role) or `GS` (GPS source) triggers an automatic reboot ~5
+seconds after the write is applied, since those two only take effect after a
+restart (same as changing them via `role set`/`role gps` above) — every other
+field is applied live. Five failed `CSU` attempts lock out further unlock
+attempts for 10 minutes. The token is plaintext over RF/APRS-IS (amateur radio
+prohibits encryption) — treat the unlock window as a brief, trusted-site
+access control, not cryptographic security, and never set it remotely.

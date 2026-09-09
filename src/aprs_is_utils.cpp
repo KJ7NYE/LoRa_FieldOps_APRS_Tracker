@@ -19,6 +19,7 @@
 #include "display.h"
 #include "logger.h"
 #include "log_buffer.h"
+#include "remote_cfg_utils.h"
 
 extern Configuration    Config;
 extern logging::Logger  logger;
@@ -47,6 +48,22 @@ static PacketDedup igDedup;
 
 static bool igIsNew(const String& sender, const String& payload) {
     return igDedup.isNew(sender, payload);
+}
+
+// Outgoing remote-config reply sequence number for the APRS-IS path.
+// Independent of query_utils.cpp's own counter (that one is `static` to its
+// translation unit) — message numbers only need to be unique per
+// conversation, not globally, so two small independent counters are simpler
+// than sharing one across an extern. Only used for the passcode-gated
+// "CS ERR DISABLED" short-circuit reply below; every other self-addressed
+// reply (including successful remote-cfg replies) goes through
+// query_utils.cpp's own counter instead.
+static int remoteCfgMsgCounter = 1;
+
+static String nextRemoteCfgMsgNo() {
+    String n = String(remoteCfgMsgCounter++);
+    if (remoteCfgMsgCounter > 999) remoteCfgMsgCounter = 1;
+    return n;
 }
 
 // Third-party packets actually uploaded since boot — for telemetry reporting.
@@ -360,6 +377,32 @@ namespace APRS_IS_Utils {
                                    (tactical.length() > 0 && addressee == tactical) ||
                                    (addressee == "APRS") || (addressee == "IGATE");
             if (addressedToSelf) {
+                // A write-capable remote-config command (CSU unlock / CSW
+                // write, see remote_cfg_utils.h) is refused up front when our
+                // own APRS-IS login is unverified: processLoRaPacket() above
+                // already downgrades RF->IS uploads to qAO for the same
+                // unverified-session reason, and this session's claimed
+                // sender identity deserves no more trust for something that
+                // can change device config. Reads (CSR) and every other
+                // self-addressed query (?PING?, ?TELEM?, plain messages,
+                // ...) are unaffected; RF-sourced commands have no passcode
+                // concept and are never routed through here.
+                if (!passcodeValid) {
+                    String body = line.substring(colonIdx + 12);
+                    int brace = body.indexOf('{');
+                    if (brace >= 0) body = body.substring(0, brace);
+                    body.trim();
+                    String upperBody = body; upperBody.toUpperCase();
+                    if (upperBody.startsWith("CSU") || upperBody.startsWith("CSW")) {
+                        String replyPkt = APRSPacketLib::generateMessagePacket(
+                            myCall, "APLRT1", "", sender,
+                            "CS ERR DISABLED{" + nextRemoteCfgMsgNo() + "}");
+                        upload(replyPkt);
+                        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "RemoteCfg",
+                            "IS command from %s refused: unverified passcode", sender.c_str());
+                        continue;
+                    }
+                }
                 QUERY_Utils::processLoRaPacket(line);
                 continue;
             }

@@ -300,6 +300,12 @@ namespace WEB_Utils {
         //  TCP KISS server
         Config.tcpKISS.port           = getParamIntSafe("tcpKISS.port",            Config.tcpKISS.port);
 
+        //  Remote configuration (CourseSentry) -- compact read/write protocol
+        //  over APRS directed messages. Off by default; see remote_cfg_utils.h.
+        Config.remoteCfg.enabled          = request->hasParam("remoteCfg.enabled", true);
+        Config.remoteCfg.token            = getParamStringSafe("remoteCfg.token", Config.remoteCfg.token);
+        Config.remoteCfg.unlockWindowSec  = constrain(getParamIntSafe("remoteCfg.unlockWindowSec", Config.remoteCfg.unlockWindowSec), 60, 3600);
+
         //  SmartBeacon custom profile (profile index 3)
         Config.customSmartBeacon.slowRate       = getParamIntSafe("customSmartBeacon.slowRate",      Config.customSmartBeacon.slowRate);
         Config.customSmartBeacon.slowSpeed      = getParamIntSafe("customSmartBeacon.slowSpeed",     Config.customSmartBeacon.slowSpeed);

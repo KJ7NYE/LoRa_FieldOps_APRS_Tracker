@@ -179,8 +179,8 @@ namespace DeviceRoleUtils {
             }
             #endif
 
-            uint32_t beaconInterval = (uint32_t)Config.nonSmartBeaconRate * 60000UL;
-            if (beaconInterval < 60000UL) beaconInterval = 60000UL;  // floor at 1 min
+            uint32_t beaconInterval = (uint32_t)Config.nonSmartBeaconRate * 1000UL;
+            if (beaconInterval < 1000UL) beaconInterval = 1000UL;  // floor at 1 sec
             if (millis() - lastTxTime >= beaconInterval) {
                 STATION_Utils::sendBeacon();
             }

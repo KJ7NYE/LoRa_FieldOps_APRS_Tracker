@@ -14,7 +14,9 @@
  * name are ACKed here too, independent of any attached KISS client — the
  * tracker is often deployed with no client attached at all, so it must
  * not rely on one to satisfy the sender's ack expectation. No automated
- * reply is generated for free text, only the ack.
+ * body reply is generated for ordinary free text, only the ack — except
+ * for remote-config commands (CSR/CSU/CSW, see remote_cfg_utils.h), which
+ * also get a reply carrying the requested data / write result.
  *
  * Responses/acks are queued through addToOutputPacketBuffer() so the
  * 200 ms inter-packet gap is respected and TX does not block the main loop.
@@ -30,6 +32,7 @@
 #include "query_utils.h"
 #include "station_utils.h"
 #include "dedup_utils.h"
+#include "remote_cfg_utils.h"
 #include "version.h"
 #include "logger.h"
 #include "battery_utils.h"
@@ -166,7 +169,9 @@ namespace QUERY_Utils {
 
         String msgPayload = packet.substring(firstColon + 12);
 
-        // Extract sender callsign (before '>').
+        // Extract sender callsign (before '>'). For an unwrapped third-party
+        // packet this is the ORIGINAL sender (e.g. KG7KMV), not the relaying
+        // iGate — correct, since replies must go to whoever actually sent it.
         int arrowIdx = packet.indexOf('>');
         if (arrowIdx <= 0) return;
         String sender = packet.substring(0, arrowIdx);
@@ -233,6 +238,20 @@ namespace QUERY_Utils {
             } else {
                 logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO,
                     "Query", "Message from %s (no msg#, not acked)", sender.c_str());
+            }
+
+            // Remote-config command (CSR/CSU/CSW) — see remote_cfg_utils.h.
+            // Handled after the ack above so a command still gets acked like
+            // any other message; the command reply itself is a second,
+            // separate directed message queued right behind it.
+            if (RemoteCfg_Utils::isCommand(text)) {
+                String replyBody = RemoteCfg_Utils::handleCommand(sender, text);
+                if (replyBody.length() > 0) {
+                    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO,
+                        "RemoteCfg", "Command from %s: %s -> %s",
+                        sender.c_str(), text.c_str(), replyBody.c_str());
+                    sendReply(buildReply(sender, replyBody));
+                }
             }
             return;
         }

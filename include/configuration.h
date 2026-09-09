@@ -161,6 +161,13 @@ public:
     uint8_t beaconRate;  // Minutes between PHG beacons (independent of normal beacon rate)
 };
 
+class RemoteCfg {
+public:
+    bool    enabled;          // master switch; false disables all CS?/CSR/CSU/CSW handling
+    String  token;             // shared secret for CSU unlock; empty = write stage disabled
+    int     unlockWindowSec;   // write-window duration after a successful CSU, in seconds
+};
+
 
 class Configuration {
 public:
@@ -178,6 +185,7 @@ public:
     TCPKISS                 tcpKISS;
     FixedPosition           fixedPosition;
     PHGConfig               phg;
+    RemoteCfg               remoteCfg;
 
     DeviceRole              deviceRole;
     GPSSource               gpsSource;
@@ -185,7 +193,7 @@ public:
 
     int     sendCommentAfterXBeacons;
     String  beaconPath;     // APRS path for OWN TX (e.g. WIDE1-1). Not used by the digi relay.
-    int     nonSmartBeaconRate;
+    int     nonSmartBeaconRate;    // seconds (JSON key "nonSmartBeaconRateSec"; legacy "nonSmartBeaconRate" was minutes)
     bool    sendAltitude;
     bool    sendSpeedCourse;
 

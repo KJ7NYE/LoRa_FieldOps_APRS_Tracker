@@ -156,6 +156,11 @@ function loadSettings(s) {
     setVal('tcpKISS.enabled',       tk.enabled       ?? false);
     setVal('tcpKISS.port',          tk.port          ?? 8001);
 
+    const rcfg = s.remoteCfg ?? {};
+    setVal('remoteCfg.enabled',         rcfg.enabled         ?? false);
+    setVal('remoteCfg.token',           rcfg.token           ?? '');
+    setVal('remoteCfg.unlockWindowSec', rcfg.unlockWindowSec ?? 300);
+
     const lora = s.lora?.[0] ?? {};
     setVal('lora.0.frequency',      lora.frequency       ?? 433775000);
     setVal('lora.0.spreadingFactor',lora.spreadingFactor ?? 12);
@@ -207,7 +212,7 @@ function loadSettings(s) {
     // Normalize legacy empty-string path ("" = no repeat) to the explicit "DIRECT" option.
     const _bp = s.beaconPath ?? s.path ?? oth.beaconPath ?? 'WIDE1-1';
     setVal('beaconPath', _bp === '' ? 'DIRECT' : _bp);
-    setVal('nonSmartBeaconRate',      s.nonSmartBeaconRate      ?? oth.nonSmartBeaconRate  ?? 15);
+    setVal('nonSmartBeaconRate',      s.nonSmartBeaconRateSec   ?? oth.nonSmartBeaconRateSec ?? 900);
     setVal('sendCommentAfterXBeacons',s.sendCommentAfterXBeacons?? oth.sendCommentAfterXBeacons ?? 10);
     setVal('sendSpeedCourse',         s.sendSpeedCourse         ?? oth.sendSpeedCourse ?? true);
     setVal('sendAltitude',            s.sendAltitude            ?? oth.sendAltitude ?? true);

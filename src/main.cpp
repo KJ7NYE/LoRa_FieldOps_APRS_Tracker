@@ -28,6 +28,7 @@
 #include "device_role.h"
 #include "digi_utils.h"
 #include "query_utils.h"
+#include "remote_cfg_utils.h"
 #include "version.h"
 #ifdef HAS_WIFI
 #include <WiFi.h>
@@ -309,6 +310,11 @@ void loop() {
         QUERY_Utils::processLoRaPacket(packet);
     }
 
+    // Fire any deferred reboot requested by a remote-config write (role/gps
+    // changes only take effect after a restart) once its reply has had time
+    // to drain through the output packet buffer.
+    RemoteCfg_Utils::pollReboot();
+
     // ── BLE / BT inbound (KISS TX) ──────────────────────────────────────
     if (Config.bluetooth.active && bluetoothConnected) {
         #if defined(ARDUINO_ARCH_NRF52) || defined(HAS_NIMBLE)
@@ -358,7 +364,7 @@ void loop() {
         // iGate and Digipeater roles handle their own periodic beaconing in
         // handleRoleSpecificTasks() above using the same lastTxTime reference.
         if (Config.deviceRole == ROLE_TRACKER &&
-            now - lastTxTime >= (uint32_t)Config.nonSmartBeaconRate * 60000UL) {
+            now - lastTxTime >= (uint32_t)Config.nonSmartBeaconRate * 1000UL) {
             STATION_Utils::sendBeacon();
         }
     }

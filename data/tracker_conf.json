@@ -23,7 +23,7 @@
   "other": {
     "sendCommentAfterXBeacons": 10,
     "beaconPath": "WIDE1-1",
-    "nonSmartBeaconRate": 15,
+    "nonSmartBeaconRateSec": 900,
     "sendSpeedCourse": true,
     "sendAltitude": true,
     "digiMode": 0
