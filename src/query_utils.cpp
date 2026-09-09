@@ -88,26 +88,40 @@ namespace QUERY_Utils {
         //   SENDER>DEST,PATH::ADDRESSEE :payload
         //                   ^^ two colons mark message type
         //
+        // An iGate relaying an APRS-IS message back to RF (see
+        // aprs_is_utils.cpp's listenAPRSIS()) wraps it in standard
+        // third-party format instead: the outer SRC>DST,PATH is the
+        // relaying iGate's own frame, and the real packet — the part we
+        // need to parse — follows a leading '}'. Unwrap it here so directed
+        // messages/queries/remote-cfg commands relayed this way aren't
+        // silently dropped; the outer frame carries no information we need.
+        int outerColon = rawPacket.indexOf(':');
+        String packet = (outerColon >= 3 && rawPacket.charAt(outerColon + 1) == '}')
+            ? rawPacket.substring(outerColon + 2)
+            : rawPacket;
+
         // Find the AX.25 info field start: first ':' after the header.
-        int firstColon = rawPacket.indexOf(':');
+        int firstColon = packet.indexOf(':');
         if (firstColon < 3) return;
 
         // Must be a message: info field starts with ':' immediately after the first.
-        if (rawPacket.charAt(firstColon + 1) != ':') return;
+        if (packet.charAt(firstColon + 1) != ':') return;
 
         // Addressee is 9 characters after '::'; the 11th char must be ':'.
-        if (rawPacket.charAt(firstColon + 11) != ':') return;
+        if (packet.charAt(firstColon + 11) != ':') return;
 
-        String addressee = rawPacket.substring(firstColon + 2, firstColon + 11);
+        String addressee = packet.substring(firstColon + 2, firstColon + 11);
         addressee.trim();
         addressee.toUpperCase();
 
-        String msgPayload = rawPacket.substring(firstColon + 12);
+        String msgPayload = packet.substring(firstColon + 12);
 
-        // Extract sender callsign (before '>').
-        int arrowIdx = rawPacket.indexOf('>');
+        // Extract sender callsign (before '>'). For an unwrapped third-party
+        // packet this is the ORIGINAL sender (e.g. KG7KMV), not the relaying
+        // iGate — correct, since replies must go to whoever actually sent it.
+        int arrowIdx = packet.indexOf('>');
         if (arrowIdx <= 0) return;
-        String sender = rawPacket.substring(0, arrowIdx);
+        String sender = packet.substring(0, arrowIdx);
 
         // Route: addressed to us directly (real callsign or tactical object
         // name, if configured), or to the broadcast aliases.
