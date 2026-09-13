@@ -622,6 +622,12 @@ const LOG_TYPE = {
 
 let _evtSrc = null;
 
+// Device millis() has no wall-clock meaning on its own, so every incoming
+// entry re-derives an offset from the browser's clock. This self-corrects
+// for drift and also recovers automatically if the device reboots mid-session
+// (its ms counter resets near zero, the offset just jumps to match).
+let _clockOffsetMs = null;
+
 function liveEscapeHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -632,16 +638,14 @@ function appendLogEntry(jsonData) {
     let entry;
     try { entry = JSON.parse(jsonData); } catch (_) { return; }
 
-    const t   = LOG_TYPE[entry.t] || { label: '?', color: '#a0a0a0' };
-    const ms  = entry.ms || 0;
-    const sec = Math.floor(ms / 1000);
-    const hh  = String(Math.floor(sec / 3600) % 24).padStart(2, '0');
-    const mm  = String(Math.floor(sec / 60) % 60).padStart(2, '0');
-    const ss  = String(sec % 60).padStart(2, '0');
+    const t  = LOG_TYPE[entry.t] || { label: '?', color: '#a0a0a0' };
+    const ms = entry.ms || 0;
+    _clockOffsetMs = Date.now() - ms;
+    const hhmmss = new Date(ms + _clockOffsetMs).toLocaleTimeString();
 
     const line = document.createElement('div');
     line.innerHTML =
-        `<span style="color:#666">${hh}:${mm}:${ss}</span> ` +
+        `<span style="color:#666">${hhmmss}</span> ` +
         `<span style="color:${t.color};font-weight:bold">[${t.label}]</span> ` +
         `<span>${liveEscapeHtml(entry.msg || '')}</span>`;
     log.appendChild(line);
