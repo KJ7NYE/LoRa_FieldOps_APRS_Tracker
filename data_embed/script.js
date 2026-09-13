@@ -52,6 +52,7 @@ function updatePhgPreview() {
 function updateVisibility() {
     const role      = parseInt(document.getElementById('deviceRole')?.value ?? '0', 10);
     const gpsSrc    = parseInt(document.getElementById('gpsSource')?.value ?? '0', 10);
+    const digiMode  = parseInt(document.getElementById('digiMode')?.value ?? '0', 10);
 
     const fixedEl   = document.getElementById('fixedPosFields');
     const aprsIsEl  = document.getElementById('aprsIsFields');
@@ -59,13 +60,16 @@ function updateVisibility() {
 
     if (fixedEl)   fixedEl.style.display   = (gpsSrc === 1) ? '' : 'none';
     if (aprsIsEl)  aprsIsEl.style.display  = (role === 1)   ? '' : 'none';  // iGate only
-    if (tcpKissEl) tcpKissEl.style.display = (role !== 0)   ? '' : 'none';  // not for Tracker
+    // TCP KISS relays any role's traffic, so show it whenever iGate/digipeater
+    // role is selected OR digipeating is enabled independently of role.
+    if (tcpKissEl) tcpKissEl.style.display = (role !== 0 || digiMode !== 0) ? '' : 'none';
 
     if (role === 1) startAprsIsPolling(); else stopAprsIsPolling();
 }
 
 document.getElementById('deviceRole')?.addEventListener('change', updateVisibility);
 document.getElementById('gpsSource')?.addEventListener('change', updateVisibility);
+document.getElementById('digiMode')?.addEventListener('change', updateVisibility);
 
 // ── Fixed position: pull lat/lon/elev from the browser's own location ────────
 // Note: most browsers only expose Geolocation on secure origins (HTTPS or
