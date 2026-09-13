@@ -399,6 +399,20 @@ const logRecv = text => consoleAppend(text, null);
 const logErr  = msg  => consoleAppend('[!] ' + msg + '\n', 'e');
 const logInfo = msg  => consoleAppend('[i] ' + msg + '\n', 'i');
 
+// Device log-mode output is a plain unstamped text stream, so we prefix each
+// line with local receipt time as it arrives. It's a live tail with no
+// backlog replay, so receipt time is accurate to within serial latency.
+let _logAtLineStart = true;
+function stampLogChunk(text) {
+  let out = '';
+  for (const ch of text) {
+    if (_logAtLineStart) { out += `[${new Date().toLocaleTimeString()}] `; _logAtLineStart = false; }
+    out += ch;
+    if (ch === '\n') _logAtLineStart = true;
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────
 //  4. Status / UI enable helpers
 // ─────────────────────────────────────────────
@@ -563,7 +577,7 @@ function onData(text) {
   // Signal boot-activity detection (first byte after port open when device just reset).
   if (_bootActivityResolve) _bootActivityResolve();
 
-  logRecv(text);
+  logRecv(serialMode === 'log' ? stampLogChunk(text) : text);
   _handleExportChunk(text);
 
   // ── Firmware mode-banner detection ──────────────────────────────────
@@ -580,6 +594,7 @@ function onData(text) {
   } else if (bannerBuf.includes('[LOG] Serial log output active')) {
     bannerBuf = '';
     serialMode = 'log';
+    _logAtLineStart = true;
     updateModeButtons();
   } else if (bannerBuf.includes('Returning to KISS TNC mode') ||
              bannerBuf.includes('[KISS TNC] Type')) {
