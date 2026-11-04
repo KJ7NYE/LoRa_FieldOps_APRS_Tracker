@@ -1,4 +1,4 @@
-/* Copyright (C) 2025 Ricardo Guzman - CA2RXU
+/* Copyright (C) 2026 Ricardo Guzman - CA2RXU
  *
  * This file is part of LoRa APRS Tracker.
  *
@@ -25,6 +25,7 @@
 #include "board_pinout.h"
 #include "configuration.h"
 #include "user_preferences.h"
+#include "lora_utils.h"
 #include "web_utils.h"
 #include "wifi_utils.h"
 #include "display.h"
@@ -230,6 +231,8 @@ namespace WEB_Utils {
         Config.nonSmartBeaconRate               = getParamIntSafe("nonSmartBeaconRate", Config.nonSmartBeaconRate);
         Config.sendSpeedCourse                  = request->hasParam("sendSpeedCourse", true);
         Config.sendAltitude                     = request->hasParam("sendAltitude", true);
+        Config.cadActive                        = request->hasParam("cadActive", true);
+
         //  Display
         Config.display.ecoMode                  = request->hasParam("display.ecoMode", true);
         if (Config.display.ecoMode) {

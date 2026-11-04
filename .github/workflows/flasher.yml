@@ -1,7 +1,7 @@
 name: Build and Publish Firmware
 
 # Runs on every GitHub Release publish.
-# Builds all 6 project targets and uploads firmware as release assets.
+# Builds all 7 project targets and uploads firmware as release assets.
 # The web flasher at apps.k7swi.org is updated separately by running
 # ~/deploy_flasher.sh on the server after each release.
 
@@ -80,11 +80,11 @@ jobs:
                       chip: nrf52
 
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v5
 
-            - uses: actions/setup-python@v5
+            - uses: actions/setup-python@v6
               with:
-                  python-version: "3.9"
+                  python-version: "3.11"   # 3.9 is EOL and unavailable on Ubuntu 26.04 runners
 
             - name: Install build tools
               run: pip install esptool platformio adafruit-nrfutil
@@ -244,7 +244,7 @@ jobs:
         permissions:
             contents: write
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v5
               with:
                   ref: main
 
