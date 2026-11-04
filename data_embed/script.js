@@ -220,6 +220,7 @@ function loadSettings(s) {
     setVal('sendCommentAfterXBeacons',s.sendCommentAfterXBeacons?? oth.sendCommentAfterXBeacons ?? 10);
     setVal('sendSpeedCourse',         s.sendSpeedCourse         ?? oth.sendSpeedCourse ?? true);
     setVal('sendAltitude',            s.sendAltitude            ?? oth.sendAltitude ?? true);
+    setVal('cadActive',               s.cadActive               ?? oth.cadActive ?? true);
     setVal('digiMode',                s.other?.digiMode         ?? oth.digiMode ?? 0);
 
     updateVisibility();

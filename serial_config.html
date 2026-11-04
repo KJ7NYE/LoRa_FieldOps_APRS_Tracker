@@ -1673,6 +1673,7 @@ function renderConfig() {
 
     body.appendChild(mkBool('Include speed &amp; course in beacons', other.sendSpeedCourse ?? true, v => sendCmd(`sendspeed ${boolStr(v)}`)));
     body.appendChild(mkBool('Include altitude in beacons (/A= comment)', other.sendAltitude, v => sendCmd(`sendalt ${boolStr(v)}`)));
+    body.appendChild(mkBool('Channel Activity Detection (CAD, listen before TX)', other.cadActive ?? true, v => sendCmd(`cad ${boolStr(v)}`)));
     body.appendChild(mkGroupTitle('Battery Voltage'));
     body.appendChild(mkBool('Send voltage in comment', bat.sendVoltage,       v => sendCmd(`bat sendv ${boolStr(v)}`)));
     body.appendChild(mkBool('Send voltage on every beacon', bat.sendVoltageAlways, v => sendCmd(`bat alwaysv ${boolStr(v)}`)));

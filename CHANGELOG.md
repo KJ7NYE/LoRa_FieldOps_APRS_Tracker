@@ -9,6 +9,26 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-03 — CAD on/off toggle in web UI and serial config tool
+
+The 2026-11-02 upstream sync adopted Channel Activity Detection (`Config.cadActive`, default
+`true`) in `src/lora_utils.cpp`, but the only way to toggle it was editing JSON by hand — the field
+had no entry in the web config UI or the serial config tool. This completes the config-pathway
+parity (per [CLAUDE.md](CLAUDE.md)'s "Synchronized configuration pathways" rule) by exposing CAD in
+both: a `form-switch` checkbox in the Station section of the web UI, and a `mkBool` entry in the
+serial tool's Station group that calls a new `cad on|off` serial CLI command.
+
+Android app (`jeepnjonny/lora-fieldops-config-android`) remains a TODO for a separate PR.
+
+Files changed:
+
+- [src/serial_setup.cpp](src/serial_setup.cpp) — `cad on|off` in help text + status printer + CLI dispatch
+- [data_embed/index.html](data_embed/index.html) — `cadActive` `form-switch` checkbox after `sendAltitude`
+- [data_embed/script.js](data_embed/script.js) — populate the checkbox from saved config
+- [serial_config.html](serial_config.html) — `mkBool` entry that sends `cad on|off` over USB
+
+---
+
 ## 2026-11-02 — Sync with upstream `richonguzman/LoRa_APRS_Tracker` (V4.0.1 + 4 bugfixes)
 
 Merged ~6.5 months of upstream work (35 commits since merge-base `bfd531a`, 2026-04-23) into
