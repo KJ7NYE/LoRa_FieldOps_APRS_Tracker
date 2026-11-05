@@ -47,6 +47,24 @@ function updatePhgPreview() {
     document.getElementById(id)?.addEventListener('change', updatePhgPreview);
 });
 
+// ── BLE PIN passkey hint ──────────────────────────────────────────────────────
+// BLE pairing always uses a 6-digit passkey; a shorter PIN is zero-padded
+// (1234 -> 001234). Show the exact digits a phone should be given, and dim
+// the PIN field while PIN pairing is off (the value is still saved).
+function updateBlePinHint() {
+    const pinEl  = document.getElementById('bluetooth.pin');
+    const onEl   = document.getElementById('bluetooth.pinEnabled');
+    const hintEl = document.getElementById('bluetooth.pinPasskeyHint');
+    if (!pinEl || !onEl || !hintEl) return;
+    const pin = pinEl.value.trim();
+    pinEl.classList.toggle('opacity-50', !onEl.checked);
+    if (!onEl.checked)               hintEl.textContent = 'PIN off: any nearby phone can connect';
+    else if (/^\d{4,6}$/.test(pin))  hintEl.textContent = 'Phone passkey: ' + pin.padStart(6, '0');
+    else                             hintEl.textContent = 'Enter 4 to 6 digits';
+}
+['bluetooth.pin', 'bluetooth.pinEnabled'].forEach(id =>
+    document.getElementById(id)?.addEventListener('input', updateBlePinHint));
+
 // ── Progressive disclosure ────────────────────────────────────────────────────
 
 function updateVisibility() {
@@ -190,6 +208,9 @@ function loadSettings(s) {
     const bt = s.bluetooth ?? {};
     setVal('bluetooth.active',     bt.active     ?? false);
     setVal('bluetooth.deviceName', bt.deviceName ?? 'LoRaAPRS');
+    setVal('bluetooth.pinEnabled', bt.pinEnabled ?? true);
+    setVal('bluetooth.pin',        bt.pin        ?? '123456');
+    updateBlePinHint();
 
     const bat = s.battery ?? {};
     setVal('battery.sendVoltage',       bat.sendVoltage       ?? false);
@@ -249,7 +270,11 @@ document.getElementById('configForm')?.addEventListener('submit', async function
         syncWifiNetworksToForm();
         const fd = new FormData(this);
         const res = await fetch('/configuration.json', { method: 'POST', body: fd });
-        if (!res.ok) throw new Error('Save failed: HTTP ' + res.status);
+        if (!res.ok) {
+            // 400 responses carry a human-readable validation message (e.g. bad BLE PIN).
+            const detail = (await res.text().catch(() => '')).trim();
+            throw new Error('Save failed: ' + (detail || 'HTTP ' + res.status));
+        }
         // Poll /status until device reboots and comes back.
         await pollUntilAlive();
         saveModal.hide();

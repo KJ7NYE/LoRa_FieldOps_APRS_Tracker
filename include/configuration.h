@@ -117,6 +117,8 @@ class BLUETOOTH {
 public:
     bool    active;
     String  deviceName;
+    bool    pinEnabled; // require Passkey Entry pairing before KISS traffic flows
+    String  pin;        // 4-6 digits (see ble_pin.h); kept even while pinEnabled is false
     // Stack and framing are board-determined: nRF52 uses Bluefruit BLE,
     // ESP32 uses NimBLE when available, otherwise BT Classic SPP.
     // All paths use KISS (AX.25) framing — no config needed.

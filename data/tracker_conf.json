@@ -29,7 +29,7 @@
     "cadActive": true,
     "digiMode": 0
   },
-  "bluetooth": { "active": false, "deviceName": "LoRaAPRS" },
+  "bluetooth": { "active": false, "deviceName": "LoRaAPRS", "pinEnabled": true, "pin": "123456" },
   "wifiAP": { "password": "1234567890" },
   "wifiSTA": { "enabled": false, "networks": [] },
   "aprsIS": { "server": "rotate.aprs.net", "port": 14580, "passcode": "", "filter": "m/20", "downlinkEnabled": true },

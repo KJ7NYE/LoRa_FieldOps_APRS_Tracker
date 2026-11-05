@@ -15,6 +15,7 @@
 #include "serial_setup.h"
 #include "board_pinout.h"
 #include "configuration.h"
+#include "ble_pin.h"
 #include "display.h"
 #include "smartbeacon_utils.h"
 #include "kiss_utils.h"
@@ -159,6 +160,7 @@ namespace SERIAL_Setup {
         Serial.println(F("  display eco|turn180|led on|off"));
         Serial.println(F("  display timeout <sec>"));
         Serial.println(F("  bt on|off                  name <text>"));
+        Serial.println(F("  bt pin on|off              pin <4-6 digits>     (save + reboot)"));
         Serial.println(F("  bat sendv|alwaysv on|off"));
         Serial.println(F("  bat sleepv <volts>          bat read"));
         Serial.println(F("  ptt on|off                 pin <n>              reverse on|off"));
@@ -280,6 +282,10 @@ namespace SERIAL_Setup {
             hdr("bt");
             kv("active", Config.bluetooth.active);
             kv("name  ", Config.bluetooth.deviceName);
+            kv("pin on", Config.bluetooth.pinEnabled);
+            kv("pin   ", BlePin::isValid(Config.bluetooth.pin)
+                            ? Config.bluetooth.pin + "  (phone passkey " + BlePin::passkeyDigits(Config.bluetooth.pin) + ")"
+                            : Config.bluetooth.pin + "  (INVALID - BLE stays off until fixed)");
         }
         if (section == "" || section == "bat") {
             const Battery& b = Config.battery;
@@ -515,11 +521,32 @@ namespace SERIAL_Setup {
         else err("unknown display subcommand: " + sub);
     }
 
+    // bt pin on|off        -> require / stop requiring PIN pairing
+    // bt pin <4-6 digits>  -> change the PIN (on/off state unchanged)
+    // Both take effect after save + reboot, which also makes every previously
+    // paired phone forget-and-re-pair (see BLE_Utils bond policy).
+    static void cmdBtPin(String* tk, int n) {
+        if (n != 3) { err("bt pin on|off  or  bt pin <4-6 digits>"); return; }
+        const String& arg = tk[2];
+        if (BlePin::isValid(arg)) {
+            Config.bluetooth.pin = arg;
+            ok("bt.pin = " + arg + " (phone passkey " + BlePin::passkeyDigits(arg) + ")"
+               + (Config.bluetooth.pinEnabled ? "" : "; note PIN is currently off")
+               + ". Save + reboot, then re-pair phones.");
+            return;
+        }
+        if (parseBoolTok(arg) < 0) { err("bt pin: expected on/off or 4-6 digits"); return; }
+        if (applyBool(arg, Config.bluetooth.pinEnabled, "bt.pinEnabled")) {
+            Serial.println(F("   Save + reboot to apply; phones paired earlier must be forgotten and re-paired."));
+        }
+    }
+
     static void cmdBt(String* tk, int n, const String& line) {
         if (n < 2) { err("bt: missing subcommand"); return; }
         const String& sub = tk[1];
         if      (sub == "on" || sub == "off" || sub == "true" || sub == "false") applyBool(tk[1], Config.bluetooth.active, "bt.active");
         else if (sub == "name") { Config.bluetooth.deviceName = restOfLine(line, 2); ok("bt.name = " + Config.bluetooth.deviceName); }
+        else if (sub == "pin") cmdBtPin(tk, n);
         else err("unknown bt subcommand: " + sub);
     }
 

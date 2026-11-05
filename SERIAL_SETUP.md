@@ -164,6 +164,10 @@ T-Beam 1W drives an external 30 dBm (1 W) PA. Only `power 20` on the T-Beam
 |-----------------------------------|-------------------------------------------------------|
 | `bt on\|off`                  | Activate Bluetooth at boot.                           |
 | `bt name <text>`              | Bluetooth device name (e.g. `LoRaTracker`).           |
+| `bt pin on\|off`              | Require PIN pairing before KISS traffic flows (default on). |
+| `bt pin <4-6 digits>`         | Set the pairing PIN (default `123456`). A shorter PIN is zero-padded on the phone, e.g. `1234` → `001234`. |
+
+PIN changes apply after `save` + `reboot`. Changing the PIN or turning it on/off makes the tracker forget every paired phone, so remove the old pairing on the phone and pair again. See [docs/ble-pairing-pin.md](docs/ble-pairing-pin.md).
 
 ### Battery
 
