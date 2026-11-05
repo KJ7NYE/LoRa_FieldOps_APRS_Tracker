@@ -1,4 +1,4 @@
-# OTA-capable partition table for 4MB flash (tbeam_433_aprs, lilygo_t3_433_aprs).
+# OTA-capable partition table for 4MB flash (tbeam_433_aprs, lilygo_t3_433_aprs, lilygo_t3s3_433_aprs).
 # Two equal OTA app slots allow safe wireless firmware updates via the web UI (/update).
 # After flashing this layout via USB once, subsequent updates can be done OTA.
 #

@@ -9,6 +9,25 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-05 — New target: LilyGo T3-S3 V1.2 / V1.3 (SX1262), board-ID fix
+
+New environment `lilygo_t3s3_433_aprs` (macro `LILYGO_T3S3_433_APRS`): ESP32-S3, SX1262 with
+1.8 V TCXO and DIO2 RF switch, SSD1306 OLED on I²C 18/17, BOOT button 0, battery ADC 1 (2:1
+divider), LED 37. No onboard GPS (`HAS_NO_GPS`); the external GPS header pins are noted in
+`board_pinout.h`. The pinout follows upstream's `ttgo_lora32_t3s3_v1_2_GPS` variant. The board has
+native USB (`usb_flags`) and 4 MB flash, and uses `partitions_4mb_ota.csv` because the S3 build
+fits the dual OTA slots. Requires the 433 MHz SX1262 version of the board.
+
+`handleVersion()` (web `/version`) reported `"unknown"` on the T-Beam 1W and Wireless Tracker
+because it kept its own board table. It now uses `BOARD_ENV_ID` from `version.h`, the same table
+as the serial `version` command, which also gains the Wireless Tracker and T3-S3.
+
+Registered in: `platformio.ini`, both CI workflows, `tools/generate_manifests.py` (web flasher;
+`targets.json` is regenerated at the next release), `tools/gen_manifests.py`, the
+`serial_config.html` flasher, README and CLAUDE.md.
+
+---
+
 ## 2026-11-05 — CAD moved to the LoRa section, Android app support, clearer CAD logging
 
 Channel Activity Detection (listen before TX) is a radio setting, so its toggle now sits in the

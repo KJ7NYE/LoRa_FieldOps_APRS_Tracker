@@ -48,6 +48,14 @@ ESP_TARGETS = [
         "manufacturer": "LilyGo",
     },
     {
+        "id":    "lilygo_t3s3_433_aprs",
+        "label": "LilyGo T3-S3",
+        "chip":  "ESP32-S3",
+        "desc":  "LilyGo T3-S3 V1.2/V1.3 — ESP32-S3, SX1262 (433 MHz version), SSD1306 OLED, WiFi/BLE. No onboard GPS.",
+        "manufacturer": "LilyGo",
+        "ota_partitions": True,
+    },
+    {
         "id":    "tbeam_433_1w_aprs",
         "label": "LilyGo T-Beam 1W",
         "chip":  "ESP32-S3",

@@ -28,6 +28,10 @@
 #  define BOARD_ENV_ID "tbeam_433_1w_aprs"
 #elif defined(LILYGO_T3_433_APRS)
 #  define BOARD_ENV_ID "lilygo_t3_433_aprs"
+#elif defined(LILYGO_T3S3_433_APRS)
+#  define BOARD_ENV_ID "lilygo_t3s3_433_aprs"
+#elif defined(HELTEC_WIRELESS_TRACKER)
+#  define BOARD_ENV_ID "heltec_wireless_tracker_433_aprs"
 #elif defined(LORANGER_V1)
 #  define BOARD_ENV_ID "LoRanger_V1"
 #else
