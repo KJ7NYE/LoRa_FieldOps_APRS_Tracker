@@ -9,6 +9,24 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-05 — CAD moved to the LoRa section, Android app support, clearer CAD logging
+
+Channel Activity Detection (listen before TX) is a radio setting, so its toggle now sits in the
+LoRa section of the web UI, serial config tool and Android config app (the app previously had no
+CAD control). The JSON key stays `other.cadActive`, so existing configs load unchanged.
+
+- Serial CLI: new `lora cad on|off`; `cad on|off` stays as an alias (the config tools send it so
+  they also work with v1.4.1 firmware). `show lora` now prints the CAD state.
+- Logging: boot logs whether CAD is on. A TX held by a busy channel logs `CAD: channel busy,
+  holding TX` once, then `CAD: channel clear after N ms (N busy scans)` or `CAD: channel still busy
+  after N ms, transmitting anyway`; both outcomes also go to the web UI live log. A failing CAD scan
+  is logged once with its RadioLib code. This replaces a DEBUG line per busy retry and a runtime
+  message that was mislabelled as a "Boot" step.
+- The FCC NOCALL TX gate now runs before the CAD wait, so a blocked packet no longer listens for up
+  to 10 s first.
+
+---
+
 ## 2026-11-03 — CAD on/off toggle in web UI and serial config tool
 
 The 2026-11-02 upstream sync adopted Channel Activity Detection (`Config.cadActive`, default

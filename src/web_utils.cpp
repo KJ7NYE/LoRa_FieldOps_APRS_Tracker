@@ -232,7 +232,6 @@ namespace WEB_Utils {
         Config.nonSmartBeaconRate               = getParamIntSafe("nonSmartBeaconRate", Config.nonSmartBeaconRate);
         Config.sendSpeedCourse                  = request->hasParam("sendSpeedCourse", true);
         Config.sendAltitude                     = request->hasParam("sendAltitude", true);
-        Config.cadActive                        = request->hasParam("cadActive", true);
 
         //  Display
         Config.display.ecoMode                  = request->hasParam("display.ecoMode", true);
@@ -265,6 +264,8 @@ namespace WEB_Utils {
         #else
         Config.loraTypes[0].power           = constrain(getParamIntSafe("lora.0.power", Config.loraTypes[0].power), 2, 22);
         #endif
+        // Global listen-before-TX switch (stored under "other"); shown in the LoRa Radio section.
+        Config.cadActive                    = request->hasParam("cadActive", true);
 
         //  Battery
         Config.battery.sendVoltage              = request->hasParam("battery.sendVoltage", true);
