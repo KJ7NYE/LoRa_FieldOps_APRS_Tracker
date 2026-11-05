@@ -143,7 +143,7 @@ Type `setup` or `log` over serial to switch; any mode returns to KISS on disconn
 - **OLED (V3/T-Beam/T3)** — 128×64; callsign header, role+battery, last-heard station
 - **Tactical callsign** — when set, shown as the large primary identifier; RF callsign shown smaller below
 - **"Last:" heard-station line** — shows the most recently heard station's callsign-SSID, or the reported object's name instead when the packet is an APRS Object Report
-- **"Msg:" received-message indicator** — flashes on the T114's bottom row for any addressed or broadcast message (a query like `?PING?` or a plain free-text message); persists until the next received packet updates the heard-station line
+- **"Msg:" received-message indicator** — flashes on the T114's bottom row for any addressed or broadcast message (a query like `?PING` or a plain free-text message); persists until the next received packet updates the heard-station line
 - **Display eco mode** — configurable timeout; wakes on button press, packet RX, or TX
 - **LED indicator** — heartbeat (50 ms/1.5 s) + TX/RX flash; can be disabled in config
 
@@ -412,13 +412,23 @@ A 5th profile, **Custom** (`smartset 4`), is fully user-editable rather than a f
 
 ## APRS Station Queries
 
-All device roles (Tracker, iGate, Digipeater) respond to APRS station capability queries as defined in APRS 1.01 §13. Queries are case-insensitive and may be sent from any APRS tool — APRSDroid, Xastir, APRS.fi, a handheld radio, etc.
+All device roles (Tracker, iGate, Digipeater) respond to APRS station capability queries as defined in APRS 1.01 §13. Queries may be sent from any APRS tool — APRSDroid, Xastir, APRS.fi, a handheld radio, etc. They are case-insensitive, and every query works **with or without a trailing `?`**: `?TELEM` and `?TELEM?`, `?PING` and `?PING?`, `?APRS` and `?APRS?` are the same query.
 
-Duplicate queries from the same station are suppressed for 60 seconds. If the incoming message includes a sequence number (`{NNN}`), an ACK is sent before the response.
+Send **`?`** on its own to get the list of supported queries.
 
-Directed queries are also answered when addressed to the configured **tactical callsign** (object name), not just the device's real callsign — `?APRSP`/`?APRS?` addressed to the tactical name reply with the Object Report.
+Duplicate queries from the same station are suppressed for 60 seconds. Unrecognised queries get an ACK but no reply.
+
+Directed queries are also answered when addressed to the configured **tactical callsign** (object name), not just the device's real callsign — `?APRSP`/`?APRS` addressed to the tactical name reply with the Object Report.
 
 **Plain messages are ACKed too.** A free-text APRS message (not a query) addressed to the device's callsign or tactical name gets an ACK if it carries a sequence number — no automated reply, just the ack. The tracker sends this itself rather than relying on an attached KISS client, since it's commonly deployed with no client attached at all.
+
+### Message numbers and ACKs
+
+Messaging follows APRS 1.01 chapter 14:
+
+- **Incoming:** a message or query ending in a message number (`{N`, 1–5 letters/digits) is ACKed with `ackN` before any reply. Every copy is ACKed, including retries the duplicate filter otherwise drops, so a sender whose first ACK was lost stops retrying. The APRS 1.1 reply-ack form `{MM}AA` is also understood and ACKed as `ackMM`.
+- **Outgoing:** every reply carries its own message number in the standard form `{N` with **no closing brace**, e.g. `PING KG7KMV-13{12`. The receiving client strips it and answers `ack12`. Numbers run 1–999 and wrap.
+- **ACKs/rejects received** (`ackN`, `rejN`) are consumed silently: not displayed, not ACKed back, not treated as commands. Replies are sent once and not retried.
 
 ### Directed queries
 
@@ -426,14 +436,15 @@ Send as an APRS message addressed to the device's callsign (or its tactical call
 
 | Query | Response |
 |---|---|
+| `?` | List of supported queries: `Query: ?APRSD ?APRSH ?APRSL ?APRSP ?APRSS ?PING ?VER ?TELEM` (plus `?IGATE` in iGate mode) |
 | `?APRSD` | List of stations heard directly (no digi hop), space-separated |
 | `?APRSH <CALL>` | Whether `<CALL>` has been heard recently and how long ago |
 | `?APRSL` | All recently heard stations, newest first |
 | `?APRSP` | Current position beacon (same as pressing the beacon button) |
 | `?APRSS` | Current status text from config |
-| `?APRST` or `?PING?` | Ping reply with device callsign |
+| `?APRST` or `?PING` | Ping reply with device callsign |
 | `?APRSV` or `?VER` | Firmware version string |
-| `?TELEM?` | Infrastructure health snapshot: `TELEM BATT=<pct%\|NA> UP=<Xh Ym> IS=<RW\|R\|DOWN> RPT=<n> GATE=<n>` |
+| `?TELEM` | Infrastructure health snapshot: `TELEM BATT=<pct%\|NA> UP=<Xh Ym> IS=<RW\|R\|DOWN> RPT=<n> GATE=<n>` |
 
 ### Undirected queries
 
@@ -441,10 +452,12 @@ Send as an APRS message addressed to `APRS` or `IGATE`:
 
 | Query | Addressee | Response |
 |---|---|---|
-| `?APRS?` | `APRS` | Position beacon from all listening stations |
-| `?IGATE?` | `IGATE` | iGate-online confirmation *(iGate mode only)* |
+| `?APRS` | `APRS` | Position beacon from all listening stations |
+| `?IGATE` | `IGATE` | iGate-online confirmation *(iGate mode only)* |
 
-### `?TELEM?` field reference
+`?` (the query list) is only answered when addressed to the device's own callsign, so a broadcast `?` doesn't make every station in range reply at once.
+
+### `?TELEM` field reference
 
 Intended for infrastructure monitoring (e.g. a course/event system polling field igates and digipeaters), directly or via the APRS-IS downlink:
 

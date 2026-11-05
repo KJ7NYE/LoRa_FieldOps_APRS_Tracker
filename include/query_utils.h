@@ -10,8 +10,9 @@ namespace QUERY_Utils {
     // capability queries directed at our callsign (or the configured tactical
     // object name, if set) or broadcast to APRS/IGATE.
     //
-    // Handles: ?APRS? ?APRSD ?APRSH ?APRSL ?APRSP ?APRSS ?APRST ?APRSV
-    //          ?PING? ?VER ?IGATE? ?TELEM?
+    // Handles: ? (query list) ?APRS ?APRSD ?APRSH ?APRSL ?APRSP ?APRSS
+    //          ?APRST ?APRSV ?PING ?VER ?IGATE ?TELEM, each with or without
+    //          a trailing '?' and in any case.
     //
     // Also ACKs plain (non-query) APRS messages addressed to our callsign or
     // tactical name — no automated body reply, just the ack, since the
@@ -22,6 +23,14 @@ namespace QUERY_Utils {
     // Responses/acks are queued via STATION_Utils::addToOutputPacketBuffer().
     // Duplicate queries/messages from the same sender are suppressed for 60 s.
     void processLoRaPacket(const String& rawPacket);
+
+    // Next outgoing APRS message number (1-999, wrapping), shared by every
+    // directed message this device originates.
+    String nextMessageId();
+
+    // `body` with an APRS 1.01 message number appended: "body{N" (no
+    // closing brace; see query_utils.cpp).
+    String withMessageId(const String& body);
 
 }
 

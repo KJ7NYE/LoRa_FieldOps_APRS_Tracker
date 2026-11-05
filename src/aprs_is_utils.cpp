@@ -50,22 +50,6 @@ static bool igIsNew(const String& sender, const String& payload) {
     return igDedup.isNew(sender, payload);
 }
 
-// Outgoing remote-config reply sequence number for the APRS-IS path.
-// Independent of query_utils.cpp's own counter (that one is `static` to its
-// translation unit) — message numbers only need to be unique per
-// conversation, not globally, so two small independent counters are simpler
-// than sharing one across an extern. Only used for the passcode-gated
-// "CS ERR DISABLED" short-circuit reply below; every other self-addressed
-// reply (including successful remote-cfg replies) goes through
-// query_utils.cpp's own counter instead.
-static int remoteCfgMsgCounter = 1;
-
-static String nextRemoteCfgMsgNo() {
-    String n = String(remoteCfgMsgCounter++);
-    if (remoteCfgMsgCounter > 999) remoteCfgMsgCounter = 1;
-    return n;
-}
-
 // Third-party packets actually uploaded since boot — for telemetry reporting.
 static uint32_t uploadedCount = 0;
 
@@ -395,7 +379,7 @@ namespace APRS_IS_Utils {
                     if (upperBody.startsWith("CSU") || upperBody.startsWith("CSW")) {
                         String replyPkt = APRSPacketLib::generateMessagePacket(
                             myCall, "APLRT1", "", sender,
-                            "CS ERR DISABLED{" + nextRemoteCfgMsgNo() + "}");
+                            QUERY_Utils::withMessageId("CS ERR DISABLED"));
                         upload(replyPkt);
                         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "RemoteCfg",
                             "IS command from %s refused: unverified passcode", sender.c_str());
