@@ -25,6 +25,7 @@
 #include "board_pinout.h"
 #include "configuration.h"
 #include "lora_utils.h"
+#include "ble_pin.h"
 #include "web_utils.h"
 #include "wifi_utils.h"
 #include "display.h"
@@ -200,6 +201,14 @@ namespace WEB_Utils {
             return defaultValue;
         };
 
+        // Validate the BLE PIN before mutating any Config field, so a rejected
+        // save leaves the running configuration untouched.
+        const String blePin = getParamStringSafe("bluetooth.pin", Config.bluetooth.pin);
+        if (!BlePin::isValid(blePin)) {
+            request->send(400, "text/plain", "Bluetooth PIN must be 4 to 6 digits");
+            return;
+        }
+
         //  Beacon (single)
         Config.beacons[0].callsign      = getParamStringSafe("beacons.0.callsign",     Config.beacons[0].callsign);
         Config.beacons[0].symbol        = getParamStringSafe("beacons.0.symbol",        Config.beacons[0].symbol);
@@ -239,6 +248,8 @@ namespace WEB_Utils {
         if (Config.bluetooth.active) {
             Config.bluetooth.deviceName         = getParamStringSafe("bluetooth.deviceName", Config.bluetooth.deviceName);
         }
+        Config.bluetooth.pinEnabled             = request->hasParam("bluetooth.pinEnabled", true);
+        Config.bluetooth.pin                    = blePin;
 
         // LoRa (single)
         Config.loraTypes[0].frequency       = getParamDoubleSafe("lora.0.frequency",       Config.loraTypes[0].frequency);

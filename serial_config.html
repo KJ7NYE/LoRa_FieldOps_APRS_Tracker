@@ -1624,6 +1624,34 @@ function renderConfig() {
     inp.addEventListener('change', () => { markDirty(inp); sendCmd(`bt name ${inp.value}`); });
     row.appendChild(inp);
     body.appendChild(row);
+
+    // ── PIN pairing ──
+    // BLE pairing always uses a 6-digit passkey; shorter PINs are zero-padded
+    // (1234 -> 001234), so show the exact digits to give the phone.
+    let pinEnabled = bt.pinEnabled ?? true;
+    const pinHint = mkInfo('');
+    const pinRow  = mkText('PIN (4-6 digits)', bt.pin ?? '123456', v => {
+      if (!/^\d{4,6}$/.test(v)) { pinInput.classList.add('is-invalid'); return; }
+      pinInput.classList.remove('is-invalid');
+      sendCmd(`bt pin ${v}`);
+    }, { maxlength: 6, placeholder: '123456' });
+    const pinInput = pinRow.querySelector('input');
+    pinInput.inputMode = 'numeric';
+    const refreshPinHint = () => {
+      const v = pinInput.value.trim();
+      pinInput.classList.toggle('opacity-50', !pinEnabled);
+      pinHint.textContent = !pinEnabled              ? 'PIN off: any nearby phone can connect.'
+                          : /^\d{4,6}$/.test(v)      ? `Phone passkey: ${v.padStart(6, '0')}`
+                          :                            'Enter 4 to 6 digits.';
+    };
+    pinInput.addEventListener('input', refreshPinHint);
+    body.appendChild(mkBool('Require PIN', pinEnabled, v => {
+      pinEnabled = v; refreshPinHint(); sendCmd(`bt pin ${boolStr(v)}`);
+    }));
+    body.appendChild(pinRow);
+    body.appendChild(pinHint);
+    body.appendChild(mkInfo("Save + reboot to apply. After changing the PIN or turning it on/off, forget the tracker in your phone's Bluetooth settings and pair again."));
+    refreshPinHint();
   });
 
   // ── Battery & Altitude ───────────────────

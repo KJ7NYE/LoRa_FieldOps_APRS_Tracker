@@ -312,6 +312,15 @@
                                             </div>
                                             <input type="text" class="form-control" style="max-width:16rem" id="bluetooth.deviceName" name="bluetooth.deviceName" maxlength="20" placeholder="Device name" />
                                         </div>
+                                        <div class="d-flex align-items-center gap-3 mt-3">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input" type="checkbox" id="bluetooth.pinEnabled" name="bluetooth.pinEnabled" />
+                                                <label class="form-check-label" for="bluetooth.pinEnabled">Require PIN</label>
+                                            </div>
+                                            <input type="text" class="form-control" style="max-width:8rem" id="bluetooth.pin" name="bluetooth.pin" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" required autocomplete="off" placeholder="PIN" title="4 to 6 digits" />
+                                            <span class="form-text mt-0" id="bluetooth.pinPasskeyHint"></span>
+                                        </div>
+                                        <p class="form-text mb-0">4&ndash;6 digits (default 123456). A shorter PIN is zero-padded to six digits on the phone. After changing the PIN or turning it on/off, forget the tracker in your phone's Bluetooth settings and pair again.</p>
                                         <p class="form-text mt-2 mb-0">KISS TNC — connects to APRS.fi, APRSDroid, Pinpoint. Mutually exclusive with WiFi</p>
                                     </div>
                                 </div>

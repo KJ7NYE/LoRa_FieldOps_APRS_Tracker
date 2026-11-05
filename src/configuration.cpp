@@ -29,6 +29,7 @@
 #endif
 #include <SPIFFS.h>
 #include "configuration.h"
+#include "ble_pin.h"
 #include "board_pinout.h"
 #include "display.h"
 #include "logger.h"
@@ -85,6 +86,8 @@ bool Configuration::writeFile() {
 
         data["bluetooth"]["active"]                 = bluetooth.active;
         data["bluetooth"]["deviceName"]             = bluetooth.deviceName;
+        data["bluetooth"]["pinEnabled"]             = bluetooth.pinEnabled;
+        data["bluetooth"]["pin"]                    = bluetooth.pin;
 
         data["lora"][0]["frequency"]       = loraTypes[0].frequency;
         data["lora"][0]["spreadingFactor"] = loraTypes[0].spreadingFactor;
@@ -241,9 +244,18 @@ bool Configuration::readFile() {
         display.ledEnabled              = data["display"]["ledEnabled"] | true;
 
         if (data["bluetooth"]["active"].isNull() ||
-            data["bluetooth"]["deviceName"].isNull()) needsRewrite = true;
+            data["bluetooth"]["deviceName"].isNull() ||
+            data["bluetooth"]["pinEnabled"].isNull() ||
+            data["bluetooth"]["pin"].isNull()) needsRewrite = true;
         bluetooth.active                = data["bluetooth"]["active"] | false;
         bluetooth.deviceName            = data["bluetooth"]["deviceName"] | "LoRaTracker";
+        // Configs that predate the PIN feature migrate to PIN-on with the
+        // default PIN. A malformed PIN is kept verbatim (not silently replaced)
+        // so BLE_Utils::setup() fails closed and the error is visible.
+        bluetooth.pinEnabled            = data["bluetooth"]["pinEnabled"] | true;
+        bluetooth.pin                   = data["bluetooth"]["pin"].is<const char*>()
+                                            ? String(data["bluetooth"]["pin"].as<const char*>())
+                                            : (data["bluetooth"]["pin"].isNull() ? String(BlePin::DEFAULT_PIN) : String("INVALID"));
 
         JsonArray LoraTypesArray = data["lora"];
         for (size_t j = 0; j < LoraTypesArray.size(); j++) {
@@ -447,6 +459,8 @@ void Configuration::setDefaultValues() {
 
     bluetooth.active                = false;
     bluetooth.deviceName            = "LoRaTracker";
+    bluetooth.pinEnabled            = true;
+    bluetooth.pin                   = BlePin::DEFAULT_PIN;
 
     // ONE LoRa type (433 MHz APRS EU default)
     LoraType loraType;
