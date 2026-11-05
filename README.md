@@ -17,7 +17,7 @@ Derived from [richonguzman/LoRa_APRS_Tracker](https://github.com/richonguzman/Lo
 
 ## Install / Flash Firmware
 
-### ESP32 boards (Heltec V3.2, T-Beam, T-Beam 1W, T3, LoRanger V1, Wireless Tracker)
+### ESP32 boards (Heltec V3.2, T-Beam, T-Beam 1W, T3, T3-S3, LoRanger V1, Wireless Tracker)
 
 Two release assets are published per ESP32 board:
 
@@ -46,7 +46,7 @@ Two release assets are published per ESP32 board:
 Symptom: the board no longer boots into firmware — pressing RESET only produces
 `waiting for download` (or `boot:0x0 (DOWNLOAD(USB/UART0))`) on the serial console.
 
-Cause: on Heltec V3.2 and LoRanger V1, the USR button shares the ESP32-S3's GPIO0 BOOT
+Cause: on Heltec V3.2, LoRanger V1 and LilyGo T3-S3, the USR/BOOT button shares the ESP32-S3's GPIO0 BOOT
 strapping pin (see the [Button (USR)](#button-usr) section). If GPIO0 is held low
 at the moment of reset, the chip boots into the ROM bootloader instead of firmware.
 The most common trigger isn't the button itself — it's a serial monitor or terminal
@@ -85,6 +85,7 @@ Install explicitly.
 | **LilyGo T-Beam** | ESP32 | SX1278 | u-blox NEO-6M/M8N | SSD1306/SH1106 OLED | ✅ | ✅ NimBLE |
 | **LilyGo T-Beam 1W** | ESP32-S3 | SX1262 (1 W) | onboard GNSS (WAKE_UP) | SH1106 OLED | ✅ | ✅ NimBLE |
 | **LilyGo T3 V1.6** | ESP32 | SX1278 | None (fixed position) | SSD1306 OLED | ✅ | ✅ NimBLE |
+| **LilyGo T3-S3 V1.2 / V1.3** | ESP32-S3 | SX1262 (433 MHz version) | None (fixed position) | SSD1306 OLED | ✅ | ✅ NimBLE |
 | **LoRanger V1** (KJ7NYE) | ESP32-S3 | EBYTE E22-400 (SX1262) | ATGM336H (onboard) | None (headless) | ✅ | ✅ NimBLE |
 | **Heltec Wireless Tracker V1.1** | ESP32-S3 | SX1262 | UC6580 (onboard) | ST7735 0.96" TFT | ✅ | ✅ NimBLE |
 
@@ -151,7 +152,7 @@ Type `setup` or `log` over serial to switch; any mode returns to KISS on disconn
 - **Long press (3 s – 8 s)** — send status beacon
 - **Extra-long hold (≥8 s, while running)** — enter AP config mode (WiFi boards)
 
-> **Note for Heltec V3 and LoRanger V1:** the USR button is wired to GPIO0 (the ESP32 BOOT pin). Holding it during power-up or reset forces the chip into ROM download mode instead of running firmware. AP mode must therefore be triggered at runtime, not at boot.
+> **Note for Heltec V3, LoRanger V1 and LilyGo T3-S3:** the USR button (BOOT on the T3-S3) is wired to GPIO0 (the ESP32 BOOT pin). Holding it during power-up or reset forces the chip into ROM download mode instead of running firmware. AP mode must therefore be triggered at runtime, not at boot.
 
 ### Thermal Management (T-Beam 1W)
 
@@ -201,6 +202,7 @@ pio run -e heltec_t114 -t uploadfs
 | `tbeam_433_aprs` | LilyGo T-Beam |
 | `tbeam_433_1w_aprs` | LilyGo T-Beam 1W |
 | `lilygo_t3_433_aprs` | LilyGo T3 V1.6 |
+| `lilygo_t3s3_433_aprs` | LilyGo T3-S3 V1.2 / V1.3 (SX1262) |
 | `LoRanger_V1` | LoRanger V1 (KJ7NYE) |
 | `heltec_wireless_tracker_433_aprs` | Heltec Wireless Tracker V1.1 |
 
@@ -462,6 +464,18 @@ Message packets addressed to the device's own callsign are never digipeated. Thi
 
 ---
 
+## LilyGo T3-S3 Notes
+
+Environment `lilygo_t3s3_433_aprs` supports the T3-S3 **V1.2 and V1.3** with the **SX1262** radio.
+
+- **Buy the 433 MHz version.** LilyGo sells the T3-S3 with several radios and RF front ends. A 868/915 MHz board will tune to 433 MHz, but its band-fixed filter and matching make output very poor.
+- **No onboard GPS.** Use a fixed position (web UI or `role gps fixed`), the iGate/Digipeater roles, or a phone app over BLE/USB KISS. The external GPS header (GPIO 42/46) is noted in `variants/lilygo_t3s3_433_aprs/board_pinout.h` but not enabled.
+- **Native USB.** There is no USB-UART bridge chip. If the first USB flash doesn't start, hold **BOOT**, plug in USB (or tap RST), then release BOOT. Later flashes are automatic.
+- **OTA updates work.** The board has 4 MB flash and uses `partitions_4mb_ota.csv`; the ESP32-S3 build fits both OTA slots, so web UI firmware updates work, unlike the 4 MB T-Beam and T3 V1.6.
+- **Controls.** The BOOT button is the USR button (beacon / status / AP mode holds). The green LED (GPIO 37) flashes on TX/RX. Battery is read on GPIO 1 through the onboard 2:1 divider; fine-tune with the battery correction setting if needed.
+
+---
+
 ## LoRanger V1 Notes
 
 The LoRanger V1 uses a headless (no display) build. The `HAS_DISPLAY` flag is unset to avoid a boot hang that would otherwise occur when the I2C display initialisation fails.
@@ -481,6 +495,7 @@ variants/             Per-board pin definitions and PlatformIO environments
   tbeam_433_aprs/     ESP32 + GPS + AXP PMU
   tbeam_433_1w_aprs/  ESP32-S3 + SX1262 1W + GPS + SH1106
   lilygo_t3_433_aprs/ ESP32 + OLED
+  lilygo_t3s3_433_aprs/ ESP32-S3 + SX1262 + OLED
   LoRanger_V1/        ESP32-S3 + SX1262 (headless)
   heltec_wireless_tracker_433_aprs/  ESP32-S3 + SX1262 + GNSS + ST7735 TFT
 variants_bsp/         BSP-level variant overrides (T114 nRF52 BSP)

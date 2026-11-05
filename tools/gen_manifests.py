@@ -35,6 +35,12 @@ ESP32_TARGETS = [
         "description": "433 MHz iGate / TNC — WiFi, BLE, SSD1306 OLED",
     },
     {
+        "id":         "lilygo_t3s3_433_aprs",
+        "label":      "LilyGo T3-S3 V1.2/V1.3 (SX1262)",
+        "chip_family": "ESP32-S3",
+        "description": "433 MHz iGate / Digipeater / Tracker — SSD1306 OLED, WiFi, BLE",
+    },
+    {
         "id":         "LoRanger_V1",
         "label":      "LoRanger V1 (KJ7NYE)",
         "chip_family": "ESP32-S3",

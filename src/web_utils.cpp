@@ -413,21 +413,10 @@ namespace WEB_Utils {
 
     // Reports the running firmware version and board environment name.
     void handleVersion(AsyncWebServerRequest *request) {
-        // PIOENV is not a C preprocessor macro; derive the env name from the
-        // per-variant defines that are already passed in build_flags.
-        #if defined(HELTEC_V3_433_APRS)
-            static const char kEnv[] = "heltec_v3_433_aprs";
-        #elif defined(TTGO_T_Beam_V1_2_433_APRS)
-            static const char kEnv[] = "tbeam_433_aprs";
-        #elif defined(LILYGO_T3_433_APRS)
-            static const char kEnv[] = "lilygo_t3_433_aprs";
-        #elif defined(LORANGER_V1)
-            static const char kEnv[] = "LoRanger_V1";
-        #else
-            static const char kEnv[] = "unknown";
-        #endif
+        // BOARD_ENV_ID (version.h) is the single board-name table, shared with
+        // the serial `version` command, so the two can't drift apart.
         String json = "{\"version\":\"" FIRMWARE_VERSION_DATE "\",\"env\":\"";
-        json += kEnv;
+        json += BOARD_ENV_ID;
         json += "\"}";
         request->send(200, "application/json", json);
     }

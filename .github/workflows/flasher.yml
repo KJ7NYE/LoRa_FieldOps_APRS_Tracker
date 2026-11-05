@@ -1,7 +1,7 @@
 name: Build and Publish Firmware
 
 # Runs on every GitHub Release publish.
-# Builds all 7 project targets and uploads firmware as release assets.
+# Builds all 8 project targets and uploads firmware as release assets.
 # The web flasher at apps.k7swi.org is updated separately by running
 # ~/deploy_flasher.sh on the server after each release.
 
@@ -26,8 +26,8 @@ jobs:
             matrix:
                 target:
                     # ESP32 targets — merged factory binary for Web Serial flashing.
-                    # ota_partitions: true marks boards on partitions_8mb_ota.csv (a real
-                    # dual-slot app0/app1 OTA table) — these also get a merged
+                    # ota_partitions: true marks boards on a real dual-slot app0/app1 OTA
+                    # table (partitions_8mb_ota.csv, or partitions_4mb_ota.csv on the T3-S3) — these also get a merged
                     # "_ota_update.bin" (bootloader+partitions+otadata+firmware, no SPIFFS)
                     # for the preserve-config "Firmware Update" manifest. Flashing that as
                     # several separate manifest parts instead (what this used to do) hits a
@@ -60,6 +60,13 @@ jobs:
                       flash_mode: dio
                       spiffs_offset: "0x310000"   # huge_app.csv (firmware too large for dual OTA slots)
                       ota_partitions: false
+
+                    - name: lilygo_t3s3_433_aprs
+                      chip: esp32s3
+                      flash_size: 4MB
+                      flash_mode: dio
+                      spiffs_offset: "0x3D0000"   # partitions_4mb_ota.csv (S3 build fits dual OTA slots)
+                      ota_partitions: true
 
                     - name: LoRanger_V1
                       chip: esp32s3

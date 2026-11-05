@@ -313,7 +313,7 @@ samples GPIO0 low and drops the board into the ROM download bootloader
 vendor ID (`port.getInfo().usbVendorId`) and choosing signals accordingly:
 both lines deasserted for bridge-chip boards (the neutral row above), or DTR
 asserted only for boards with Espressif's native USB silicon (T-Beam 1W,
-LoRanger V1), which have no such wiring and need DTR asserted for their
+LoRanger V1, LilyGo T3-S3), which have no such wiring and need DTR asserted for their
 CDC serial output to flush. If the page ever detects the ROM download banner
 mid-session, it automatically pulses EN (RTS) once to reset the board back
 into a normal boot; a second occurrence means something else is holding the
