@@ -326,10 +326,12 @@ namespace GPS_Utils {
     void calculateHeadingDelta(int speed) {
         double headingDelta = fabs(previousHeading - currentHeading);
         if (headingDelta > 180.0) headingDelta = 360.0 - headingDelta;    // shortest angle: 355 -> 5 is 10 deg, not 350
-        // Don't allow a heading-change beacon sooner than the current beacon interval.
-        // When parked (speed==0) txInterval equals nonSmartBeaconRate, so GPS heading
-        // noise cannot trigger a beacon during the stationary wait.
-        if (speed > 1 && lastTx >= txInterval) {
+        // Corner beacons use their own minimum spacing, independent of the
+        // speed-based periodic interval. Otherwise the periodic timer already
+        // requests a beacon before a turn can produce an earlier update.
+        // Keep stationary GPS noise from triggering corner beacons.
+        constexpr uint32_t minTurnBeaconIntervalMs = 10000UL;
+        if (speed > 1 && lastTx >= minTurnBeaconIntervalMs) {
             int TurnMinAngle = currentSmartBeaconValues.turnMinDeg + (currentSmartBeaconValues.turnSlope / speed);
             if (headingDelta > TurnMinAngle) {
                 sendUpdate = true;
