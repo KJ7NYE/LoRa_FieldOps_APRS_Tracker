@@ -1,6 +1,6 @@
 {
-  "version": "v1.4.1",
-  "published": "2026-11-04",
+  "version": "v1.4.2",
+  "published": "2026-11-05",
   "repo": "KJ7NYE/LoRa_FieldOps_APRS_Tracker",
   "targets": [
     {
@@ -46,6 +46,15 @@
       "manufacturer": "LilyGo",
       "manifest": "lilygo_t3_433_aprs.json",
       "update_manifest": "lilygo_t3_433_aprs_update.json"
+    },
+    {
+      "id": "lilygo_t3s3_433_aprs",
+      "label": "LilyGo T3-S3",
+      "chip": "ESP32-S3",
+      "description": "LilyGo T3-S3 V1.2/V1.3 \u2014 ESP32-S3, SX1262 (433 MHz version), SSD1306 OLED, WiFi/BLE. No onboard GPS.",
+      "manufacturer": "LilyGo",
+      "manifest": "lilygo_t3s3_433_aprs.json",
+      "update_manifest": "lilygo_t3s3_433_aprs_update.json"
     },
     {
       "id": "tbeam_433_1w_aprs",

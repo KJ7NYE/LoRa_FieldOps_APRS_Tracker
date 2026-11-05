@@ -1,0 +1,16 @@
+{
+  "name": "LoRa FieldOps \u2014 LilyGo T3-S3 (Firmware Update)",
+  "version": "v1.4.2",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/lilygo_t3s3_433_aprs_ota_update.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

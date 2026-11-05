@@ -1,0 +1,15 @@
+{
+  "name": "LoRa FieldOps \u2014 LilyGo T3-S3",
+  "version": "v1.4.2",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/lilygo_t3s3_433_aprs_web_factory.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
