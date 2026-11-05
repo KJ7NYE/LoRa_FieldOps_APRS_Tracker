@@ -1,14 +1,22 @@
 /* query_utils.cpp — APRS station capability query and message handler.
  *
- * Supported queries (APRS 1.01 §13):
+ * Supported queries (APRS 1.01 §13), case-insensitive, each accepted with
+ * or without a trailing '?' (?TELEM == ?TELEM?, ?PING == ?PING?):
  *   Directed (addressed to our callsign, or to the configured tactical
  *   object name if one is set):
+ *     ?  (list of supported queries)
  *     ?APRSD  ?APRSH <CALL>  ?APRSL  ?APRSP  ?APRSS  ?APRST  ?APRSV
- *     ?PING?  ?VER  ?TELEM?
+ *     ?PING  ?VER  ?TELEM
  *   Undirected (addressed to "APRS"):
- *     ?APRS?
+ *     ?APRS
  *   iGate query (addressed to "IGATE", iGate mode only):
- *     ?IGATE?
+ *     ?IGATE
+ *
+ * Message numbers follow APRS 1.01 ch. 14: outgoing messages end in
+ * "{N" (no closing brace) and the receiver answers "ackN". The closing
+ * brace form "{MM}AA" is the APRS 1.1 reply-ack extension, which this
+ * firmware does not implement; incoming reply-ack numbers are parsed and
+ * acked as plain "ackMM". Incoming ack/rej messages are consumed silently.
  *
  * Plain (non-query) APRS messages addressed to our callsign or tactical
  * name are ACKed here too, independent of any attached KISS client — the
@@ -52,23 +60,53 @@ namespace QUERY_Utils {
     // Dedup to rate-limit responses: same query from same sender within 60 s is ignored.
     static PacketDedup queryDedup;
 
-    // Outgoing message sequence number, 1–999 wrapping.
+    // Outgoing message sequence number, 1–999 wrapping. Shared by every
+    // directed message this device originates (see nextMessageId()).
     static int msgCounter = 1;
 
-    static String nextMsgNo() {
+    String nextMessageId() {
         String n = String(msgCounter++);
         if (msgCounter > 999) msgCounter = 1;
         return n;
     }
 
-    // Extract the message number from a payload ending in `{NNN}`.
-    // Returns an empty string if no message number is present.
+    String withMessageId(const String& body) {
+        // APRS 1.01: "{" + 1-5 alphanumerics, NO closing brace. A trailing
+        // "}" would advertise APRS 1.1 reply-acks, which we don't implement,
+        // and clients without reply-ack support show "{N}" as message text.
+        return body + "{" + nextMessageId();
+    }
+
+    // Extract the message number from a payload ending in "{N" (APRS 1.01)
+    // or "{MM}AA" (APRS 1.1 reply-ack; MM is the number to ack, AA is the
+    // sender's ack of one of ours and is ignored). Returns an empty string
+    // if there is no valid number (1-5 alphanumerics).
     static String extractMsgNo(const String& payload) {
         int idx = payload.lastIndexOf('{');
         if (idx < 0) return "";
         String num = payload.substring(idx + 1);
+        int replyAck = num.indexOf('}');
+        if (replyAck >= 0) num = num.substring(0, replyAck);
         num.trim();
+        if (num.length() == 0 || num.length() > 5) return "";
+        for (unsigned i = 0; i < num.length(); i++) {
+            if (!isalnum((unsigned char)num.charAt(i))) return "";
+        }
         return num;
+    }
+
+    // True for an APRS ack/rej message ("ackN" / "rejN", optionally in the
+    // reply-ack form "ackMM}AA"). These answer one of our messages and must
+    // never be acked, displayed, or treated as a command.
+    static bool isAckOrRej(const String& payload) {
+        if (!payload.startsWith("ack") && !payload.startsWith("rej")) return false;
+        const unsigned len = payload.length();
+        if (len < 4 || len > 3 + 5 + 1 + 5) return false;
+        for (unsigned i = 3; i < len; i++) {
+            const char c = payload.charAt(i);
+            if (!isalnum((unsigned char)c) && c != '}') return false;
+        }
+        return true;
     }
 
     // Build a directed APRS message reply addressed to `toCall`.
@@ -76,8 +114,30 @@ namespace QUERY_Utils {
         const String& myCall = Config.beacons[0].callsign;
         const String& myPath = Config.beaconPath;
         return APRSPacketLib::generateMessagePacket(
-            myCall, "APLRT1", myPath, toCall,
-            body + "{" + nextMsgNo() + "}");
+            myCall, "APLRT1", myPath, toCall, withMessageId(body));
+    }
+
+    // Reply to "?": every supported query, sized to fit one APRS message
+    // (67-character text limit, before the message ID). Aliases (?APRST =
+    // ?PING, ?APRSV = ?VER) are left out to stay within that limit.
+    static String buildQueryList(bool includeIgate) {
+        String list = "Query: ?APRSD ?APRSH ?APRSL ?APRSP ?APRSS ?PING ?VER ?TELEM";
+        if (includeIgate) list += " ?IGATE";
+        return list;
+    }
+
+    // Normalise a query for matching: uppercase, trimmed, and without one
+    // trailing '?' so "?TELEM" and "?TELEM?" (or "?PING?" and "?PING") are
+    // the same query. A lone "?" (the query list) is left as-is.
+    static String normaliseQuery(const String& text) {
+        String query = text;
+        query.trim();
+        query.toUpperCase();
+        if (query.length() > 1 && query.endsWith("?")) {
+            query.remove(query.length() - 1);
+            query.trim();
+        }
+        return query;
     }
 
     // Build an ACK for the given message number.
@@ -198,6 +258,16 @@ namespace QUERY_Utils {
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Query",
                    "Message from %s addressed to our SSID \"%s\"", sender.c_str(), addressee.c_str());
 
+        // An ack/rej answers one of our replies. This firmware doesn't
+        // retry its own messages, so there is nothing to clear; just make
+        // sure it isn't displayed, acked back, or parsed as a command.
+        if (isAckOrRej(msgPayload)) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Query",
+                       "%s from %s: %s", msgPayload.startsWith("ack") ? "Ack" : "Reject",
+                       sender.c_str(), msgPayload.c_str());
+            return;
+        }
+
         // Surface the message text on the status display (as a "Msg:"
         // indicator) for any addressed/broadcast packet that reaches this
         // point, whether it turns out to be a query or a plain message.
@@ -227,14 +297,22 @@ namespace QUERY_Utils {
             if (brace >= 0) text = text.substring(0, brace);
             text.trim();
 
-            // Rate-limit: ignore duplicate messages from the same sender.
-            if (!queryDedup.isNew(sender, text)) return;
-
+            // Ack every copy, including retries: a sender retries because
+            // our previous ack was lost, so a retry must be acked again
+            // even though the duplicate filter below drops its content.
             String msgNo = extractMsgNo(msgPayload);
+            if (msgNo.length() > 0) sendReply(buildAck(sender, msgNo));
+
+            // Rate-limit: ignore duplicate messages from the same sender.
+            if (!queryDedup.isNew(sender, text)) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Query",
+                           "Repeat message from %s (msg# %s), re-acked only",
+                           sender.c_str(), msgNo.length() ? msgNo.c_str() : "none");
+                return;
+            }
             if (msgNo.length() > 0) {
                 logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO,
                     "Query", "Message from %s, ACKed (msg# %s)", sender.c_str(), msgNo.c_str());
-                sendReply(buildAck(sender, msgNo));
             } else {
                 logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO,
                     "Query", "Message from %s (no msg#, not acked)", sender.c_str());
@@ -256,29 +334,35 @@ namespace QUERY_Utils {
             return;
         }
 
-        // Strip message number before matching query keyword, then normalise to
-        // uppercase so matching is case-insensitive (?aprsv == ?APRSV, etc.).
-        String query = msgPayload;
-        int braceIdx = query.indexOf('{');
-        if (braceIdx >= 0) query = query.substring(0, braceIdx);
-        query.trim();
-        query.toUpperCase();
+        // Strip the message number, then normalise (case, trailing '?') so
+        // ?aprsv, ?APRSV and ?APRSV? all match the same query.
+        String queryText = msgPayload;
+        int braceIdx = queryText.indexOf('{');
+        if (braceIdx >= 0) queryText = queryText.substring(0, braceIdx);
+        const String query = normaliseQuery(queryText);
+
+        // Ack every copy, including retries (see the plain-message case above).
+        String msgNo = extractMsgNo(msgPayload);
+        if (msgNo.length() > 0) sendReply(buildAck(sender, msgNo));
 
         // Rate-limit: ignore duplicate queries from the same sender.
-        if (!queryDedup.isNew(sender, query)) return;
+        if (!queryDedup.isNew(sender, query)) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "Query",
+                       "Repeat query from %s: %s, re-acked only", sender.c_str(), query.c_str());
+            return;
+        }
 
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO,
             "Query", "Query from %s: %s", sender.c_str(), query.c_str());
 
-        // ACK the incoming message if it carried a sequence number.
-        String msgNo = extractMsgNo(msgPayload);
-        if (msgNo.length() > 0) {
-            sendReply(buildAck(sender, msgNo));
-        }
-
         // ── Dispatch ──────────────────────────────────────────────────────────
 
-        if (query == "?APRS?" && (toAPRS || toUs)) {
+        if (query == "?") {
+            // Query list. Directed only: a "?" to APRS/IGATE would make every
+            // station in range answer at once.
+            if (toUs) sendReply(buildReply(sender, buildQueryList(Config.deviceRole == ROLE_IGATE)));
+
+        } else if (query == "?APRS" && (toAPRS || toUs)) {
             // Undirected general query — respond with our current position beacon.
             // sendBeacon() transmits immediately; the ACK above is queued and will
             // follow on the next output-buffer drain (200 ms gap).
@@ -329,7 +413,7 @@ namespace QUERY_Utils {
             if (status.length() == 0) status = "No status configured";
             sendReply(buildReply(sender, status));
 
-        } else if (query == "?APRST" || query == "?PING?") {
+        } else if (query == "?APRST" || query == "?PING") {
             // Trace / ping — echo back our callsign.
             sendReply(buildReply(sender, "PING " + myCall));
 
@@ -337,15 +421,19 @@ namespace QUERY_Utils {
             // Firmware version.
             sendReply(buildReply(sender, "LoRa APRS Tracker " + String(FIRMWARE_VERSION_DATE)));
 
-        } else if (query == "?TELEM?") {
+        } else if (query == "?TELEM") {
             // Infrastructure health snapshot — battery, uptime, APRS-IS link
             // state, digipeat/upload counters.
             sendReply(buildReply(sender, buildTelemetry()));
 
-        } else if ((query == "?IGATE?" || (toIGATE && query == "?IGATE?"))
-                   && Config.deviceRole == ROLE_IGATE) {
+        } else if (query == "?IGATE" && Config.deviceRole == ROLE_IGATE) {
             // iGate capability query — only iGate mode responds.
             sendReply(buildReply(sender, "IGATE Online"));
+
+        } else {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Query",
+                       "Unsupported query from %s: %s (no reply; \"?\" lists queries)",
+                       sender.c_str(), query.c_str());
         }
     }
 

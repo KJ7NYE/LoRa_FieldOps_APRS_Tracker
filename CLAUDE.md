@@ -86,7 +86,7 @@ Runtime config is stored as `tracker_conf.json` on the filesystem. Three interfa
 | `src/station_utils.cpp` | Beacon/status packet generation; Mic-E encoding; tactical objects |
 | `src/smartbeacon_utils.cpp` | SmartBeacon interval calculation; 5 profiles (Runner/Bike/Car/Jetboat/Custom) |
 | `src/digi_utils.cpp` | WIDE1-1/WIDE2 digipeating; 25-slot djb2 hash dedup (30s TTL) |
-| `src/query_utils.cpp` | APRS station capability query parsing/dispatch (?APRSD, ?PING?, etc.); also surfaces the Msg: display indicator |
+| `src/query_utils.cpp` | APRS station capability query parsing/dispatch (`?` list, ?APRSD, ?PING, etc.; trailing `?` optional); message numbers (`{N`, APRS 1.01) and acks; also surfaces the Msg: display indicator |
 | `src/display.cpp` | SSD1306 OLED + ST7789 TFT rendering; eco-mode timeout |
 | `src/gps_utils.cpp` | TinyGPSPlus parser; GPS_INTERNAL/GPS_FIXED/GPS_NONE sources |
 | `src/wifi_utils.cpp` | WiFi AP + STA management |

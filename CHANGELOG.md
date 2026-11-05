@@ -9,6 +9,31 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-05 — APRS message numbers fixed; `?` query list; trailing `?` optional
+
+Replies ended in `{N}` (e.g. `PING KG7KMV-13{3}`). APRS 1.01 message numbers are `{N` with no closing
+brace; `{MM}AA` is the APRS 1.1 reply-ack form, which this firmware doesn't implement, so clients
+without reply-ack support displayed `{3}` as part of the text. Fixes in
+[src/query_utils.cpp](src/query_utils.cpp):
+
+- Outgoing replies use `{N`. One shared counter (`QUERY_Utils::withMessageId()`) now also covers the
+  APRS-IS "CS ERR DISABLED" reply in [src/aprs_is_utils.cpp](src/aprs_is_utils.cpp), which had its own
+  counter and the same `{N}` format.
+- Incoming message numbers stop at `}` (reply-ack `{MM}AA` is acked as `ackMM`, not `ackMM}AA`) and
+  must be 1–5 alphanumerics.
+- Incoming `ackN` / `rejN` are ignored. Previously they were treated as free-text messages: shown on
+  the display as "Msg: ack4" and fed to the duplicate filter.
+- Retries are acked. The 60 s duplicate filter ran before the ack, so a sender whose ack was lost
+  never got one and kept retrying.
+- New `?` query (directed only) replies with the supported query list.
+- Every query matches with or without a trailing `?` (`?TELEM` = `?TELEM?`, `?VER?` = `?VER`).
+  Unsupported queries are logged.
+
+README "APRS Station Queries" documents the query list, trailing-`?` rule and message-number/ACK
+behaviour.
+
+---
+
 ## 2026-11-05 — New target: LilyGo T3-S3 V1.2 / V1.3 (SX1262), board-ID fix
 
 New environment `lilygo_t3s3_433_aprs` (macro `LILYGO_T3S3_433_APRS`): ESP32-S3, SX1262 with
