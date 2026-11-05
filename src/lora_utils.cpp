@@ -43,11 +43,20 @@ bool transmitFlag    = true;
 // for why a queued TX waits for a short quiet window since this timestamp.
 uint32_t lastRxActivityMs = 0;
 
-#define DIFS_SLOTS      2       // Number of secuential CAD slots to consider a free channel to Tx
-int     backoffMax      = 4;    // Max Backoff value (number of CAD slots to wait before Tx)
-#define CAD_MAX_WAIT_MS 10000   // Max total time waiting for a free channel before Tx anyway
-unsigned long cadStartTime = 0;
-bool cadNoticeShown = false;
+// ── Channel Activity Detection (listen before TX) ───────────────────────────
+// With Config.cadActive, every TX first needs DIFS_SLOTS consecutive clear CAD
+// scans, then a random backoff of 1..backoffMax clear scans; a busy scan during
+// the backoff freezes it and restarts the DIFS wait. After CAD_MAX_WAIT_MS the
+// packet goes out anyway so a stuck-busy channel (or a failing CAD scan) can
+// never silence the tracker.
+#define DIFS_SLOTS      2       // Consecutive clear CAD scans that mark the channel free
+int     backoffMax      = 4;    // Max random backoff, in clear CAD scans, after DIFS
+#define CAD_MAX_WAIT_MS 10000   // Give up listening and transmit after this long
+
+// Per-TX CAD bookkeeping, reset at the start of each waitForClearChannel().
+static unsigned long cadStartTime     = 0;
+static uint16_t      cadBusyScans     = 0;      // scans that heard LoRa activity
+static int16_t       cadScanErrorCode = 0;      // first non-CAD result from scanChannel(), 0 = none
 
 #if defined(HAS_SX1262)
     // On HELTEC_T114, variants_bsp/heltec_t114/variant.h sets PIN_SPI_MISO/MOSI/SCK
@@ -228,15 +237,27 @@ namespace LoRa_Utils {
         #endif
 
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa", "LoRa init done!");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa",
+                   Config.cadActive ? "CAD listen-before-TX on (max wait %d s)"
+                                    : "CAD listen-before-TX off, transmitting without checking the channel",
+                   CAD_MAX_WAIT_MS / 1000);
     }
 
-    bool doCAD() {      // CAD (Channel Activity Detection)
-        return radio.scanChannel() != RADIOLIB_CHANNEL_FREE;    // false=channel free | true=RADIOLIB_LORA_DETECTED or CAD failed
-    }
-
-    bool doDIFS() {
-        for (uint8_t i = DIFS_SLOTS; i > 0; i--) {
-            if (doCAD()) return false;
+    // One CAD scan. Returns true when the channel must be treated as busy:
+    // LoRa activity was detected, or the scan itself failed (fail safe; the
+    // CAD_MAX_WAIT_MS cap still guarantees the packet goes out).
+    bool doCAD() {
+        const int16_t result = radio.scanChannel();
+        if (result == RADIOLIB_CHANNEL_FREE) return false;
+        if (result == RADIOLIB_LORA_DETECTED) {
+            if (cadBusyScans == 0) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa Tx", "CAD: channel busy, holding TX");
+            }
+            cadBusyScans++;
+        } else if (cadScanErrorCode == 0) {
+            cadScanErrorCode = result;
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "LoRa Tx",
+                       "CAD scan failed (code %d), treating channel as busy", result);
         }
         return true;
     }
@@ -245,50 +266,58 @@ namespace LoRa_Utils {
         return millis() - cadStartTime > CAD_MAX_WAIT_MS;
     }
 
-    void showCadNotice() {
-        if (cadNoticeShown) return;
-        cadNoticeShown = true;
-        bootStatus("CAD: waiting for free channel...");
+    // DIFS (Distributed Inter-Frame Space): wait for DIFS_SLOTS clear scans in a row.
+    bool doDIFS() {
+        for (uint8_t i = DIFS_SLOTS; i > 0; i--) {
+            if (doCAD()) return false;
+        }
+        return true;
     }
 
     void waitForDIFS() {
         while (!doDIFS()) {
             if (cadTimedOut()) return;
-            showCadNotice();
-            logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "LoRa Tx", "CAD/DIFS failed, retry...");
         }
     }
 
+    // BEB (Binary Exponential Backoff): count down a random number of clear
+    // scans; a busy scan freezes the countdown until DIFS passes again.
     void doBEB() {
         int backoffCounter = random(1, backoffMax + 1);
         while (backoffCounter > 0) {
             if (cadTimedOut()) return;
             if (doCAD()) {
-                showCadNotice();
-                waitForDIFS();  // busy channel: freeze backoff and restart DIFS
+                waitForDIFS();
             } else {
                 backoffCounter--;
             }
         }
     }
 
-    void sendNewPacket(const String& newPacket) {
-        if (Config.cadActive) {
-            cadStartTime = millis();
-            cadNoticeShown = false;
-            waitForDIFS();  // DIFS (Distributed Inter-Frame Space)
-            doBEB();        // BEB  (Binary Exponential Backoff)
-            if (cadTimedOut()) {
-                logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "LoRa Tx", "CAD timeout, transmitting anyway");
-            }
-            // Note: our fork's displayTx(newPacket) below handles the TX overlay;
-            // upstream's redundant displayShow() here would double-render.
-        }
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa Tx","---> %s", newPacket.c_str());
-        /*logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "LoRa","Send data: %s", newPacket.c_str());
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "LoRa","Send data: %s", newPacket.c_str());
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "LoRa","Send data: %s", newPacket.c_str());*/
+    // Listen before talk. Returns once the channel is clear or the wait cap is
+    // hit, logging only when the TX was actually held up.
+    void waitForClearChannel() {
+        cadStartTime     = millis();
+        cadBusyScans     = 0;
+        cadScanErrorCode = 0;
 
+        waitForDIFS();
+        doBEB();
+
+        const unsigned long waitedMs = millis() - cadStartTime;
+        if (cadTimedOut()) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "LoRa Tx",
+                       "CAD: channel still busy after %lu ms, transmitting anyway", waitedMs);
+            LogBuffer::pushf(LogBuffer::TYPE_INFO, "CAD: channel busy for %lu s, transmitting anyway",
+                             waitedMs / 1000);
+        } else if (cadBusyScans > 0) {
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa Tx",
+                       "CAD: channel clear after %lu ms (%u busy scans)", waitedMs, cadBusyScans);
+            LogBuffer::pushf(LogBuffer::TYPE_INFO, "CAD: channel busy, TX held %lu ms", waitedMs);
+        }
+    }
+
+    void sendNewPacket(const String& newPacket) {
         // FCC TX-gate: refuse to key the carrier if the source callsign field
         // looks like a placeholder (NOCALL / N0CALL). Catches misconfigured
         // local beacons and any externally-injected packets via BLE/BT-Classic
@@ -303,6 +332,11 @@ namespace LoRa_Utils {
                        fromCall.c_str());
             return;
         }
+
+        // Listen before talk (after the FCC gate, so a blocked packet doesn't
+        // wait on the channel first). displayTx() below draws the TX overlay.
+        if (Config.cadActive) waitForClearChannel();
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa Tx","---> %s", newPacket.c_str());
 
         LogBuffer::pushf(LogBuffer::TYPE_TX, "%s", newPacket.c_str());
         displayTx(newPacket);

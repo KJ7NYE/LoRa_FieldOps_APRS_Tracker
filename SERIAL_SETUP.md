@@ -134,6 +134,7 @@ plan.
 | `lora bw <Hz>`           | Signal bandwidth in hertz.        |
 | `lora cr <5..8>`         | Coding rate denominator.          |
 | `lora power <dBm>`       | TX power. Clamped to 2-20 on `HAS_1W_LORA` boards (T-Beam 1W, LoRanger V1), 2-22 elsewhere. |
+| `lora cad on\|off`       | Channel Activity Detection (listen before TX), default on. Before each TX the radio waits for a clear channel plus a short random backoff, and transmits anyway after 10 s of a busy channel. `cad on\|off` is an alias. |
 
 Actual RF output for a given `power` setting depends on the board: T114/V3.2
 are bare SX1262 (chip output = setting + 2 dBm, clamped at 22 dBm); the

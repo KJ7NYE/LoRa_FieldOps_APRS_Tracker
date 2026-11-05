@@ -156,6 +156,7 @@ namespace SERIAL_Setup {
         Serial.println(F("\n-- lora --"));
         Serial.println(F("  lora freq <Hz>             sf <7..12>           bw <Hz>"));
         Serial.println(F("  lora cr <5..8>             power <dBm>"));
+        Serial.println(F("  lora cad on|off            (Channel Activity Detection: listen before TX)"));
         Serial.println(F("\n-- peripherals --"));
         Serial.println(F("  display eco|turn180|led on|off"));
         Serial.println(F("  display timeout <sec>"));
@@ -190,7 +191,7 @@ namespace SERIAL_Setup {
         Serial.println(F("  wifi password <text>       (AP password; AP triggers on NOCALL or USR button at boot)"));
         Serial.println(F("  beaconpath <DIRECT|WIDE1-1|WIDE1-1,WIDE2-1|WIDE1-1,WIDE2-2>"));
         Serial.println(F("  gps read                   print current GPS position (all sources)"));
-        Serial.println(F("  sendspeed on|off             sendalt on|off             cad on|off"));
+        Serial.println(F("  sendspeed on|off             sendalt on|off"));
         Serial.println(F("  nonsmartrate <sec>"));
         Serial.println(F("  commentafter <n>"));
         Serial.println();
@@ -242,6 +243,7 @@ namespace SERIAL_Setup {
         kv("    bw   ", l.signalBandwidth);
         kv("    cr   ", l.codingRate4);
         kv("    power", l.power);
+        kv("  cad    ", Config.cadActive);   // global, not per lora[] entry
     }
 
     static void printSmartCustom() {
@@ -344,7 +346,6 @@ namespace SERIAL_Setup {
             kv("nonSmartBeaconRate ", Config.nonSmartBeaconRate);
             kv("sendSpeedCourse     ", Config.sendSpeedCourse);
             kv("sendAltitude       ", Config.sendAltitude);
-            kv("cadActive          ", Config.cadActive);
             kv("digiMode           ", Config.digiMode == DIGI_OFF ? "off" :
                                        Config.digiMode == DIGI_WIDE1 ? "wide1" : "wide1+wide2");
             kv("digiActive(runtime)", digipeaterActive ? "yes" : "no");
@@ -483,6 +484,9 @@ namespace SERIAL_Setup {
             l.power = constrain(tk[2].toInt(), 2, 22);
             #endif
             ok("power = " + String(l.power));
+        } else if (sub == "cad") {
+            if (n < 3) { err("cad on|off"); return; }
+            applyBool(tk[2], Config.cadActive, "cadActive");
         } else {
             err("unknown lora subcommand: " + sub);
         }
@@ -1067,6 +1071,7 @@ namespace SERIAL_Setup {
         }
         else if (cmd == "sendspeed")                { if (n >= 2) applyBool(tk[1], Config.sendSpeedCourse, "sendSpeedCourse"); else err("sendspeed on|off"); }
         else if (cmd == "sendalt")                  { if (n >= 2) applyBool(tk[1], Config.sendAltitude, "sendAltitude"); else err("sendalt on|off"); }
+        // Alias of `lora cad` (v1.4.1 and the config tools send this form).
         else if (cmd == "cad")                      { if (n >= 2) applyBool(tk[1], Config.cadActive, "cadActive"); else err("cad on|off"); }
         else if (cmd == "nonsmartrate")             { if (n >= 2) { Config.nonSmartBeaconRate = tk[1].toInt(); ok("nonSmartBeaconRate = " + String(Config.nonSmartBeaconRate)); } else err("nonsmartrate <sec>"); }
         else if (cmd == "commentafter")             { if (n >= 2) { Config.sendCommentAfterXBeacons = tk[1].toInt(); ok("sendCommentAfterXBeacons = " + String(Config.sendCommentAfterXBeacons)); } else err("commentafter <n>"); }
