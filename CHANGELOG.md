@@ -9,6 +9,33 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-05 — Fix web UI firmware update ("Update failed — see device log")
+
+The web UI firmware update (Device → Update Firmware) had failed on every board since 2026-07-29
+(`aca1bb0`). That change pinned every update to the `app0` slot so it would agree with the USB web
+flasher. However, a device normally runs *from* `app0`, and ESP-IDF refuses to rewrite the running
+slot (`esp_ota_begin` → `ESP_ERR_OTA_PARTITION_CONFLICT`). The upload reached 100%, nothing was
+written, and the reason only went to raw `Serial`, which is invisible in KISS mode.
+
+[src/web_utils.cpp](src/web_utils.cpp) now writes to the inactive slot
+(`esp_ota_get_next_update_partition`) and selects it for boot, the standard ESP-IDF A/B scheme. The
+pinning is no longer needed: since `3d7fe01` the USB flasher's `_ota_update.bin` image includes
+`boot_app0.bin` at the otadata offset, which resets the boot selection to `app0` itself. Also:
+
+- USB flasher images (`_web_factory.bin`, `_ota_update.bin`) and non-ESP files are rejected up front
+  with a message naming the right file.
+- Single-slot boards (T-Beam, T3 V1.6 on `huge_app.csv`) get a clear "use the USB web flasher" error.
+- Every failure is returned to the browser with its reason, logged to serial and pushed to the web
+  live log (`OTA:`), and the partial write is aborted.
+- The update dialog and README describe which file to use and which boards can update this way.
+- Heltec V3.2 display dark after a software reboot (after an update, a settings save, or `reboot`):
+  `esp_restart()` doesn't reset GPIOs, so VEXT stayed on and the OLED never got the power cycle that
+  the RST button or a power-up gives it. [src/power_utils.cpp](src/power_utils.cpp) registers a
+  shutdown handler on VEXT boards (V3.2, Wireless Tracker) that switches VEXT off for 300 ms before
+  any software restart.
+
+---
+
 ## 2026-11-05 — APRS message numbers fixed; `?` query list; trailing `?` optional
 
 Replies ended in `{N}` (e.g. `PING KG7KMV-13{3}`). APRS 1.01 message numbers are `{N` with no closing

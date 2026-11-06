@@ -23,8 +23,10 @@ Two release assets are published per ESP32 board:
 
 | File | When to use | Tool required |
 |---|---|---|
-| `<board>_firmware.bin` | **Normal OTA update** — device already running, WiFi reachable | None — upload via device web UI at `192.168.4.1 → Device → Update Firmware` |
+| `<board>_firmware.bin` | **Normal OTA update** — device already running, WiFi reachable. Not available on the 4 MB T-Beam and T3 V1.6 (single firmware slot): use the factory/update image over USB | None — upload via device web UI at `192.168.4.1 → Device → Update Firmware` |
 | `<board>_web_factory.bin` | **First-time flash or recovery** — new device, bricked device, or partition table changed | USB cable + Chrome/Edge → [kj7nye.github.io/LoRa\_FieldOps\_APRS\_Tracker/flasher](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/) |
+
+> **How OTA works:** the new firmware is written to the spare firmware slot (`app0`/`app1`) and the device boots from it, so the running firmware is never overwritten mid-update and a failed upload leaves the device unchanged. If an upload fails, the dialog shows the reason (also in the web live log, prefixed `OTA:`).
 
 > **Why two files?** The factory binary is a merged image (bootloader + partition table + firmware + filesystem) that writes the entire flash from scratch. The OTA binary is the bare application only — it fits in the OTA partition and is what the device web UI expects. Uploading the factory binary via OTA will fail with "Not Enough Space."
 
