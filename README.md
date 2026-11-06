@@ -395,7 +395,7 @@ SmartBeacon adjusts the beacon interval dynamically:
 - **Moving slow** → long interval (slowRate)
 - **Stopped** (speed < 1 km/h) → beacons at slowRate regardless of distance; prevents the tracker from going silent when parked
 
-Heading changes above `turnMinDeg` threshold trigger an immediate beacon regardless of time elapsed.
+**Corner pegging:** a heading change greater than `turnMinDeg + turnSlope / speed` triggers an early beacon, so turns are captured in the track. Corner pegging only applies at or above the profile's `slowSpeed` (so GPS course noise while parked cannot trigger it), and corner beacons are spaced at least 10 seconds apart.
 
 ### Built-in profiles
 
