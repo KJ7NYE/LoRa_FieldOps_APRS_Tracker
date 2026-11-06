@@ -326,12 +326,20 @@ namespace GPS_Utils {
     void calculateHeadingDelta(int speed) {
         double headingDelta = fabs(previousHeading - currentHeading);
         if (headingDelta > 180.0) headingDelta = 360.0 - headingDelta;    // shortest angle: 355 -> 5 is 10 deg, not 350
-        // Corner beacons use their own minimum spacing, independent of the
-        // speed-based periodic interval. Otherwise the periodic timer already
-        // requests a beacon before a turn can produce an earlier update.
-        // Keep stationary GPS noise from triggering corner beacons.
+        // Corner pegging uses its own minimum spacing, independent of the
+        // speed-based periodic interval. Gating on txInterval would make this
+        // check dead code: calculateDistanceTraveled() runs first in the same
+        // GPS update and already requests the periodic beacon at that point.
+        //
+        // Corner pegging is only armed at or above the profile's slowSpeed
+        // (standard SmartBeacon behaviour). A parked receiver commonly reports
+        // 2-4 km/h of multipath speed noise with an essentially random course,
+        // which would otherwise fire a turn beacon every 10 s. slowSpeed is
+        // always >= 5 km/h in the built-in profiles, which also keeps the
+        // turnSlope / speed division below well-defined.
         constexpr uint32_t minTurnBeaconIntervalMs = 10000UL;
-        if (speed > 1 && lastTx >= minTurnBeaconIntervalMs) {
+        const int minTurnBeaconSpeedKmh = max(2, currentSmartBeaconValues.slowSpeed);  // floor guards an unvalidated custom slowSpeed <= 1
+        if (speed >= minTurnBeaconSpeedKmh && lastTx >= minTurnBeaconIntervalMs) {
             int TurnMinAngle = currentSmartBeaconValues.turnMinDeg + (currentSmartBeaconValues.turnSlope / speed);
             if (headingDelta > TurnMinAngle) {
                 sendUpdate = true;
