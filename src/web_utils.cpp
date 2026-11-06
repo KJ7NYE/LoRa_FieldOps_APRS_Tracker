@@ -323,13 +323,14 @@ namespace WEB_Utils {
         Config.remoteCfg.token            = getParamStringSafe("remoteCfg.token", Config.remoteCfg.token);
         Config.remoteCfg.unlockWindowSec  = constrain(getParamIntSafe("remoteCfg.unlockWindowSec", Config.remoteCfg.unlockWindowSec), 60, 3600);
 
-        //  SmartBeacon custom profile (profile index 3)
-        Config.customSmartBeacon.slowRate       = getParamIntSafe("customSmartBeacon.slowRate",      Config.customSmartBeacon.slowRate);
-        Config.customSmartBeacon.slowSpeed      = getParamIntSafe("customSmartBeacon.slowSpeed",     Config.customSmartBeacon.slowSpeed);
-        Config.customSmartBeacon.fastRate       = getParamIntSafe("customSmartBeacon.fastRate",      Config.customSmartBeacon.fastRate);
-        Config.customSmartBeacon.fastSpeed      = getParamIntSafe("customSmartBeacon.fastSpeed",     Config.customSmartBeacon.fastSpeed);
-        Config.customSmartBeacon.turnMinDeg     = getParamIntSafe("customSmartBeacon.turnMinDeg",    Config.customSmartBeacon.turnMinDeg);
-        Config.customSmartBeacon.turnSlope      = getParamIntSafe("customSmartBeacon.turnSlope",     Config.customSmartBeacon.turnSlope);
+        //  SmartBeacon custom profile (profile index 4). Form field names are
+        //  "customSmartBeacon.<jsonKey>" from the shared field table; values the
+        //  browser's min/max did not catch are clamped into range.
+        for (const SmartBeaconField& f : SMARTBEACON_CUSTOM_FIELDS) {
+            int& value = Config.customSmartBeacon.*(f.member);
+            value = getParamIntSafe(String("customSmartBeacon.") + f.jsonKey, value);
+        }
+        SMARTBEACON_Utils::clampCustomValues(Config.customSmartBeacon);
 
         //  PTT Trigger
         Config.ptt.active                       = request->hasParam("ptt.active", true);

@@ -113,12 +113,10 @@ bool Configuration::writeFile() {
         data["other"]["cadActive"]                  = cadActive;
         data["other"]["digiMode"]                   = (int)digiMode;
 
-        data["customSmartBeacon"]["slowRate"]       = customSmartBeacon.slowRate;
-        data["customSmartBeacon"]["slowSpeed"]      = customSmartBeacon.slowSpeed;
-        data["customSmartBeacon"]["fastRate"]       = customSmartBeacon.fastRate;
-        data["customSmartBeacon"]["fastSpeed"]      = customSmartBeacon.fastSpeed;
-        data["customSmartBeacon"]["turnMinDeg"]     = customSmartBeacon.turnMinDeg;
-        data["customSmartBeacon"]["turnSlope"]      = customSmartBeacon.turnSlope;
+        // Keys come from the shared field table so load/save/CLI/web stay in step.
+        for (const SmartBeaconField& f : SMARTBEACON_CUSTOM_FIELDS) {
+            data["customSmartBeacon"][f.jsonKey]    = customSmartBeacon.*(f.member);
+        }
 
         data["wifiSTA"]["enabled"]                  = wifiSTA.enabled;
         JsonArray wifiNetworksOut = data["wifiSTA"]["networks"].to<JsonArray>();
@@ -325,18 +323,15 @@ bool Configuration::readFile() {
             digiMode = DIGI_OFF; needsRewrite = true;
         }
 
-        if (data["customSmartBeacon"]["slowRate"].isNull() ||
-            data["customSmartBeacon"]["slowSpeed"].isNull() ||
-            data["customSmartBeacon"]["fastRate"].isNull() ||
-            data["customSmartBeacon"]["fastSpeed"].isNull() ||
-            data["customSmartBeacon"]["turnMinDeg"].isNull() ||
-            data["customSmartBeacon"]["turnSlope"].isNull()) needsRewrite = true;
-        customSmartBeacon.slowRate       = data["customSmartBeacon"]["slowRate"]       | 120;
-        customSmartBeacon.slowSpeed      = data["customSmartBeacon"]["slowSpeed"]      | 5;
-        customSmartBeacon.fastRate       = data["customSmartBeacon"]["fastRate"]       | 60;
-        customSmartBeacon.fastSpeed      = data["customSmartBeacon"]["fastSpeed"]      | 40;
-        customSmartBeacon.turnMinDeg     = data["customSmartBeacon"]["turnMinDeg"]     | 12;
-        customSmartBeacon.turnSlope      = data["customSmartBeacon"]["turnSlope"]      | 60;
+        // Missing keys (e.g. turnMinTime in configs written before it existed)
+        // take the field default; out-of-range values from a hand-edited file
+        // are clamped. Either case rewrites the file so it is self-describing.
+        for (const SmartBeaconField& f : SMARTBEACON_CUSTOM_FIELDS) {
+            JsonVariantConst value = data["customSmartBeacon"][f.jsonKey];
+            if (value.isNull()) needsRewrite = true;
+            customSmartBeacon.*(f.member) = value | f.defaultValue;
+        }
+        if (SMARTBEACON_Utils::clampCustomValues(customSmartBeacon)) needsRewrite = true;
         SMARTBEACON_Utils::setCustomValues(customSmartBeacon);
 
         wifiSTA.enabled = data["wifiSTA"]["enabled"] | false;
@@ -494,7 +489,7 @@ void Configuration::setDefaultValues() {
     cadActive                       = true;
     digiMode                        = DIGI_OFF;
 
-    customSmartBeacon               = SmartBeaconValues{ 120, 5, 60, 40, 100, 12 };
+    customSmartBeacon               = SMARTBEACON_Utils::customDefaults();
     SMARTBEACON_Utils::setCustomValues(customSmartBeacon);
 
     wifiSTA.enabled                 = false;

@@ -1521,36 +1521,60 @@ function renderConfig() {
 
   // ── SmartBeacon Custom ───────────────────
   mkSection(cont, 'smartcustom', '🏃 SmartBeacon Custom Profile', body => {
-    // Helper: two equal-width number inputs on one row
-    function mkPair(l1, v1, cb1, l2, v2, cb2) {
+    // Mirrors SMARTBEACON_CUSTOM_FIELDS in src/smartbeacon_utils.cpp — keep
+    // keys, CLI names and ranges in sync. The firmware rejects out-of-range
+    // values, so they are blocked here rather than sent and silently lost.
+    const SMART_CUSTOM_FIELDS = [
+      { key: 'slowRate',    cli: 'slowrate',    label: 'Slow rate (sec)',      min: 10, max: 3600 },
+      { key: 'slowSpeed',   cli: 'slowspeed',   label: 'Slow speed (km/h)',    min: 2,  max: 200  },
+      { key: 'fastRate',    cli: 'fastrate',    label: 'Fast rate (sec)',      min: 5,  max: 3600 },
+      { key: 'fastSpeed',   cli: 'fastspeed',   label: 'Fast speed (km/h)',    min: 3,  max: 300  },
+      { key: 'turnMinDeg',  cli: 'turnmindeg',  label: 'Turn min deg',         min: 1,  max: 180  },
+      { key: 'turnSlope',   cli: 'turnslope',   label: 'Turn slope',           min: 0,  max: 1000 },
+      { key: 'turnMinTime', cli: 'turnmintime', label: 'Turn min time (sec)',  min: 5,  max: 300  },
+    ];
+
+    function mkSmartField(field) {
+      const g = document.createElement('div');
+      g.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:0.2rem';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:0.75rem;color:#8b949e';
+      lbl.textContent = `${field.label}  [${field.min}–${field.max}]`;
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.className = 'form-control form-control-sm';
+      inp.min = field.min; inp.max = field.max; inp.step = 1;
+      inp.value = sc[field.key] ?? '';
+      inp.addEventListener('change', () => {
+        const v = Number(inp.value);
+        if (!Number.isInteger(v) || v < field.min || v > field.max) {
+          inp.classList.add('is-invalid');
+          return;
+        }
+        inp.classList.remove('is-invalid');
+        markDirty(inp);
+        sendCmd(`smartcustom ${field.cli} ${v}`);
+      });
+      g.appendChild(lbl); g.appendChild(inp);
+      return g;
+    }
+
+    // Firmware older than turnMinTime omits the key and would reject the
+    // command, so only render fields the connected device actually reports
+    // (the original six are always present).
+    const visible = SMART_CUSTOM_FIELDS.filter(f => f.key !== 'turnMinTime' || sc.turnMinTime !== undefined);
+    for (let i = 0; i < visible.length; i += 2) {
       const row = document.createElement('div');
       row.className = 'field-row';
-      function grp(label, value, cb) {
-        const g = document.createElement('div');
-        g.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:0.2rem';
-        const lbl = document.createElement('div');
-        lbl.style.cssText = 'font-size:0.75rem;color:#8b949e';
-        lbl.textContent = label;
-        const inp = document.createElement('input');
-        inp.type = 'number'; inp.className = 'form-control form-control-sm';
-        inp.value = value ?? '';
-        inp.addEventListener('change', () => { markDirty(inp); cb(inp.value); });
-        g.appendChild(lbl); g.appendChild(inp);
-        return g;
+      row.appendChild(mkSmartField(visible[i]));
+      if (visible[i + 1]) {
+        row.appendChild(mkSmartField(visible[i + 1]));
+      } else {
+        const spacer = document.createElement('div');   // keep the lone field half-width
+        spacer.style.flex = '1';
+        row.appendChild(spacer);
       }
-      row.appendChild(grp(l1, v1, cb1));
-      row.appendChild(grp(l2, v2, cb2));
-      return row;
+      body.appendChild(row);
     }
-    body.appendChild(mkPair(
-      'Slow rate (sec)',   sc.slowRate,       v => sendCmd(`smartcustom slowrate ${v}`),
-      'Slow speed (km/h)', sc.slowSpeed,      v => sendCmd(`smartcustom slowspeed ${v}`)));
-    body.appendChild(mkPair(
-      'Fast rate (sec)',   sc.fastRate,       v => sendCmd(`smartcustom fastrate ${v}`),
-      'Fast speed (km/h)', sc.fastSpeed,      v => sendCmd(`smartcustom fastspeed ${v}`)));
-    body.appendChild(mkPair(
-      'Turn min deg',      sc.turnMinDeg,     v => sendCmd(`smartcustom turnmindeg ${v}`),
-      'Turn slope',        sc.turnSlope,      v => sendCmd(`smartcustom turnslope ${v}`)));
   });
 
   // ── LoRa ─────────────────────────────────
