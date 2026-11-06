@@ -36,21 +36,73 @@ bool                wxRequestStatus             = false;
 uint32_t            wxRequestTime               = 0;
 
 
-// {slowRate(s), slowSpeed(km/h), fastRate(s), fastSpeed(km/h), turnMinDeg, turnSlope}
+// {slowRate(s), slowSpeed(km/h), fastRate(s), fastSpeed(km/h), turnMinDeg, turnSlope, turnMinTime(s)}
+//
+// turnMinTime scales with the profile's speed so a run of corners (switchbacks,
+// city blocks) produces a track-shaping beacon roughly every 50–150 m instead
+// of a burst of near-duplicate positions:
+//   Runner 20 s ≈ 55 m at 10 km/h, Bike 15 s ≈ 100 m at 25 km/h,
+//   Car 10 s ≈ 140 m at 50 km/h,   Jetboat 5 s ≈ 85 m at 60 km/h.
 SmartBeaconValues   smartBeaconSettings[SMARTBEACON_PROFILE_COUNT] = {
-    { 90,  5, 45,  18, 12,  60},    // Runner  — walk→sprint (5–18 km/h), ~200 m/beacon at pace
-    {120,  5, 45,  50, 12,  60},    // Bike    — casual→e-bike (5–50 km/h), ~600 m/beacon
-    { 90, 10, 36,  97, 10,  80},    // Car     — city→highway, ~0.6 mi/beacon at 60 mph
-    { 60, 30, 10,  97,  5, 150},    // Jetboat — marina→WOT; clips to 10 s above 60 mph
-    {120,  5, 60,  40, 12,  60}     // Custom  — filled from Config.customSmartBeacon at load
+    { 90,  5, 45,  18, 12,  60, 20},    // Runner  — walk→sprint (5–18 km/h), ~200 m/beacon at pace
+    {120,  5, 45,  50, 12,  60, 15},    // Bike    — casual→e-bike (5–50 km/h), ~600 m/beacon
+    { 90, 10, 36,  97, 10,  80, 10},    // Car     — city→highway, ~0.6 mi/beacon at 60 mph
+    { 60, 30, 10,  97,  5, 150,  5},    // Jetboat — marina→WOT; clips to 10 s above 60 mph
+    {120,  5, 60,  40, 12,  60, 15}     // Custom  — filled from Config.customSmartBeacon at load
 };
 
 static const char* SMARTBEACON_PROFILE_LABELS[SMARTBEACON_PROFILE_COUNT] = {
     "Runner", "Bike", "Car", "Jetboat", "Custom"
 };
 
+// Ranges rationale:
+//  - slowSpeed >= 2: speed <= 1 km/h is treated as parked by checkInterval(), and
+//    it keeps the turnSlope / speed division in calculateHeadingDelta() safe.
+//  - fastRate / turnMinTime >= 5 s: below this a beacon series can saturate a
+//    slow LoRa channel (an SF12 position packet is ~1.5–3 s of airtime).
+//  - turnSlope 0 is allowed and means a fixed turn angle at all speeds.
+const SmartBeaconField SMARTBEACON_CUSTOM_FIELDS[SMARTBEACON_CUSTOM_FIELD_COUNT] = {
+    // jsonKey        cliName        member                          min    max  default
+    { "slowRate",    "slowrate",    &SmartBeaconValues::slowRate,     10,  3600,   120 },
+    { "slowSpeed",   "slowspeed",   &SmartBeaconValues::slowSpeed,     2,   200,     5 },
+    { "fastRate",    "fastrate",    &SmartBeaconValues::fastRate,      5,  3600,    60 },
+    { "fastSpeed",   "fastspeed",   &SmartBeaconValues::fastSpeed,     3,   300,    40 },
+    { "turnMinDeg",  "turnmindeg",  &SmartBeaconValues::turnMinDeg,    1,   180,    12 },
+    { "turnSlope",   "turnslope",   &SmartBeaconValues::turnSlope,     0,  1000,    60 },
+    { "turnMinTime", "turnmintime", &SmartBeaconValues::turnMinTime,   5,   300,    15 },
+};
+
 
 namespace SMARTBEACON_Utils {
+
+    SmartBeaconValues customDefaults() {
+        SmartBeaconValues v{};
+        for (const SmartBeaconField& f : SMARTBEACON_CUSTOM_FIELDS) v.*(f.member) = f.defaultValue;
+        return v;
+    }
+
+    const SmartBeaconField* findCustomFieldByCliName(const String& cliName) {
+        for (const SmartBeaconField& f : SMARTBEACON_CUSTOM_FIELDS) {
+            if (cliName == f.cliName) return &f;
+        }
+        return nullptr;
+    }
+
+    bool clampCustomValues(SmartBeaconValues& v) {
+        bool changed = false;
+        for (const SmartBeaconField& f : SMARTBEACON_CUSTOM_FIELDS) {
+            int& value = v.*(f.member);
+            int clamped = constrain(value, f.minValue, f.maxValue);
+            if (clamped != value) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "SmartBeacon",
+                           "customSmartBeacon.%s %d out of range %d-%d, clamped to %d",
+                           f.jsonKey, value, f.minValue, f.maxValue, clamped);
+                value   = clamped;
+                changed = true;
+            }
+        }
+        return changed;
+    }
 
     void checkSettings(byte index) {
         if (index >= SMARTBEACON_PROFILE_COUNT) {

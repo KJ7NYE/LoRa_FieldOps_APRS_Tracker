@@ -393,22 +393,24 @@ To use a different passcode (e.g., for club callsigns where your personal call g
 SmartBeacon adjusts the beacon interval dynamically:
 - **Moving fast** → short interval (fastRate)
 - **Moving slow** → long interval (slowRate)
-- **Stopped** (speed < 1 km/h) → beacons at slowRate regardless of distance; prevents the tracker from going silent when parked
+- **Stopped** (speed ≤ 1 km/h) → beacons at the non-smart rate (`nonsmartrate`, default 900 s) regardless of distance; GPS speed noise on a parked device is treated as stopped, and the tracker never goes silent
 
-**Corner pegging:** a heading change greater than `turnMinDeg + turnSlope / speed` triggers an early beacon, so turns are captured in the track. Corner pegging only applies at or above the profile's `slowSpeed` (so GPS course noise while parked cannot trigger it), and corner beacons are spaced at least 10 seconds apart.
+**Corner pegging:** a heading change greater than `turnMinDeg + turnSlope / speed` triggers an early beacon, so turns are captured in the track. Corner pegging only applies at or above the profile's `slowSpeed` (so GPS course noise while parked cannot trigger it). A corner beacon is never sent sooner than the profile's **Min Turn Time** after the previous beacon of any kind, so a run of switchbacks or city blocks doesn't produce a burst of near-duplicate positions.
 
 ### Built-in profiles
 
 Four fixed presets are built in, selected via `beacon smartset <0..3>`:
 
-| Profile | Slow Rate | Slow Speed | Fast Rate | Fast Speed | Min Turn Angle | Turn Slope |
-|---|---|---|---|---|---|---|
-| **0 — Runner** | 90 s | 5 km/h | 45 s | 18 km/h | 12° | 60 |
-| **1 — Bike** | 120 s | 5 km/h | 45 s | 50 km/h | 12° | 60 |
-| **2 — Car** | 90 s | 10 km/h | 36 s | 97 km/h | 10° | 80 |
-| **3 — Jetboat** | 60 s | 30 km/h | 10 s | 97 km/h | 5° | 150 |
+| Profile | Slow Rate | Slow Speed | Fast Rate | Fast Speed | Min Turn Angle | Turn Slope | Min Turn Time |
+|---|---|---|---|---|---|---|---|
+| **0 — Runner** | 90 s | 5 km/h | 45 s | 18 km/h | 12° | 60 | 20 s |
+| **1 — Bike** | 120 s | 5 km/h | 45 s | 50 km/h | 12° | 60 | 15 s |
+| **2 — Car** | 90 s | 10 km/h | 36 s | 97 km/h | 10° | 80 | 10 s |
+| **3 — Jetboat** | 60 s | 30 km/h | 10 s | 97 km/h | 5° | 150 | 5 s |
 
-A 5th profile, **Custom** (`smartset 4`), is fully user-editable rather than a fixed preset — see [SERIAL_SETUP.md's SmartBeacon Custom Profile section](SERIAL_SETUP.md#smartbeacon-custom-profile) for its tuning commands. Its out-of-the-box defaults are bike-like (120 s / 5 km/h / 60 s / 40 km/h / 12° / 60).
+Min Turn Time scales with each profile's speed, so corner beacons land roughly every 50–150 m through a series of turns. The Jetboat's 5 s is aggressive on slow LoRa settings: at SF12 a position packet takes about 1.5–3 s of airtime, so a long run of turns can keep the channel busy. Use the Custom profile with a longer Min Turn Time if that matters on your channel.
+
+A 5th profile, **Custom** (`smartset 4`), is fully user-editable rather than a fixed preset — see [SERIAL_SETUP.md's SmartBeacon Custom Profile section](SERIAL_SETUP.md#smartbeacon-custom-profile) for its tuning commands and valid ranges. Its out-of-the-box defaults are bike-like (120 s / 5 km/h / 60 s / 40 km/h / 12° / 60 / 15 s).
 
 ---
 

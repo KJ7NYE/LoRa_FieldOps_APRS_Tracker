@@ -9,6 +9,33 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-06 — SmartBeacon: per-profile corner-beacon spacing (`turnMinTime`); Custom profile range checks
+
+Closes [#50](../../issues/50). Corner beacons (heading-change beacons) were spaced at least a fixed
+10 s apart on every profile (since #51). That's too short at walking and cycling speeds, where a
+switchback trail produced bursts of near-duplicate positions, and it had no effect on the Jetboat,
+whose `fastRate` is already 10 s.
+
+- `SmartBeaconValues` gains `turnMinTime` (seconds), the minimum time after the previous beacon of
+  any kind before a corner beacon may be sent. Built-in values: Runner 20 s, Bike 15 s, Car 10 s
+  (unchanged behaviour), Jetboat 5 s. Custom defaults to 15 s.
+- The Custom profile exposes it in every config pathway: `tracker_conf.json`
+  (`customSmartBeacon.turnMinTime`, added with the default to older configs on first boot), the
+  serial CLI (`smartcustom turnmintime <sec>`), the web UI, `serial_config.html` and the LoRa FieldOps
+  Config app. `serial_config.html` and the app show the field only when the connected firmware
+  reports it.
+- All seven Custom fields are now range-checked from one table (`SMARTBEACON_CUSTOM_FIELDS` in
+  [src/smartbeacon_utils.cpp](src/smartbeacon_utils.cpp)) that drives JSON load/save, the CLI, the
+  web POST handler and factory defaults. The CLI rejects out-of-range or non-numeric values. JSON
+  load and the web form clamp them, with a warning. The UIs enforce the same ranges. Ranges are
+  documented in [SERIAL_SETUP.md](SERIAL_SETUP.md#smartbeacon-custom-profile).
+- Fix: a factory reset set the Custom profile to `turnMinDeg = 100°`, `turnSlope = 12`. Those were
+  leftovers from upstream's older 8-field layout, and they effectively disabled corner pegging.
+  Factory reset now uses the same defaults as a fresh config (12° / 60 / 15 s).
+- README: the stopped-tracker rate is `nonSmartBeaconRate`, not `slowRate`, as the docs used to say.
+
+---
+
 ## 2026-11-05 — Fix web UI firmware update ("Update failed — see device log")
 
 The web UI firmware update (Device → Update Firmware) had failed on every board since 2026-07-29

@@ -153,6 +153,7 @@ namespace SERIAL_Setup {
         Serial.println(F("  smartcustom slowrate <sec>     slowspeed <km/h>"));
         Serial.println(F("  smartcustom fastrate <sec>     fastspeed <km/h>"));
         Serial.println(F("  smartcustom turnmindeg <deg>   turnslope <n>"));
+        Serial.println(F("  smartcustom turnmintime <sec>  (min spacing for corner beacons)"));
         Serial.println(F("\n-- lora --"));
         Serial.println(F("  lora freq <Hz>             sf <7..12>           bw <Hz>"));
         Serial.println(F("  lora cr <5..8>             power <dBm>"));
@@ -249,12 +250,13 @@ namespace SERIAL_Setup {
     static void printSmartCustom() {
         SmartBeaconValues& s = Config.customSmartBeacon;
         Serial.println("  customSmartBeacon (used when beacon smartset = 4):");
-        kv("    slowRate  ", s.slowRate);
-        kv("    slowSpeed ", s.slowSpeed);
-        kv("    fastRate  ", s.fastRate);
-        kv("    fastSpeed ", s.fastSpeed);
-        kv("    turnMinDeg", s.turnMinDeg);
-        kv("    turnSlope ", s.turnSlope);
+        kv("    slowRate   ", s.slowRate);
+        kv("    slowSpeed  ", s.slowSpeed);
+        kv("    fastRate   ", s.fastRate);
+        kv("    fastSpeed  ", s.fastSpeed);
+        kv("    turnMinDeg ", s.turnMinDeg);
+        kv("    turnSlope  ", s.turnSlope);
+        kv("    turnMinTime", s.turnMinTime);
         bool usedByBeacon0 = (Config.beacons.size() > 0 && Config.beacons[0].smartBeaconSetting == SMARTBEACON_CUSTOM_INDEX);
         Serial.println(String("    used by beacon[0]: ") + (usedByBeacon0 ? "yes" : "no"));
     }
@@ -492,26 +494,47 @@ namespace SERIAL_Setup {
         }
     }
 
+    // True if s is a plain decimal integer (optional leading '-'), so that
+    // typos like "1o" are rejected instead of String::toInt() reading them as 1 or 0.
+    static bool isPlainInteger(const String& s) {
+        unsigned start = (s.length() > 0 && s[0] == '-') ? 1 : 0;
+        if (s.length() <= start) return false;
+        for (unsigned i = start; i < s.length(); i++) {
+            if (!isdigit((unsigned char)s[i])) return false;
+        }
+        return true;
+    }
+
     static void cmdSmartcustom(String* tk, int n, const String& /*line*/) {
-        if (n < 2) { err("smartcustom <show|slowrate|slowspeed|fastrate|fastspeed|turnmindeg|turnslope> <n>"); return; }
+        if (n < 2) { err("smartcustom <show|slowrate|slowspeed|fastrate|fastspeed|turnmindeg|turnslope|turnmintime> <n>"); return; }
         const String& sub = tk[1];
 
         if (sub == "show") { printSmartCustom(); return; }
 
-        if (n < 3) { err("smartcustom " + sub + " <n>"); return; }
-        SmartBeaconValues& s = Config.customSmartBeacon;
+        const SmartBeaconField* field = SMARTBEACON_Utils::findCustomFieldByCliName(sub);
+        if (field == nullptr) { err("unknown smartcustom subcommand: " + sub); return; }
+        if (n < 3 || !isPlainInteger(tk[2])) { err("smartcustom " + sub + " <n>"); return; }
+
+        // Out-of-range values are rejected rather than clamped so the caller
+        // (serial_config.html, the mobile app) never shows a value the
+        // firmware did not actually store.
         int v = tk[2].toInt();
+        if (v < field->minValue || v > field->maxValue) {
+            err("smartcustom " + sub + " must be " + String(field->minValue) + "-" + String(field->maxValue));
+            return;
+        }
 
-        if      (sub == "slowrate")   { s.slowRate       = v; }
-        else if (sub == "slowspeed")  { s.slowSpeed      = v; }
-        else if (sub == "fastrate")   { s.fastRate       = v; }
-        else if (sub == "fastspeed")  { s.fastSpeed      = v; }
-        else if (sub == "turnmindeg") { s.turnMinDeg     = v; }
-        else if (sub == "turnslope")  { s.turnSlope      = v; }
-        else { err("unknown smartcustom subcommand: " + sub); return; }
-
+        SmartBeaconValues& s = Config.customSmartBeacon;
+        s.*(field->member) = v;
         SMARTBEACON_Utils::setCustomValues(s);
-        ok("customSmartBeacon." + sub + " = " + String(v));
+        ok("customSmartBeacon." + String(field->jsonKey) + " = " + String(v));
+
+        // Not an error — the edit order is up to the user — but this pair
+        // collapses the speed-interpolated band to a fixed fastRate.
+        if (s.fastSpeed <= s.slowSpeed) {
+            Serial.println("  warning: fastSpeed (" + String(s.fastSpeed) + ") <= slowSpeed (" + String(s.slowSpeed)
+                           + "); interval will be fixed at fastRate while moving");
+        }
     }
 
     static void cmdDisplay(String* tk, int n) {

@@ -102,20 +102,27 @@ selects `smartset 4`. Edits take effect **live** — no `save` + reboot needed
 to retune cadence in the field. Persist with `save` to keep them across
 reboots.
 
-| Command                              | Description                                                |
-|------------------------------------------|------------------------------------------------------------|
-| `smartcustom show`                   | Print the 6 custom values and whether the beacon currently uses them. |
-| `smartcustom slowrate <sec>`         | Beacon interval at or below `slowSpeed`.                   |
-| `smartcustom slowspeed <km/h>`       | Speed at/below which `slowRate` applies.                   |
-| `smartcustom fastrate <sec>`         | Beacon interval at or above `fastSpeed`.                   |
-| `smartcustom fastspeed <km/h>`       | Speed at/above which `fastRate` applies.                   |
-| `smartcustom turnmindeg <deg>`       | Minimum heading change to trigger a corner peg.            |
-| `smartcustom turnslope <n>`          | Turn-angle slope (lower = peg sooner at speed).            |
+| Command                              | Range      | Default | Description                                                |
+|--------------------------------------|------------|---------|------------------------------------------------------------|
+| `smartcustom show`                   |            |         | Print the 7 custom values and whether the beacon currently uses them. |
+| `smartcustom slowrate <sec>`         | 10–3600    | 120     | Beacon interval at or below `slowSpeed`.                   |
+| `smartcustom slowspeed <km/h>`       | 2–200      | 5       | Speed at/below which `slowRate` applies. Corner pegging is armed only at or above this speed. |
+| `smartcustom fastrate <sec>`         | 5–3600     | 60      | Beacon interval at or above `fastSpeed`.                   |
+| `smartcustom fastspeed <km/h>`       | 3–300      | 40      | Speed at/above which `fastRate` applies.                   |
+| `smartcustom turnmindeg <deg>`       | 1–180      | 12      | Minimum heading change to trigger a corner peg.            |
+| `smartcustom turnslope <n>`          | 0–1000     | 60      | Extra turn angle needed at low speed: `turnSlope / speed` degrees is added to `turnmindeg`. `0` = fixed angle at all speeds. |
+| `smartcustom turnmintime <sec>`      | 5–300      | 15      | Minimum time after the previous beacon (of any kind) before a corner beacon may be sent. |
 
-Defaults are bike-like (`120, 5, 60, 40, 12, 60`). The on-disk JSON stores
-these under a top-level `customSmartBeacon` object. Older configs without the
-key are auto-upgraded on first boot via the existing missing-key rewrite
-path.
+Out-of-range or non-numeric values are rejected with an `ERR` and the stored
+value is left unchanged. Setting `fastspeed` at or below `slowspeed` is
+allowed (so the fields can be edited in any order) but prints a warning: the
+interval then stays at `fastRate` whenever the tracker is moving.
+
+The on-disk JSON stores these under a top-level `customSmartBeacon` object.
+Older configs missing a key (for example `turnMinTime`, added after v1.4.3) are
+auto-upgraded on first boot with the default above. Out-of-range values in a
+hand-edited file are clamped into range with a warning, and the file is
+rewritten.
 
 If the saved `smartBeaconSetting` is out of range (e.g. from a hand-edited
 JSON or older firmware), `checkSettings()` clamps to `0` (Runner) and prints

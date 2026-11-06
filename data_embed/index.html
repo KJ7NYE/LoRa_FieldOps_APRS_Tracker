@@ -154,27 +154,33 @@
                                         <div class="row g-3">
                                             <div class="col-md-3">
                                                 <label class="form-label" for="customSmartBeacon.slowRate">Slow rate (s)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.slowRate" name="customSmartBeacon.slowRate" />
+                                                <!-- min/max mirror SMARTBEACON_CUSTOM_FIELDS in src/smartbeacon_utils.cpp -->
+                                                <input type="number" class="form-control" id="customSmartBeacon.slowRate" name="customSmartBeacon.slowRate" min="10" max="3600" step="1" />
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="form-label" for="customSmartBeacon.slowSpeed">Slow speed (km/h)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.slowSpeed" name="customSmartBeacon.slowSpeed" />
+                                                <input type="number" class="form-control" id="customSmartBeacon.slowSpeed" name="customSmartBeacon.slowSpeed" min="2" max="200" step="1" />
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="form-label" for="customSmartBeacon.fastRate">Fast rate (s)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.fastRate" name="customSmartBeacon.fastRate" />
+                                                <input type="number" class="form-control" id="customSmartBeacon.fastRate" name="customSmartBeacon.fastRate" min="5" max="3600" step="1" />
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="form-label" for="customSmartBeacon.fastSpeed">Fast speed (km/h)</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.fastSpeed" name="customSmartBeacon.fastSpeed" />
+                                                <input type="number" class="form-control" id="customSmartBeacon.fastSpeed" name="customSmartBeacon.fastSpeed" min="3" max="300" step="1" />
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="form-label" for="customSmartBeacon.turnMinDeg">Turn min deg</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.turnMinDeg" name="customSmartBeacon.turnMinDeg" />
+                                                <input type="number" class="form-control" id="customSmartBeacon.turnMinDeg" name="customSmartBeacon.turnMinDeg" min="1" max="180" step="1" />
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="form-label" for="customSmartBeacon.turnSlope">Turn slope</label>
-                                                <input type="number" class="form-control" id="customSmartBeacon.turnSlope" name="customSmartBeacon.turnSlope" />
+                                                <input type="number" class="form-control" id="customSmartBeacon.turnSlope" name="customSmartBeacon.turnSlope" min="0" max="1000" step="1" />
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label" for="customSmartBeacon.turnMinTime">Turn min time (s)</label>
+                                                <input type="number" class="form-control" id="customSmartBeacon.turnMinTime" name="customSmartBeacon.turnMinTime" min="5" max="300" step="1" />
+                                                <div class="form-text">Minimum spacing before a corner beacon.</div>
                                             </div>
                                         </div>
                                     </div>

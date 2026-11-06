@@ -197,6 +197,7 @@ function loadSettings(s) {
     setVal('customSmartBeacon.fastSpeed',  csb.fastSpeed  ?? 40);
     setVal('customSmartBeacon.turnMinDeg', csb.turnMinDeg ?? 12);
     setVal('customSmartBeacon.turnSlope',  csb.turnSlope  ?? 60);
+    setVal('customSmartBeacon.turnMinTime', csb.turnMinTime ?? 15);
 
     const disp = s.display ?? {};
     setVal('display.ecoMode',      disp.ecoMode      ?? false);
