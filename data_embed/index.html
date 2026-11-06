@@ -787,8 +787,10 @@
                     </div>
                     <div class="modal-body">
                         <p class="text-muted small mb-3">
-                            Upload a <code>firmware.bin</code> built for this board to replace the running firmware.
-                            The device will reboot automatically after a successful upload.
+                            Upload the <code>&lt;board&gt;_firmware.bin</code> release file for this board (not the
+                            <code>_web_factory.bin</code> or <code>_ota_update.bin</code> USB flasher images).
+                            Settings are kept, and the device reboots automatically after a successful upload.
+                            The 4&nbsp;MB T-Beam and T3 V1.6 can't update this way; use the USB web flasher.
                             Get firmware from the <a href="https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/tag/Current" target="_blank" rel="noopener">GitHub releases</a>.
                         </p>
                         <div class="mb-3">

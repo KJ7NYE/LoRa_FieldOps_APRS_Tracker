@@ -21,6 +21,8 @@
 #include <nrf_wdt.h>
 #else
 #include <esp_task_wdt.h>
+#include <esp_system.h>     // esp_register_shutdown_handler
+#include <rom/ets_sys.h>    // ets_delay_us (busy-wait; safe inside a shutdown handler)
 #endif
 
 #include "configuration.h"
@@ -99,6 +101,23 @@ namespace POWER_Utils {
         }
     #endif
 
+
+    #if defined(VEXT_CTRL) && !defined(ARDUINO_ARCH_NRF52)
+        // Software reboots (esp_restart / ESP.restart: after a web UI firmware
+        // update, a settings save, the CLI `reboot`) reset the CPU but NOT the
+        // GPIO peripheral, so VEXT would stay on and the OLED would never see
+        // the power cycle it gets from the RST button or a power-up. The
+        // SSD1306/SSD1315 can then come back dark. Dropping VEXT here, for long
+        // enough for the panel rail to discharge, makes every software reboot
+        // look like a power cycle to the display. Registered once in setup();
+        // runs in esp_restart() before the reset.
+        static constexpr uint32_t VEXT_OFF_BEFORE_RESTART_US = 300UL * 1000UL;   // 300 ms
+
+        static void powerCyclePeripheralsOnRestart() {
+            vext_ctrl_OFF();
+            ets_delay_us(VEXT_OFF_BEFORE_RESTART_US);
+        }
+    #endif
 
     #ifdef ADC_CTRL
         void adc_ctrl_ON() {
@@ -394,6 +413,9 @@ namespace POWER_Utils {
         #ifdef VEXT_CTRL
             pinMode(VEXT_CTRL,OUTPUT);
             vext_ctrl_ON();
+            #ifndef ARDUINO_ARCH_NRF52
+                esp_register_shutdown_handler(powerCyclePeripheralsOnRestart);
+            #endif
         #endif
 
         #ifdef ADC_CTRL
