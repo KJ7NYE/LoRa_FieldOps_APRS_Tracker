@@ -261,6 +261,7 @@
             </optgroup>
             <optgroup label="Custom">
               <option value="LoRanger_V1">KJ7NYE LoRanger V1 (ESP32-S3)</option>
+              <option value="LoRanger_V2">KJ7NYE LoRanger V2 (ESP32-S3)</option>
             </optgroup>
           </select>
           <div id="flash-board-desc" class="form-text text-muted d-none" style="font-size:0.8rem"></div>
@@ -666,10 +667,11 @@ const BRIDGE_CHIP_VENDOR_IDS = new Set([
 //   on  off | high (run)  low  (held)          <- a past bug: held the whole session
 //   on  on  | low  (reset)low                  <- worse: chip stuck in reset
 // Native-USB boards have no such wiring (confirmed in this repo's
-// tbeam_433_1w_aprs / LoRanger_V1 platformio.ini comments — "no USB-UART
-// bridge... asserting DTR won't cause spurious resets"), so DTR can and must
-// stay asserted there for the CDC TX-flush gate (tud_cdc_connected() on
-// nRF52/TinyUSB, the IDF USB-CDC equivalent on native ESP32-S3).
+// tbeam_433_1w_aprs / LoRanger_V1 / LoRanger_V2 platformio.ini comments —
+// "no USB-UART bridge... asserting DTR won't cause spurious resets"), so
+// DTR can and must stay asserted there for the CDC TX-flush gate
+// (tud_cdc_connected() on nRF52/TinyUSB, the IDF USB-CDC equivalent on
+// native ESP32-S3).
 //
 // Detected by EXCLUDING known bridge-chip vendor IDs rather than allowlisting
 // native-silicon ones, so any future native-USB board (or an unrecognized
@@ -2485,6 +2487,7 @@ const FLASH_BOARDS = {
   'lilygo_t3_433_aprs': 'esp32',
   'lilygo_t3s3_433_aprs': 'esp32s3',
   'LoRanger_V1':        'esp32s3',
+  'LoRanger_V2':        'esp32s3',
   'heltec_wireless_tracker_433_aprs': 'esp32s3',
   'heltec_t114':        'nrf52',
 };

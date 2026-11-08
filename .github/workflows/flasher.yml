@@ -1,7 +1,7 @@
 name: Build and Publish Firmware
 
 # Runs on every GitHub Release publish.
-# Builds all 8 project targets and uploads firmware as release assets.
+# Builds all 9 project targets and uploads firmware as release assets.
 # The web flasher at apps.k7swi.org is updated separately by running
 # ~/deploy_flasher.sh on the server after each release.
 
@@ -69,6 +69,13 @@ jobs:
                       ota_partitions: true
 
                     - name: LoRanger_V1
+                      chip: esp32s3
+                      flash_size: 8MB
+                      flash_mode: qio
+                      spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
+                      ota_partitions: true
+
+                    - name: LoRanger_V2
                       chip: esp32s3
                       flash_size: 8MB
                       flash_mode: qio

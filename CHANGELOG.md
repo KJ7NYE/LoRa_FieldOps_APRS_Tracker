@@ -9,6 +9,41 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-07 — LoRanger V2 variant — Stage 0 scaffolding
+
+Starts the staged port of the KJ7NYE LoRanger Rev 2 hardware (tracker PCB + stackable
+power-board carrier, ESP32-S3, E22-400M30S 1 W SX1262, ATGM336H on a gated rail,
+STK8328-C accelerometer, microSD, optional 128x64 I2C OLED on J2). Full port is
+tracked in `LORANGER_V2_PORT.md`; this commit lands only the board-recognition and
+build-plumbing scaffolding so the environment compiles in CI. No hardware is in hand
+yet — later stages (rail switching, CARRIER_ID decode, BQ25798 telemetry, accelerometer,
+microSD) are build-verified only until the first boards arrive.
+
+- New variant: [variants/LoRanger_V2/](variants/LoRanger_V2/) with `board_pinout.h`
+  (netlist-validated GPIO map) and `platformio.ini` (ESP32-S3, 8 MB OTA partitions,
+  USB-CDC-on-boot, `-D LORANGER_V2`). Pin names reuse the fork's existing conventions
+  (`GPS_VCC` for rail enables, `BUTTON_PIN`, etc.) so existing code picks up the new
+  board without further edits.
+- GPS rail (IO36 / `GPS_VCC`) is asserted HIGH at boot in `GPS_Utils::setup()`,
+  merged with the HELTEC_T114 block since behavior is identical. Rail-off sequencing
+  (drive UART TX low/input before dropping the rail, to stop back-powering the GPS
+  through RXD) is deferred to Stage 1 behind a `HAS_RAIL_SWITCHING` flag.
+- Runtime display detection: V2 ships headless but J2 accepts an optional SSD1306
+  OLED on the shared main I2C bus. `display.cpp` ACK-probes 0x3C at setup — if the
+  probe fails the module-static `displayPresent` flag is cleared and every
+  display-touching function no-ops via a one-line guard. One firmware image handles
+  both configurations; user can retrofit an OLED without reflashing. V1's compile-time
+  `HAS_DISPLAY` strip is unaffected (the probe is gated on `LORANGER_V2`).
+- Build plumbing: added `LoRanger_V2` to top-level `default_envs`, CI matrix, release-
+  build flasher workflow (`flash_mode: qio` matching V1's N8 module), flasher manifest
+  generator, and `serial_config.html` (board dropdown, native-USB DTR comment, chip
+  lookup).
+- Docs: README.md (hardware table, directory listing, `?TELEM?` battery example)
+  and CLAUDE.md (hardware capabilities table, platform macros list, new runtime
+  display-detection constraint documenting the `displayPresent` guard pattern).
+
+---
+
 ## 2026-11-06 — SmartBeacon: per-profile corner-beacon spacing (`turnMinTime`); Custom profile range checks
 
 Closes [#50](../../issues/50). Corner beacons (heading-change beacons) were spaced at least a fixed

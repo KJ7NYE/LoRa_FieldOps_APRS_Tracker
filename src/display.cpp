@@ -337,6 +337,14 @@ void displaySetInvert(bool invert) {
 extern Configuration    Config;
 extern logging::Logger  logger;
 
+// Runtime flag — display is compiled in but may not be physically present.
+// Default true: boards that reliably ship with a soldered OLED/TFT never flip
+// this. LoRanger V2 probes the I2C bus at setup() and clears this to false
+// when no OLED is detected; the guards below then no-op all draw calls to
+// avoid null-buffer crashes (the Adafruit library allocates its frame buffer
+// inside begin(), which we skip when the probe fails).
+static bool displayPresent = true;
+
 #ifdef HAS_TFT
 static uint8_t screenBrightness = 1;   // TFT backlight PWM level (0–255)
 #endif
@@ -377,6 +385,21 @@ void displaySetup() {
             delay(10);  // SSD1306 needs ~1 ms after RST goes HIGH; 10 ms is safe margin
         #endif
         Wire.begin(OLED_SDA, OLED_SCL);
+        #if defined(LORANGER_V2)
+            // V2 ships headless but J2 accepts a 128x64 I2C OLED on the shared
+            // main bus. Probe the SSD1306 address ourselves — the Adafruit
+            // library's begin() probe-failure path has historically hung in a
+            // while(true), which is the bug V1 avoids by stripping HAS_DISPLAY
+            // at compile time. By ACK-probing first we can take the compile-in
+            // / runtime-detect path safely: one firmware image, OLED optional.
+            Wire.beginTransmission(0x3c);
+            if (Wire.endTransmission() != 0) {
+                displayPresent = false;
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "DISPLAY",
+                           "No OLED detected on I2C 0x3C — running headless");
+                return;
+            }
+        #endif
         #ifdef ssd1306
             if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) {
                 delay(200);  // VEXT may still be settling after soft reset; retry once
@@ -418,6 +441,7 @@ void displaySetup() {
 }
 
 void displayToggle(bool toggle) {
+    if (!displayPresent) return;
     #ifdef HAS_TFT
         analogWrite(TFT_BL, toggle ? screenBrightness : 0);
     #else
@@ -432,7 +456,10 @@ void displayToggle(bool toggle) {
 void displaySetInvert(bool invert) {
     #ifndef HAS_TFT
         // TFT boards don't support hardware invert — no-op there.
-        display.invertDisplay(invert);
+        // displayPresent guards the hardware call only; Config sync below
+        // still runs so the preference survives to a later boot where a
+        // display may be fitted.
+        if (displayPresent) display.invertDisplay(invert);
     #endif
     Config.display.invertDisplay = invert;   // keep Config in sync
 }
@@ -447,6 +474,7 @@ void bootStatus(const char* step) {
 }
 
 void startupScreen(const String& versionDate) {
+    if (!displayPresent) return;
     #ifdef HAS_TFT
         #ifdef HELTEC_WIRELESS_TRACKER
             sprite.fillSprite(TFT_BLACK);
@@ -492,6 +520,7 @@ void displayStatus(const String& callsign, const String& tactical,
                    const String& line4, const String& line5,
                    const String& line6) {
     if (millis() < txDisplayEnd) return;
+    if (!displayPresent) return;
     #ifdef HAS_TFT
         #ifdef HELTEC_WIRELESS_TRACKER
             sprite.fillSprite(TFT_BLACK);
@@ -700,6 +729,7 @@ void displayStatus(const String& callsign, const String& tactical,
 }
 
 void displayAPMode(const String& ssid, const String& password) {
+    if (!displayPresent) return;
     #ifdef HAS_TFT
         #ifdef HELTEC_WIRELESS_TRACKER
             sprite.fillSprite(TFT_BLACK);
@@ -745,6 +775,7 @@ void displayAPMode(const String& ssid, const String& password) {
 void displayTxFlash() {}   // superseded by displayTx(); kept for build compat
 
 void displayTx(const String& packet) {
+    if (!displayPresent) return;
     displayActivity();   // wake display if sleeping; reset idle timer
     txDisplayEnd = millis() + 2000;
     #ifdef HAS_TFT
