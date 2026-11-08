@@ -206,6 +206,7 @@ pio run -e heltec_t114 -t uploadfs
 | `lilygo_t3_433_aprs` | LilyGo T3 V1.6 |
 | `lilygo_t3s3_433_aprs` | LilyGo T3-S3 V1.2 / V1.3 (SX1262) |
 | `LoRanger_V1` | LoRanger V1 (KJ7NYE) |
+| `LoRanger_V2` | LoRanger V2 (KJ7NYE) |
 | `heltec_wireless_tracker_433_aprs` | Heltec Wireless Tracker V1.1 |
 
 ---
@@ -467,7 +468,7 @@ Intended for infrastructure monitoring (e.g. a course/event system polling field
 
 | Field | Meaning |
 |---|---|
-| `BATT` | Battery percentage (0-100), or `NA` on boards with no battery sense (e.g. `LoRanger_V1` running off DC power) |
+| `BATT` | Battery percentage (0-100), or `NA` on boards with no battery sense (e.g. `LoRanger_V1` / `LoRanger_V2` running off DC power without a carrier reporting telemetry) |
 | `UP` | Uptime since boot: `<n>m` or `<n>h<n>m` |
 | `IS` | APRS-IS link state (iGate role only, else always `DOWN`): `RW` = connected, verified, downlink enabled (fully bidirectional); `R` = connected but unverified and/or downlink disabled ("Rx only" — uploads degrade to `qAO`, downlink messages are not gated to RF); `DOWN` = no APRS-IS session |
 | `RPT` | Packets actually digipeated since boot (0 if digipeating is off) |
@@ -514,6 +515,7 @@ variants/             Per-board pin definitions and PlatformIO environments
   lilygo_t3_433_aprs/ ESP32 + OLED
   lilygo_t3s3_433_aprs/ ESP32-S3 + SX1262 + OLED
   LoRanger_V1/        ESP32-S3 + SX1262 (headless)
+  LoRanger_V2/        ESP32-S3 + SX1262 + accel + microSD (optional OLED on J2)
   heltec_wireless_tracker_433_aprs/  ESP32-S3 + SX1262 + GNSS + ST7735 TFT
 variants_bsp/         BSP-level variant overrides (T114 nRF52 BSP)
 data/                 Default config JSON (flashed to filesystem)

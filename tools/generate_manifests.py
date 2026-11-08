@@ -72,6 +72,14 @@ ESP_TARGETS = [
         "ota_partitions": True,
     },
     {
+        "id":    "LoRanger_V2",
+        "label": "KJ7NYE LoRanger V2",
+        "chip":  "ESP32-S3",
+        "desc":  "KJ7NYE LoRanger V2 — ESP32-S3, E22-400M30S (SX1262, 1 W), ATGM336H GPS, STK8328-C accel, microSD. Optional 128x64 I2C OLED on J2 (runtime-detected).",
+        "manufacturer": "Custom",
+        "ota_partitions": True,
+    },
+    {
         "id":    "heltec_wireless_tracker_433_aprs",
         "label": "Heltec Wireless Tracker",
         "chip":  "ESP32-S3",

@@ -254,9 +254,17 @@ namespace GPS_Utils {
             digitalWrite(GPS_VCC, LOW);
             delay(200);
         #endif
-        #if defined(HELTEC_T114)
-            // T114: VEXT_ENABLE (P0.21) gates the L76K GPS power rail; must be
-            // HIGH before any UART activity or the GPS reports nothing.
+        #if defined(HELTEC_T114) || defined(LORANGER_V2)
+            // GPS rail-enable boards (active-HIGH LDO enable):
+            //   HELTEC_T114  — VEXT_ENABLE (P0.21) gates the L76K GPS rail.
+            //   LORANGER_V2  — IO36 (EN_PWR1) gates the ATGM336H GPS rail via
+            //                  a TLV75733 LDO; 100 kΩ pulldown means the rail
+            //                  is off at POR and the GPS reports nothing until
+            //                  we drive HIGH.
+            // Stage 1 (HAS_RAIL_SWITCHING) will later own the V2 rail via
+            // Rail_Utils with sequenced shutoff — drive TX low/input before
+            // dropping the rail to stop back-powering the GPS through RXD —
+            // but Stage 0 leaves it on continuously for V1-equivalent behavior.
             pinMode(GPS_VCC, OUTPUT);
             digitalWrite(GPS_VCC, HIGH);
             delay(200);

@@ -35,9 +35,10 @@ There are no automated tests — the CI workflow (`.github/workflows/commit.yml`
 | `lilygo_t3_433_aprs` | ESP32 | SX1278 | None | SSD1306 OLED | WiFi + NimBLE |
 | `lilygo_t3s3_433_aprs` | ESP32-S3 | SX1262 (433 MHz version) | None | SSD1306 OLED | WiFi + NimBLE |
 | `LoRanger_V1` | ESP32-S3 | SX1262 (E22-400M30S) | ATGM336H (onboard) | None (headless) | WiFi + NimBLE |
+| `LoRanger_V2` | ESP32-S3 | SX1262 (E22-400M30S, 1W) | ATGM336H (onboard, gated rail) | Optional 128x64 I2C OLED on J2 (runtime-detected) | WiFi + NimBLE |
 | `heltec_wireless_tracker_433_aprs` | ESP32-S3 (FN8, no PSRAM) | SX1262 | UC6580 (onboard) | ST7735 0.96" 160x80 TFT (TFT_eSPI) | WiFi + NimBLE |
 
-Capability flags (defined per environment in `common_settings.ini`): `HAS_WIFI`, `HAS_NIMBLE`, `HAS_WEB_UI`, `HAS_DISPLAY`, `HAS_BT_CLASSIC`, `HAS_TFT_ST7789`. Platform macros: `HELTEC_T114`, `HELTEC_V3_433_APRS`, `TTGO_T_Beam_V1_2_433_APRS`, `TTGO_T_BEAM_1W`, `LILYGO_T3_433_APRS`, `LILYGO_T3S3_433_APRS`, `LORANGER_V1`, `HELTEC_WIRELESS_TRACKER`.
+Capability flags (defined per environment in `common_settings.ini`): `HAS_WIFI`, `HAS_NIMBLE`, `HAS_WEB_UI`, `HAS_DISPLAY`, `HAS_BT_CLASSIC`, `HAS_TFT_ST7789`. Platform macros: `HELTEC_T114`, `HELTEC_V3_433_APRS`, `TTGO_T_Beam_V1_2_433_APRS`, `TTGO_T_BEAM_1W`, `LILYGO_T3_433_APRS`, `LILYGO_T3S3_433_APRS`, `LORANGER_V1`, `LORANGER_V2`, `HELTEC_WIRELESS_TRACKER`.
 
 ## Architecture
 
@@ -110,6 +111,7 @@ Subsystems share state via `extern` globals (no dependency injection). This is c
 - **ESP32-only features**: WiFi AP/STA, web UI, APRS-IS iGate, TCP KISS, BT Classic. Guard any new ESP32-only code with `#ifndef ARDUINO_ARCH_NRF52` or the appropriate capability flag.
 - **nRF52 C++ standard**: nRF52 build requires C++17 (`-std=gnu++17`). Avoid C++17 features not available in the ESP32 C++11 build unless guarded.
 - **Display disabled on LoRanger_V1**: `HAS_DISPLAY` is not defined; all display code must be guarded. Adding display calls without the guard will cause a boot hang on that target.
+- **LoRanger_V2 runtime display detection**: V2 defines `HAS_DISPLAY=1` but the OLED on J2 is optional. `display.cpp` probes I2C address 0x3C in `displaySetup()` and clears the module-static `displayPresent` flag if no ACK is received. Every display-touching function in the OLED branch guards on that flag (`if (!displayPresent) return;` at the top) to prevent null-buffer crashes when `display.begin()` was skipped. When adding a new display call site, mirror the existing guard pattern — otherwise a V2 unit without an OLED soldered will crash on that path.
 - **Single beacon profile**: Never reference `beacons[1]` or higher in new features.
 - **`heltec_v3_433_aprs` targets V3.2 hardware only**: VEXT polarity is inverted vs. the original V3 (LOW = peripherals ON; see `power_utils.cpp` `vext_ctrl_ON()`/`OFF()` and `variants/heltec_v3_433_aprs/board_pinout.h`). Flashing this firmware to a true V3 board leaves the OLED unpowered (permanently dark display).
 - **Syncronized configuration pathways**: keep index.html, serial_config.html, and mobile apps syncronized for UX, options, and functionality with any configuration changes to the firmware or updates to one of the configuration methods.
