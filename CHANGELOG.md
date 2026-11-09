@@ -30,6 +30,18 @@ transmitted it on LoRa, where the tracker can't hear its own packet.
 - TCP KISS: the self-addressed check runs before the own-callsign loop guard, which
   would otherwise drop the host's third-party frames (their outer source is our callsign).
 
+Also cleans up the serial KISS byte stream, where stray text showed up on the host as
+junk frames:
+
+- The logger now has a real `LOGGER_LEVEL_OFF`, used in KISS mode. It was only lowered
+  to ERROR before, so ERROR lines — notably `Rx failed, code -7` on every LoRa CRC
+  failure — still landed between KISS FENDs. `log off` now really means off.
+- Config saves (`Configuration::writeFile()`, also reached by a remote-config `CSW`
+  arriving over KISS) and the web UI save handler log through the logger instead of
+  raw `Serial`, so they're muted in KISS mode too.
+- `KISS_Utils::encodeKISS()` returns nothing for a packet that isn't valid TNC2,
+  instead of an empty data frame (`C0 00 C0`); every caller skips an empty result.
+
 ## 2026-11-09 — Setup over Bluetooth; WiFi/APRS-IS status details; APRS-IS login fixes (`c4156a2`)
 
 The serial setup CLI can now be driven over Bluetooth LE, so the FieldOps Android

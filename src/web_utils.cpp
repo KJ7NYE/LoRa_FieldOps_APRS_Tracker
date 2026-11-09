@@ -195,7 +195,7 @@ namespace WEB_Utils {
     }
 
     void handleWriteConfiguration(AsyncWebServerRequest *request) {
-        Serial.println("Got new config from www");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WebUI", "Got new config from www");
 
         auto getParamStringSafe = [&](const String& name, const String& defaultValue = "") -> String {
             if (request->hasParam(name, true)) {
@@ -374,15 +374,15 @@ namespace WEB_Utils {
         bool saveSuccess = Config.writeFile();
 
         if (saveSuccess) {
-            Serial.println("Configuration saved successfully");
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WebUI", "Configuration saved successfully");
             AsyncWebServerResponse *response = request->beginResponse(302, "text/html", "");
             response->addHeader("Location", "/?success=1");
             request->send(response);
 
-            Serial.println("Restarting...");
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "WebUI", "Restarting...");
             scheduleRestart(1000);
         } else {
-            Serial.println("Error saving configuration!");
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "WebUI", "Error saving configuration!");
             String errorPage = "<!DOCTYPE html><html><head><title>Error</title></head><body>";
             errorPage += "<h1>Configuration Error:</h1>";
             errorPage += "<p>Couldn't save new configuration. Please try again.</p>";

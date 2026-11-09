@@ -655,6 +655,7 @@ namespace BLE_Utils {
     void sendToPhone(const String& packet) {
         if (packet.length() == 0 || !bluetoothConnected) return;
         const String kissFrame = KISS_Utils::encodeKISS(packet);
+        if (kissFrame.length() == 0) return;   // not valid TNC2: nothing to send
         txChar.notify((const uint8_t*)kissFrame.c_str(), kissFrame.length());
     }
 

@@ -29,7 +29,7 @@ KISS mode (default)  →  type "setup"  →  Setup mode
 Setup / Log mode     →  type "exit"   →  KISS mode (also on disconnect or reboot)
 ```
 
-- **KISS mode** (default): binary APRS TNC passthrough for KISS clients.
+- **KISS mode** (default): binary APRS TNC passthrough for KISS clients. Log output is fully muted, so nothing but KISS frames reaches the client.
 - **Setup mode**: the interactive [configuration CLI](../reference/serial-cli.md). Changes take effect immediately; `save` writes them to flash.
 - **Log mode**: live firmware log output. Set the detail level with `log off|error|warn|info|debug`.
 

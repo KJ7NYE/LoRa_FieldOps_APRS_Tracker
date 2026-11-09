@@ -139,33 +139,38 @@ namespace KISS_Utils {
     }
 
     String encodeKISS(const String& frame) {
+        // A packet that isn't valid TNC2 (no '>' before the first ':') can't
+        // be encoded. Return nothing rather than an empty data frame
+        // (FEND 0x00 FEND), which a KISS host logs as a short/bad frame.
+        // Every caller treats an empty result as "nothing to send".
+        if (!KISS_Utils::validateTNC2Frame(frame)) return "";
+
         String ax25Frame = "";
 
-        if (KISS_Utils::validateTNC2Frame(frame)) {
-            int colonIndex = frame.indexOf(':');
+        int colonIndex = frame.indexOf(':');
 
-            String address = "";
-            bool destinationAddressWritten = false;
-            for (int i = 0; i <= colonIndex; i++) {
-                char currentChar = frame.charAt(i);
-                if (currentChar == ':' || currentChar == '>' || currentChar == ',') {
-                    if (!destinationAddressWritten && (currentChar == ',' || currentChar == ':')) {
-                        ax25Frame = encodeAddressAX25(address) + ax25Frame;
-                        destinationAddressWritten = true;
-                    } else {
-                        ax25Frame += encodeAddressAX25(address);
-                    }
-                    address = "";
+        String address = "";
+        bool destinationAddressWritten = false;
+        for (int i = 0; i <= colonIndex; i++) {
+            char currentChar = frame.charAt(i);
+            if (currentChar == ':' || currentChar == '>' || currentChar == ',') {
+                if (!destinationAddressWritten && (currentChar == ',' || currentChar == ':')) {
+                    ax25Frame = encodeAddressAX25(address) + ax25Frame;
+                    destinationAddressWritten = true;
                 } else {
-                    address += currentChar;
+                    ax25Frame += encodeAddressAX25(address);
                 }
+                address = "";
+            } else {
+                address += currentChar;
             }
-            auto lastAddressChar = (uint8_t)ax25Frame.charAt(ax25Frame.length() - 1);
-            ax25Frame.setCharAt(ax25Frame.length() - 1, (char)(lastAddressChar | IS_LAST_ADDRESS_POSITION_MASK));
-            ax25Frame += (char)AX25Char::ControlField;
-            ax25Frame += (char)AX25Char::InformationField;
-            ax25Frame += frame.substring(colonIndex + 1);
         }
+        auto lastAddressChar = (uint8_t)ax25Frame.charAt(ax25Frame.length() - 1);
+        ax25Frame.setCharAt(ax25Frame.length() - 1, (char)(lastAddressChar | IS_LAST_ADDRESS_POSITION_MASK));
+        ax25Frame += (char)AX25Char::ControlField;
+        ax25Frame += (char)AX25Char::InformationField;
+        ax25Frame += frame.substring(colonIndex + 1);
+
         String kissFrame = encapsulateKISS(ax25Frame, KissCmd::Data);
         return kissFrame;
     }

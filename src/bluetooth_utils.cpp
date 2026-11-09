@@ -122,7 +122,8 @@ namespace BLUETOOTH_Utils {
     void sendToPhone(const String& packet) {
         if (packet.isEmpty()) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT RX KISS", "%s", packet.c_str());
-        SerialBT.print(KISS_Utils::encodeKISS(packet));
+        const String kissFrame = KISS_Utils::encodeKISS(packet);
+        if (kissFrame.length() > 0) SerialBT.print(kissFrame);
     }
 
 }

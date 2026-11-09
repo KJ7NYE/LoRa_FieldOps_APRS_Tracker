@@ -94,6 +94,7 @@ namespace TCP_KISS_Utils {
     void sendToClients(const String& packet) {
         if (!tncServer) return;
         String kissFrame = KISS_Utils::encodeKISS(packet);
+        if (kissFrame.length() == 0) return;   // not valid TNC2: nothing to send
         for (int i = 0; i < MAX_KISS_CLIENTS; i++) {
             if (clients[i].connected()) {
                 clients[i].print(kissFrame);

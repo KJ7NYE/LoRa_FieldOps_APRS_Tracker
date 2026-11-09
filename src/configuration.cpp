@@ -38,9 +38,12 @@
 
 extern logging::Logger logger;
 
+// Runtime saves (setup CLI, web UI, remote-config CSW) report through the
+// logger rather than raw Serial, so the text is muted while the USB port is a
+// KISS TNC and can't corrupt the binary frame stream to the host.
 bool Configuration::writeFile() {
 
-    Serial.println("Saving config..");
+    logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Config", "Saving config..");
 
     JsonDocument data;
     #ifdef ARDUINO_ARCH_NRF52
@@ -54,7 +57,7 @@ bool Configuration::writeFile() {
     File configFile = SPIFFS.open("/tracker_conf.json", "w");
 
     if (!configFile) {
-        Serial.println("Error: Could not open config file for writing");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Config", "Could not open config file for writing");
         return false;
     }
     #ifndef ARDUINO_ARCH_NRF52
@@ -157,7 +160,7 @@ bool Configuration::writeFile() {
         return true;
     #ifndef ARDUINO_ARCH_NRF52
     } catch (...) {
-        Serial.println("Error: Exception occurred while saving config");
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Config", "Exception occurred while saving config");
         configFile.close();
         return false;
     #endif
