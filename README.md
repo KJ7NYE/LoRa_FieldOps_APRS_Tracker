@@ -3,8 +3,8 @@
 ## [⚙️ Open Serial Configuration Tool](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/serial_config.html)
 > Configure your device over USB — no app install required. Works in Chrome and Edge.
 
-## [Android USB Configuration Tool](https://github.com/jeepnjonny/lora-fieldops-config-android/releases)
-> Configure your device over USB with an Android phone app.
+## [Android Configuration App](https://github.com/jeepnjonny/lora-fieldops-config-android/releases)
+> Configure your device from an Android phone over USB, or over Bluetooth when the tracker's Bluetooth PIN is enabled.
 ---
 
 A multi-role LoRa APRS firmware for 433 MHz amateur radio operations. Supports tracker, iGate, and digipeater roles on a single configurable firmware build. Designed for field deployment at events, search and rescue operations, and remote area monitoring where cellular coverage is absent.
@@ -121,7 +121,7 @@ Any role can also digipeat simultaneously. The digipeater includes a 30-second h
 
 ### Connectivity
 - **USB serial KISS TNC** — default mode at 115200 baud; compatible with APRSDroid, Xastir, Direwolf
-- **BLE KISS TNC** — APRS.fi GATT service UUID; compatible with APRSDroid (Android), APRS.fi (iOS)
+- **BLE KISS TNC** — APRS.fi GATT service UUID; compatible with APRSDroid (Android), APRS.fi (iOS). One phone at a time; optional PIN pairing ([docs/ble-pairing-pin.md](docs/ble-pairing-pin.md))
 - **TCP KISS server** — starts automatically when WiFi STA is connected (configurable port, default 8001)
 - **APRS-IS upload** — iGate role; passcode auto-computed from callsign (Friedman algorithm), optional override
 - **Bluetooth Classic SPP** — ESP32 boards with HAS_BT_CLASSIC
@@ -138,6 +138,7 @@ Type `setup` or `log` over serial to switch; any mode returns to KISS on disconn
 - **Web UI** — served over WiFi AP (hold USR button ≥8 s while running, or callsign = NOCALL-7 on first boot); full configuration via browser, plus OTA firmware update, JSON config backup/restore, and a live firmware log viewer
 - **Serial config tool** (`serial_config.html`) — standalone HTML page using the Web Serial API; works in Chrome/Edge 89+; no server required
 - **Serial CLI** — `setup` → interactive command line with `help`, `show`, `save`, `reboot`; see [Serial CLI Reference](#serial-cli-reference) below and [SERIAL_SETUP.md](SERIAL_SETUP.md) for the full command set
+- **Setup over Bluetooth** — the same CLI over a PIN-protected BLE link (Nordic UART Service), used by the Android configuration app; only available when *Require PIN* is on. See "Setup over Bluetooth" in [SERIAL_SETUP.md](SERIAL_SETUP.md)
 - **JSON config file** — `tracker_conf.json` on LittleFS/SPIFFS; importable/exportable via serial config tool or the serial CLI's `export`/`import` commands
 
 ### Display
@@ -281,7 +282,7 @@ Alternatively, use the serial config tool:
 
 ## Serial CLI Reference
 
-Connect USB serial at 115200 baud, then type `setup` to enter the CLI. This is an abbreviated quick reference — see [SERIAL_SETUP.md](SERIAL_SETUP.md) for the full command list with descriptions, behavior notes, and example sessions.
+Connect USB serial at 115200 baud (or a PIN-paired Bluetooth UART client), then type `setup` to enter the CLI. This is an abbreviated quick reference — see [SERIAL_SETUP.md](SERIAL_SETUP.md) for the full command list with descriptions, behavior notes, and example sessions.
 
 ```
 help                              show all commands
@@ -314,7 +315,8 @@ digi off|wide1|wide1+wide2
 
 -- network --
 wifista on|off    ssid <ssid>    password <pw>
-aprsiss server <host>    port <n>    passcode <code>    filter <f>
+aprsiss server <host>    port <n>    passcode [<code>]    filter [<f>]   (no value = clear)
+wifista status           aprsiss status      (live connection details)
 tcpkiss port <n>
 wifi password <text>
 

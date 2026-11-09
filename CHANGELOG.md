@@ -9,6 +9,43 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-09 — Setup over Bluetooth; WiFi/APRS-IS status details; APRS-IS login fixes (`c4156a2`)
+
+The serial setup CLI can now be driven over Bluetooth LE, so the FieldOps Android
+app (or any BLE UART terminal) can configure a tracker without a cable. Status
+commands report more, and two APRS-IS login bugs are fixed.
+
+- **Setup over Bluetooth.** A Nordic UART Service carries the same CLI as USB serial
+  (see "Setup over Bluetooth" in [SERIAL_SETUP.md](SERIAL_SETUP.md)). It exists only
+  when *Require PIN* is on, and both characteristics need a PIN-authenticated link, so
+  a tracker without a PIN can't be reconfigured over the air and its Bluetooth service
+  list is unchanged. The service is registered after the KISS service (KISS attribute
+  handles unchanged for already-paired phones) and isn't advertised. Variants can opt
+  out with `-D DISABLE_BLE_CONFIG`.
+  - The BLE stack's callbacks only copy bytes through lock-free rings
+    ([include/byte_ring.h](include/byte_ring.h)); every command runs on the main loop.
+    Buffers (6 KB) are allocated the first time a phone connects for setup.
+  - One transport holds the setup session at a time (`ERR: config session busy on
+    USB|BLE`); a session idle for 2 minutes can be taken over. A dropped session's
+    unsaved edits stay in RAM and are reported on the next `setup`.
+  - No log mode over Bluetooth, and an `import` paste isn't echoed back.
+- **CLI: CRLF counts as one line ending.** Each `cmd\r\n` used to print two prompts;
+  the stray one could end a client's *next* command early.
+- **`wifista status`** adds `ssid=` (last, may contain spaces). **`aprsiss status`** adds
+  `host=` / `port=` (as dialed), `login=verified|unverified|pending`, and `server=`
+  (the pool member named in the login response, e.g. `T2USASW` behind
+  `rotate.aprs.net`). The web UI's status JSON, its status display, and
+  `serial_config.html` show the same; a rejected login shows amber, receive-only.
+- **Fix: rejected APRS-IS passcode treated as valid.** The login check matched
+  "verified" inside "unverified". It now parses the `# logresp` line, and a rejection
+  is recognized immediately instead of after the 5 s timeout.
+- **`aprsiss passcode` / `aprsiss filter` with no value clear the setting** (auto
+  passcode from the callsign / no filter) instead of returning an error.
+- Docs: SERIAL_SETUP.md, README.md, docs/ble-pairing-pin.md, CLAUDE.md,
+  NRF52_PORT_NOTES.md.
+
+---
+
 ## 2026-11-07 — LoRanger V2 variant — Stage 0 scaffolding
 
 Starts the staged port of the KJ7NYE LoRanger Rev 2 hardware (tracker PCB + stackable

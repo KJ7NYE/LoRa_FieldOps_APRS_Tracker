@@ -2,6 +2,8 @@
 
 The BLE KISS TNC (APRS.fi, APRSDroid, Pinpoint) is protected by a pairing PIN on every target: ESP32 / ESP32-S3 (NimBLE) and nRF52840 (Heltec T114, Bluefruit). Until a phone has paired with the PIN, the tracker does not pass any KISS traffic to or from it.
 
+The PIN also controls **setup over Bluetooth** (the configuration CLI the FieldOps Android app uses; see "Setup over Bluetooth" in [SERIAL_SETUP.md](../SERIAL_SETUP.md)). That setup service only exists while *Require PIN* is on, and only a phone paired with the PIN can use it. With the PIN off, the tracker cannot be configured over Bluetooth at all.
+
 | Setting | Default | Notes |
 |---|---|---|
 | Require PIN | on | Turn off for an open link that any nearby phone can use. |
@@ -63,10 +65,13 @@ BLE events print on USB serial in `log` mode (the serial logger is muted in the 
 | `PIN setting changed since last boot; forgetting all paired phones` | Expected once after a PIN change. |
 | `PIN is enabled but not 4-6 digits; BLE disabled until the PIN is fixed` | The saved PIN is malformed. BLE stays off rather than running unprotected. |
 | `Advertising as ... PIN disabled - any nearby phone can connect` | *Require PIN* is off. |
+| `Config link open (phone subscribed to the setup CLI)` | A PIN-paired phone opened setup over Bluetooth (e.g. the FieldOps app). |
+| `config link closed, unsaved edits kept in RAM` | The Bluetooth setup session ended mid-edit; the next `setup` (USB or Bluetooth) reports the pending edits. |
 
 ## Security notes
 
 - The PIN is stored in plain text in `tracker_conf.json` and shown in the config tools, so anyone who can access the web UI or USB serial can read it. Treat exported configs as sensitive.
 - The PIN blocks casual nearby connections, but a static PIN cannot stop a determined attacker who is able to capture the pairing exchange. Use a six-digit PIN that isn't the default.
+- Anyone who knows the PIN can also **reconfigure** the tracker over Bluetooth (callsign, frequency, TX power, everything the serial CLI can change). This is a second reason not to leave it at the default `123456`. To keep the KISS link but rule out over-the-air setup, build with `-D DISABLE_BLE_CONFIG`.
 - Only one phone can be connected at a time.
 - Bluetooth Classic SPP is not covered. Every current target uses BLE.
