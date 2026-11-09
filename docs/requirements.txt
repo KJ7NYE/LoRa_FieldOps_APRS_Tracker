@@ -1,0 +1,5 @@
+# Python packages for building the documentation site (mkdocs.yml).
+# Pinned so CI and local previews render identically.
+mkdocs==1.6.1
+mkdocs-material==9.8.1
+markdown-callouts==0.4.0

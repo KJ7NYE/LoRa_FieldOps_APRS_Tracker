@@ -1,0 +1,110 @@
+# MkDocs configuration for the LoRa Field Ops APRS Tracker user manual.
+#
+# Built and deployed to GitHub Pages by .github/workflows/docs.yml.
+# Local preview:
+#   pip install -r docs/requirements.txt
+#   mkdocs serve          # http://127.0.0.1:8000
+#
+# The Pages deploy also copies serial_config.html and flasher/ into the built
+# site so their existing URLs keep working. Link to them with absolute URLs
+# (https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/...), since they are
+# not part of docs/ and a relative link would fail the strict build.
+
+site_name: LoRa Field Ops APRS Tracker
+site_description: User manual for the LoRa Field Ops APRS tracker, iGate and digipeater firmware.
+site_url: https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/
+repo_url: https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker
+repo_name: KJ7NYE/LoRa_FieldOps_APRS_Tracker
+edit_uri: edit/main/docs/
+copyright: GPL-3.0 &middot; 73 de KJ7NYE
+
+# requirements.txt is a build input, not a page.
+exclude_docs: |
+  requirements.txt
+
+theme:
+  name: material
+  icon:
+    logo: material/radio-tower
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  # Renders GitHub-style "> [!NOTE]" alerts as admonitions, so the same
+  # Markdown looks right both on github.com and on the manual site.
+  - github-callouts
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Install firmware: getting-started/flashing.md
+      - First-time setup: getting-started/first-setup.md
+  - Using the tracker:
+      - Device roles & digipeating: guide/roles.md
+      - SmartBeacon: guide/smartbeacon.md
+      - Button, display & LED: guide/button-display.md
+      - Connecting apps (KISS TNC): guide/kiss-tnc.md
+      - Bluetooth & pairing PIN: guide/bluetooth.md
+      - iGate & APRS-IS: guide/igate.md
+      - APRS station queries: guide/aprs-queries.md
+      - Remote configuration: guide/remote-config.md
+  - Reference:
+      - Settings: reference/settings.md
+      - Serial CLI: reference/serial-cli.md
+  - Hardware:
+      - hardware/index.md
+      - Board notes: hardware/board-notes.md
+  - Troubleshooting: troubleshooting.md
+  - Developers:
+      - Building from source: developers/building.md
+      - nRF52 port notes: developers/nrf52-port-notes.md
+  - About: about.md
