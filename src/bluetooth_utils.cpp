@@ -27,6 +27,7 @@
 #include "bluetooth_utils.h"
 #include "configuration.h"
 #include "lora_utils.h"
+#include "query_utils.h"
 #include "kiss_utils.h"
 #include "display.h"
 #include "logger.h"
@@ -112,9 +113,10 @@ namespace BLUETOOTH_Utils {
     void sendToLoRa() {
         if (!shouldSendToLoRa) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT TX", "%s", serialReceived.c_str());
+        shouldSendToLoRa = false;
+        if (QUERY_Utils::processKissHostPacket(serialReceived)) return;   // addressed to us: answered locally
         displayTx(serialReceived);   // show TX overlay with packet content
         LoRa_Utils::sendNewPacket(serialReceived);
-        shouldSendToLoRa = false;
     }
 
     void sendToPhone(const String& packet) {

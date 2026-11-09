@@ -23,6 +23,7 @@
 #include "battery_utils.h"
 #include "gps_utils.h"
 #include "station_utils.h"
+#include "query_utils.h"
 #include "version.h"
 #include "ble_utils.h"
 #ifdef HAS_WIFI
@@ -1367,7 +1368,9 @@ namespace SERIAL_Setup {
             if ((uint8_t)c == 0xC0 && kissSerialBuf.length() > 1) {
                 bool isData = false;
                 String frame = KISS_Utils::decodeKISS(kissSerialBuf, isData);
-                if (isData && frame.length() > 0) {
+                // Messages addressed to this device (e.g. a query an external
+                // iGate gated down from APRS-IS) are answered locally, not TX'd.
+                if (isData && frame.length() > 0 && !QUERY_Utils::processKissHostPacket(frame)) {
                     LoRa_Utils::sendNewPacket(frame);
                 }
                 kissSerialBuf = "";

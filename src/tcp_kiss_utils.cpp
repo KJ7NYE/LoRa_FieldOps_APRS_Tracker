@@ -12,6 +12,7 @@
 #include "configuration.h"
 #include "kiss_utils.h"
 #include "lora_utils.h"
+#include "query_utils.h"
 #include "logger.h"
 
 extern Configuration    Config;
@@ -43,6 +44,14 @@ namespace TCP_KISS_Utils {
             bool isData = false;
             String frame = KISS_Utils::decodeKISS(buf, isData);
             if (isData && frame.length() > 0) {
+                // Messages addressed to this device are answered locally first.
+                // This runs before the own-callsign loop guard below because an
+                // external iGate third-party wraps downlinked messages under OUR
+                // callsign (K7SWI-9>APRS:}SENDER>...), which the guard would drop.
+                if (QUERY_Utils::processKissHostPacket(frame)) {
+                    buf = "";
+                    return;
+                }
                 // Check it's not our own callsign to avoid loop
                 String sender = frame.substring(0, frame.indexOf(">"));
                 if (sender != Config.beacons[0].callsign) {

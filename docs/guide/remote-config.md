@@ -2,6 +2,8 @@
 
 Remote configuration lets a field-management system read and change a small set of settings by sending ordinary directed APRS messages, over LoRa RF and, for iGate-role nodes, over APRS-IS. No physical access to the device is needed.
 
+Commands can also reach a node from APRS-IS through an [external iGate on its KISS link](kiss-tnc.md#using-an-external-igate-aprx-direwolf) such as aprx. These are handled exactly like commands heard on RF: reads always work, and writes need the `CSU` unlock token. The node can't see whether the external iGate's own APRS-IS login is verified, so the built-in iGate's extra rule (refusing `CSU`/`CSW` on an unverified login) doesn't apply on this path.
+
 The feature is **off by default**. A device stays locked down until an operator enables it locally over USB, Bluetooth or the web UI.
 
 ## Enable it
