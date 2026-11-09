@@ -21,6 +21,16 @@
 
 #include <Arduino.h>
 
+// BLE configuration link: the serial setup CLI carried over a Nordic UART
+// Service (NUS) GATT service so the FieldOps app can configure the tracker
+// without a USB cable. Built on every BLE-capable board unless a variant opts
+// out with -D DISABLE_BLE_CONFIG. At runtime the service is only registered
+// when BLE PIN pairing is required, so a PIN-less tracker can never be
+// reconfigured over the air (and its GATT table is unchanged).
+#if (defined(ARDUINO_ARCH_NRF52) || defined(HAS_NIMBLE)) && !defined(DISABLE_BLE_CONFIG)
+    #define HAS_BLE_CONFIG
+#endif
+
 
 namespace BLE_Utils {
 
@@ -28,6 +38,32 @@ namespace BLE_Utils {
     void setup();
     void sendToLoRa();
     void sendToPhone(const String& packet);
+
+    #ifdef HAS_BLE_CONFIG
+    // True while a PIN-authenticated phone is subscribed to the config TX
+    // characteristic. Only meaningful from the main loop.
+    bool configLinkOpen();
+
+    // Incremented every time a config link opens, so the CLI can tell a
+    // reconnect apart from a link that never dropped between two loop passes.
+    uint32_t configLinkGeneration();
+
+    // Next byte the phone wrote to the config RX characteristic, or -1.
+    int configRead();
+
+    // Reply stream for the CLI. Bytes are queued and sent as MTU-sized
+    // notifications by serviceConfigLink(); when the queue fills, write()
+    // drains it in place (bounded wait) instead of dropping output.
+    Print& configOutput();
+
+    // Main-loop pump: sends queued reply bytes. Cheap when idle.
+    void serviceConfigLink();
+
+    // Blocks until queued reply bytes have been handed to the BLE stack, the
+    // link drops, or `timeoutMs` elapses. Used before a reboot so the phone
+    // sees the final "Rebooting..." line.
+    void flushConfigOutput(uint32_t timeoutMs);
+    #endif
 
 }
 

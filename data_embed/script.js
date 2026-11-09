@@ -384,6 +384,23 @@ async function txNow(type) {
 
 let _aprsIsPoller = null;
 
+// "connected to T2USASW via rotate.aprs.net:14580" — server is the pool member
+// named in the login response; host:port is what the tracker dialed.
+function describeAprsIsConnection(host, port, server) {
+    const dialed = host ? (port ? `${host}:${port}` : host) : '';
+    if (server && dialed) return `connected to ${server} via ${dialed}`;
+    if (server)           return `connected to ${server}`;
+    if (dialed)           return `connected to ${dialed}`;
+    return 'connected';
+}
+
+// Suffix for the login outcome; empty for verified (or firmware that doesn't report it).
+function describeAprsIsLogin(login) {
+    if (login === 'unverified') return ' — receive-only (passcode rejected)';
+    if (login === 'pending')    return ' — logging in…';
+    return '';
+}
+
 async function checkAprsIsStatus() {
     const led = document.getElementById('aprsIsLed');
     const txt = document.getElementById('aprsIsStatusText');
@@ -393,9 +410,11 @@ async function checkAprsIsStatus() {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const d = await res.json();
         if (d.connected) {
-            led.style.background = '#28a745';
-            txt.textContent = 'connected';
-            txt.className = 'text-success small';
+            // A rejected passcode leaves the socket open but receive-only: amber, not green.
+            const rejected = d.login === 'unverified';
+            led.style.background = rejected ? '#ffc107' : '#28a745';
+            txt.textContent = describeAprsIsConnection(d.host, d.port, d.server) + describeAprsIsLogin(d.login);
+            txt.className = rejected ? 'text-warning small' : 'text-success small';
         } else {
             led.style.background = '#dc3545';
             txt.textContent = 'disconnected';
@@ -438,7 +457,8 @@ async function checkWifiStaStatus() {
         const d = await res.json();
         if (d.connected) {
             led.style.background = '#28a745';
-            txt.textContent = d.ip ? `connected (${d.ip})` : 'connected';
+            const where = [d.ssid, d.ip].filter(Boolean).join(', ');
+            txt.textContent = where ? `connected (${where})` : 'connected';
             txt.className = 'text-success small';
         } else {
             led.style.background = '#dc3545';

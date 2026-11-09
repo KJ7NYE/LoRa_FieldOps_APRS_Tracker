@@ -38,7 +38,7 @@ There are no automated tests — the CI workflow (`.github/workflows/commit.yml`
 | `LoRanger_V2` | ESP32-S3 | SX1262 (E22-400M30S, 1W) | ATGM336H (onboard, gated rail) | Optional 128x64 I2C OLED on J2 (runtime-detected) | WiFi + NimBLE |
 | `heltec_wireless_tracker_433_aprs` | ESP32-S3 (FN8, no PSRAM) | SX1262 | UC6580 (onboard) | ST7735 0.96" 160x80 TFT (TFT_eSPI) | WiFi + NimBLE |
 
-Capability flags (defined per environment in `common_settings.ini`): `HAS_WIFI`, `HAS_NIMBLE`, `HAS_WEB_UI`, `HAS_DISPLAY`, `HAS_BT_CLASSIC`, `HAS_TFT_ST7789`. Platform macros: `HELTEC_T114`, `HELTEC_V3_433_APRS`, `TTGO_T_Beam_V1_2_433_APRS`, `TTGO_T_BEAM_1W`, `LILYGO_T3_433_APRS`, `LILYGO_T3S3_433_APRS`, `LORANGER_V1`, `LORANGER_V2`, `HELTEC_WIRELESS_TRACKER`.
+Capability flags (defined per environment in `common_settings.ini`): `HAS_WIFI`, `HAS_NIMBLE`, `HAS_WEB_UI`, `HAS_DISPLAY`, `HAS_BT_CLASSIC`, `HAS_TFT_ST7789`. Derived in `include/ble_utils.h`: `HAS_BLE_CONFIG` (setup CLI over BLE; on for every BLE board unless a variant sets `-D DISABLE_BLE_CONFIG`). Platform macros: `HELTEC_T114`, `HELTEC_V3_433_APRS`, `TTGO_T_Beam_V1_2_433_APRS`, `TTGO_T_BEAM_1W`, `LILYGO_T3_433_APRS`, `LILYGO_T3S3_433_APRS`, `LORANGER_V1`, `LORANGER_V2`, `HELTEC_WIRELESS_TRACKER`.
 
 ## Architecture
 
@@ -65,7 +65,7 @@ See `NRF52_PORT_NOTES.md` for port decisions and known quirks.
 ### Configuration System
 Runtime config is stored as `tracker_conf.json` on the filesystem. Three interfaces, all without reflashing:
 1. **Web UI** — WiFi AP at 192.168.4.1 (auto-starts on first boot or long button hold); served by `web_utils.cpp`
-2. **Serial CLI** — Type `setup` from serial KISS mode; see `serial_setup.cpp` and `SERIAL_SETUP.md`
+2. **Serial CLI** — Type `setup` from serial KISS mode; see `serial_setup.cpp` and `SERIAL_SETUP.md`. The same CLI runs over BLE (Nordic UART Service, PIN-protected trackers only) for the FieldOps app; one transport holds the setup session at a time
 3. **Serial KISS** — Default mode; binary APRS passthrough
 
 **First-boot defaults:**
@@ -95,7 +95,7 @@ Runtime config is stored as `tracker_conf.json` on the filesystem. Three interfa
 | `src/aprs_is_utils.cpp` | iGate APRS-IS TCP socket; auto-passcode computation |
 | `src/kiss_utils.cpp` | USB serial KISS TNC mode |
 | `src/tcp_kiss_utils.cpp` | TCP KISS TNC server (WiFi STA, port 8001) |
-| `src/ble_utils.cpp` | BLE KISS TNC (NimBLE on ESP32, native on nRF52; APRS.fi GATT UUID) |
+| `src/ble_utils.cpp` | BLE KISS TNC (NimBLE on ESP32, native on nRF52; APRS.fi GATT UUID) and the BLE config link (setup CLI over NUS, registered only when the PIN is required) |
 | `src/bluetooth_utils.cpp` | BT Classic SPP (ESP32 non-S3 only) |
 | `src/power_utils.cpp` | Sleep modes; GPS disable for power saving |
 | `src/battery_utils.cpp` | ADC voltage reads; percentage; sleep threshold |

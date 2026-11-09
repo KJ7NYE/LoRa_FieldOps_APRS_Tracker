@@ -95,15 +95,37 @@ namespace WEB_Utils {
         request->send(200, "text/plain", "OK");
     }
 
+    // Same fields as the serial CLI's `aprsiss status` (host/port as dialed,
+    // login = verified|unverified|pending, server = pool member named in the
+    // login response, once received).
     void handleAprsIsStatus(AsyncWebServerRequest *request) {
-        bool up = APRS_IS_Utils::isConnected();
-        request->send(200, "application/json", up ? "{\"connected\":true}" : "{\"connected\":false}");
+        JsonDocument doc;
+        const bool up = APRS_IS_Utils::isConnected();
+        doc["connected"] = up;
+        if (up) {
+            doc["host"] = APRS_IS_Utils::getConnectedHost();
+            doc["port"]  = APRS_IS_Utils::getConnectedPort();
+            doc["login"] = APRS_IS_Utils::getLoginState();
+            const String serverName = APRS_IS_Utils::getServerName();
+            if (serverName.length() > 0) doc["server"] = serverName;
+        }
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
     }
 
+    // Same fields as the serial CLI's `wifista status`. Serialized with
+    // ArduinoJson so an SSID containing quotes or backslashes stays valid JSON.
     void handleWifiStaStatus(AsyncWebServerRequest *request) {
-        bool up = WIFI_Utils::isSTAConnected();
-        String json = up ? "{\"connected\":true,\"ip\":\"" + WiFi.localIP().toString() + "\"}"
-                          : "{\"connected\":false}";
+        JsonDocument doc;
+        const bool up = WIFI_Utils::isSTAConnected();
+        doc["connected"] = up;
+        if (up) {
+            doc["ip"]   = WiFi.localIP().toString();
+            doc["ssid"] = WiFi.SSID();
+        }
+        String json;
+        serializeJson(doc, json);
         request->send(200, "application/json", json);
     }
 

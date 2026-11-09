@@ -2181,9 +2181,12 @@ function renderConfig() {
         try {
           const resp = await sendCmd('wifista status');
           if (/wifiSTA\.connected=true/.test(resp)) {
-            const ipM = /ip=(\S+)/.exec(resp);
+            const ipM   = /ip=(\S+)/.exec(resp);
+            // ssid= is last on the line and unbounded, so SSIDs with spaces survive.
+            const ssidM = /ssid=(.*)$/m.exec(resp);
+            const where = [ssidM?.[1]?.trim(), ipM?.[1]].filter(Boolean).join(', ');
             led.style.background = '#28a745';
-            statusTxt.textContent = ipM ? `connected (${ipM[1]})` : 'connected';
+            statusTxt.textContent = where ? `connected (${where})` : 'connected';
             statusTxt.className = 'text-success small';
           } else {
             led.style.background = '#dc3545';
@@ -2306,9 +2309,22 @@ function renderConfig() {
         try {
           const resp = await sendCmd('aprsiss status');
           if (/aprsIS\.connected=true/.test(resp)) {
-            led.style.background = '#28a745';
-            statusTxt.textContent = 'connected';
-            statusTxt.className = 'text-success small';
+            // host:port as dialed (often a rotate pool); server = pool member from the login response.
+            const host   = /host=(\S+)/.exec(resp)?.[1];
+            const port   = /port=(\d+)/.exec(resp)?.[1];
+            const server = /server=(\S+)/.exec(resp)?.[1];
+            const login  = /login=(\S+)/.exec(resp)?.[1];
+            const dialed = host ? (port ? `${host}:${port}` : host) : '';
+            // A rejected passcode leaves the socket open but receive-only: amber, not green.
+            const rejected = login === 'unverified';
+            led.style.background = rejected ? '#ffc107' : '#28a745';
+            statusTxt.textContent =
+              (server && dialed ? `connected to ${server} via ${dialed}` :
+               server           ? `connected to ${server}` :
+               dialed           ? `connected to ${dialed}` : 'connected') +
+              (rejected            ? ' — receive-only (passcode rejected)' :
+               login === 'pending' ? ' — logging in…' : '');
+            statusTxt.className = rejected ? 'text-warning small' : 'text-success small';
           } else {
             led.style.background = '#dc3545';
             statusTxt.textContent = 'disconnected';

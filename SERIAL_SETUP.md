@@ -11,7 +11,7 @@ configuration, or quick edits when you already have the device tethered.
 1. Connect the tracker to your computer via USB.
 2. Open any serial terminal at **115200 baud** (PuTTY, Tera Term, PlatformIO
    Monitor, Arduino IDE Serial Monitor, `screen`, etc.).
-3. Line ending may be CR, LF, or CRLF — all work.
+3. Line ending may be CR, LF, or CRLF — all work (CRLF counts as one Enter).
 4. Type `setup` and press **Enter**.
 5. You should see:
 
@@ -51,6 +51,51 @@ Edits live in RAM until you `save`. Three exit paths:
 While setup mode is active, the global logger is dropped to **ERROR-only** so
 that periodic `[INFO] LoRa Tx --->` lines don't garble your prompt. The
 previous level is restored on `exit`.
+
+---
+
+## Setup over Bluetooth
+
+The same CLI is also reachable over Bluetooth LE, so the FieldOps app (or any
+BLE UART terminal such as nRF Connect or Serial Bluetooth Terminal) can
+configure a tracker without a cable. Every command in this document works the
+same way over both links.
+
+**Requirements**
+
+- Bluetooth on (`bt on`) **and PIN pairing required** (`bt pin on`). With the PIN
+  off the tracker does not offer the setup service at all, so nobody nearby can
+  reconfigure it. Turn the PIN on over USB first, `save`, and `reboot`.
+- The phone pairs with the PIN the first time it connects.
+- One BLE connection at a time: disconnect APRSDroid / APRS.fi before connecting
+  the FieldOps app, and the reverse.
+
+**GATT layout** (Nordic UART Service, not advertised; find the tracker by its
+APRS.fi KISS service UUID `00000001-ba2a-46c9-ae49-01b0961f68bb`, then discover):
+
+| UUID | Direction | Use |
+|---|---|---|
+| `6E400001-B5A3-F393-E0A9-E50E24DCCA9E` | service | Setup CLI |
+| `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | phone → tracker (write) | Command bytes, e.g. `setup\r\n` |
+| `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | tracker → phone (notify) | CLI output |
+
+Both characteristics require an authenticated (PIN-paired) encrypted link.
+
+**Differences from USB**
+
+- No KISS or LOG mode on this link: until you type `setup` it ignores every
+  line except `setup`, just as USB does in KISS mode. `log` is USB-only.
+- `import` does not echo the pasted JSON back (typed commands are still echoed).
+- Only one link can hold the setup session. `setup` on the other link answers
+  `ERR: config session busy on USB` (or `BLE`). A session that has had no input
+  for 2 minutes (for example, a USB cable pulled without `exit`) can be taken over.
+- If the BLE link drops mid-session, the session ends. Unsaved edits stay in RAM
+  and the next `setup` (either link) reports them, so you can `save` or `discard`.
+- On nRF52 (Heltec T114) the link uses the default 23-byte ATT MTU, so long output
+  (`help`, `export`) takes a few seconds to arrive.
+
+Variants that should not offer this can opt out at build time with
+`-D DISABLE_BLE_CONFIG`.
 
 ---
 
@@ -228,12 +273,13 @@ extension.
 | `wifista ssid <index> <ssid...>`              | Change the SSID of an existing network.    |
 | `wifista password <index> <text>`             | Change the password of an existing network. |
 | `wifista list`                                | List all configured networks (masked passwords). |
+| `wifista status`                              | Live station status: `wifiSTA.connected=true ip=<addr> ssid=<network>` (ssid last; may contain spaces) or `wifiSTA.connected=false`. |
 | `aprsiss server <host>`                       | APRS-IS server hostname.                   |
 | `aprsiss port <n>`                            | APRS-IS server port.                       |
-| `aprsiss passcode <code>`                     | APRS-IS passcode override (leave unset to auto-compute from callsign). |
-| `aprsiss filter <filter>`                     | APRS-IS server-side filter string.         |
+| `aprsiss passcode [<code>]`                   | APRS-IS passcode override. With no value, clears the override so the passcode is auto-computed from the callsign. |
+| `aprsiss filter [<filter>]`                   | APRS-IS server-side filter string. With no value, clears it (no filter). |
 | `aprsiss downlink on\|off`                    | Gate directed messages from APRS-IS back to RF (only to a station heard directly on RF in the last 30 min). |
-| `aprsiss status`                              | Print live APRS-IS connection status.      |
+| `aprsiss status`                              | Live APRS-IS status: `aprsIS.connected=true host=<as dialed> port=<n> login=<verified|unverified|pending> server=<name>` or `aprsIS.connected=false`. `login=unverified` means the passcode was rejected: the server keeps the connection open but receive-only. A changed passcode is only used on the next connect (save + reboot). `server` is the pool member named in the login response (e.g. `T2USASW` behind `rotate.aprs.net`) and appears once that response has arrived. |
 | `tcpkiss port <n>`                            | TCP KISS server port (default 8001; server auto-starts once WiFi STA connects). |
 | `remotecfg show`                              | Print remote-config status (enabled, masked token, unlock window). |
 | `remotecfg on\|off`                           | Master switch for the remote read/write protocol (see below). Off by default. |

@@ -24,6 +24,7 @@
 #include "gps_utils.h"
 #include "station_utils.h"
 #include "version.h"
+#include "ble_utils.h"
 #ifdef HAS_WIFI
 #include <vector>
 #include <WiFi.h>
@@ -39,11 +40,40 @@ extern bool                 digipeaterActive;
 namespace SERIAL_Setup {
 
     // ---------------- state ----------------
-    enum class SerialMode { KISS, SETUP, LOG };
+    //
+    // The CLI can be driven from two transports: USB serial (always) and the
+    // BLE configuration link (HAS_BLE_CONFIG, PIN-protected trackers only).
+    // Only one of them may hold the setup session at a time, since both edit
+    // the single global Config. Every reply goes to `replyOut`, which points
+    // at whichever transport supplied the input currently being processed
+    // (see ScopedInputSource), so command handlers never need to know which
+    // transport they are serving.
+    enum class SerialMode { KISS, SETUP, LOG };          // USB port mode
+    enum class InputSource { USB, BLE };
+
     static SerialMode           serialMode      = SerialMode::KISS;
+    static InputSource          inputSource     = InputSource::USB;
+    static Print*               replyOut        = &Serial;
     static bool                 exitArmed       = false;
-    static String               buf;
-    static bool                 dirty           = false;
+    static String               usbLine;                // USB line / trigger-word accumulator
+    static bool                 usbLastByteWasCR = false;
+    static bool                 dirty           = false;    // RAM Config differs from flash
+    static uint32_t             lastSetupActivityMs = 0;    // last input byte from the session owner
+
+    // A session owner that has gone quiet this long (e.g. USB cable pulled
+    // without 'exit', which most USB bridges cannot report) may be taken over
+    // by the other transport instead of locking it out until reboot.
+    static const uint32_t       SETUP_TAKEOVER_IDLE_MS = 120000;
+
+    #ifdef HAS_BLE_CONFIG
+    // The BLE link has no KISS or LOG mode: it is either idle (waiting for
+    // 'setup', every other line silently ignored exactly like USB KISS mode,
+    // so clients use the same entry handshake) or holding the setup session.
+    static bool                 bleInSetup          = false;
+    static String               bleLine;
+    static bool                 bleLastByteWasCR    = false;
+    static uint32_t             bleSeenGeneration   = 0;
+    #endif
     static bool                 showSecrets     = false;
     static logging::LoggerLevel savedLogLevel   = logging::LoggerLevel::LOGGER_LEVEL_INFO;
     static logging::LoggerLevel currentLogLevel = logging::LoggerLevel::LOGGER_LEVEL_INFO;
@@ -58,11 +88,63 @@ namespace SERIAL_Setup {
     static bool                 pasteEscapeNext = false;
     static const size_t         PASTE_MAX_BYTES = 16384;
 
+    // Routes replies to `source` for the lifetime of the scope.
+    class ScopedInputSource {
+    public:
+        ScopedInputSource(InputSource source, Print& output)
+            : savedSource(inputSource), savedOutput(replyOut) {
+            inputSource = source;
+            replyOut    = &output;
+        }
+        ~ScopedInputSource() {
+            inputSource = savedSource;
+            replyOut    = savedOutput;
+        }
+    private:
+        InputSource savedSource;
+        Print*      savedOutput;
+    };
+
+    static bool usbOwnsSetup() { return serialMode == SerialMode::SETUP; }
+
+    static bool bleOwnsSetup() {
+        #ifdef HAS_BLE_CONFIG
+            return bleInSetup;
+        #else
+            return false;
+        #endif
+    }
+
+    // True when the transport whose input is being processed holds the session.
+    static bool sourceOwnsSetup() {
+        return inputSource == InputSource::USB ? usbOwnsSetup() : bleOwnsSetup();
+    }
+
+    // Collapses a CRLF pair into one line ending: returns true for a '\n'
+    // that directly follows a '\r'. Without this every "cmd\r\n" produced two
+    // prompts, and the second could be mistaken by a client for the end of
+    // its *next* command's reply (likely over BLE, where replies arrive in
+    // small notifications rather than one USB read).
+    static bool isSecondHalfOfCRLF(char c, bool& lastByteWasCR) {
+        const bool swallow = (c == '\n' && lastByteWasCR);
+        lastByteWasCR = (c == '\r');
+        return swallow;
+    }
+
+    // Flushes queued replies before the chip resets, so a BLE client sees the
+    // final status line ("Rebooting...") instead of a silent disconnect.
+    // USB keeps relying on the existing short delay() at each restart site.
+    static void flushRepliesBeforeRestart() {
+        #ifdef HAS_BLE_CONFIG
+            if (inputSource == InputSource::BLE) BLE_Utils::flushConfigOutput(1500);
+        #endif
+    }
+
     // ---------------- helpers ----------------
-    static void prompt()                    { Serial.print(F("\n> ")); }
-    static void ok(const String& msg)       { Serial.println("OK: " + msg); dirty = true; exitArmed = false; }
-    static void okClean(const String& msg)  { Serial.println("OK: " + msg); exitArmed = false; }
-    static void err(const String& msg)      { Serial.println("ERR: " + msg); exitArmed = false; }
+    static void prompt()                   { replyOut->print(F("\n> ")); }
+    static void ok(const String& msg)       { replyOut->println("OK: " + msg); dirty = true; exitArmed = false; }
+    static void okClean(const String& msg)  { replyOut->println("OK: " + msg); exitArmed = false; }
+    static void err(const String& msg)      { replyOut->println("ERR: " + msg); exitArmed = false; }
 
     static String maskSecret(const String& s) {
         if (showSecrets) return s;
@@ -115,94 +197,94 @@ namespace SERIAL_Setup {
 
     // ---------------- printers ----------------
     static void printBanner() {
-        Serial.println();
-        Serial.println(F("================================================"));
-        Serial.println(F(" LoRa APRS Tracker - Serial Setup"));
-        Serial.println(F(" type 'help' for commands"));
-        Serial.println(F(" type 'exit' to return to KISS TNC mode"));
-        Serial.println(F("================================================"));
+        replyOut->println();
+        replyOut->println(F("================================================"));
+        replyOut->println(F(" LoRa APRS Tracker - Serial Setup"));
+        replyOut->println(F(" type 'help' for commands"));
+        replyOut->println(F(" type 'exit' to return to KISS TNC mode"));
+        replyOut->println(F("================================================"));
     }
 
     static void printHelp() {
-        Serial.println(F("\n-- core --"));
-        Serial.println(F("  help                       show this list"));
-        Serial.println(F("  show [section]             dump config (sections: beacons|lora|"));
-        Serial.println(F("                              smartcustom|display|bt|bat|ptt|wifi|other)"));
-        Serial.println(F("  show secrets               toggle masked password display"));
-        Serial.println(F("  save                       persist to tracker_conf.json"));
-        Serial.println(F("  export                     dump current saved tracker_conf.json"));
-        Serial.println(F("  import                     paste full tracker_conf.json (auto-end on"));
-        Serial.println(F("                              balanced braces, Ctrl-C aborts)"));
-        Serial.println(F("  discard                    leave without saving"));
-        Serial.println(F("  exit                       leave (errors if dirty)"));
-        Serial.println(F("  reboot                     reboot the device"));
-        Serial.println(F("  format YES-ERASE-ALL       wipe LittleFS/SPIFFS, reboot to defaults"));
+        replyOut->println(F("\n-- core --"));
+        replyOut->println(F("  help                       show this list"));
+        replyOut->println(F("  show [section]             dump config (sections: beacons|lora|"));
+        replyOut->println(F("                              smartcustom|display|bt|bat|ptt|wifi|other)"));
+        replyOut->println(F("  show secrets               toggle masked password display"));
+        replyOut->println(F("  save                       persist to tracker_conf.json"));
+        replyOut->println(F("  export                     dump current saved tracker_conf.json"));
+        replyOut->println(F("  import                     paste full tracker_conf.json (auto-end on"));
+        replyOut->println(F("                              balanced braces, Ctrl-C aborts)"));
+        replyOut->println(F("  discard                    leave without saving"));
+        replyOut->println(F("  exit                       leave (errors if dirty)"));
+        replyOut->println(F("  reboot                     reboot the device"));
+        replyOut->println(F("  format YES-ERASE-ALL       wipe LittleFS/SPIFFS, reboot to defaults"));
         #ifdef ARDUINO_ARCH_NRF52
-        Serial.println(F("  otadfu                     enter BLE OTA DFU mode (nRF52 only)"));
+        replyOut->println(F("  otadfu                     enter BLE OTA DFU mode (nRF52 only)"));
         #endif
-        Serial.println(F("  log <off|error|warn|info|debug>"));
-        Serial.println(F("\n-- beacons --"));
-        Serial.println(F("  beacon callsign <CALL-SSID>"));
-        Serial.println(F("  beacon symbol <c>          overlay <c>          micE <0..7>"));
-        Serial.println(F("  beacon comment <text...>   status <text...>     label <text...>"));
-        Serial.println(F("  beacon tactical <text...>  (<=9 chars; empty = position report)"));
-        Serial.println(F("  beacon smart on|off"));
-        Serial.println(F("  beacon smartset <0..4>     (0=Runner 1=Bike 2=Car 3=Jetboat 4=Custom)"));
-        Serial.println(F("\n-- smartcustom (used when beacon smartset = 4) --"));
-        Serial.println(F("  smartcustom show"));
-        Serial.println(F("  smartcustom slowrate <sec>     slowspeed <km/h>"));
-        Serial.println(F("  smartcustom fastrate <sec>     fastspeed <km/h>"));
-        Serial.println(F("  smartcustom turnmindeg <deg>   turnslope <n>"));
-        Serial.println(F("  smartcustom turnmintime <sec>  (min spacing for corner beacons)"));
-        Serial.println(F("\n-- lora --"));
-        Serial.println(F("  lora freq <Hz>             sf <7..12>           bw <Hz>"));
-        Serial.println(F("  lora cr <5..8>             power <dBm>"));
-        Serial.println(F("  lora cad on|off            (Channel Activity Detection: listen before TX)"));
-        Serial.println(F("\n-- peripherals --"));
-        Serial.println(F("  display eco|turn180|led on|off"));
-        Serial.println(F("  display timeout <sec>"));
-        Serial.println(F("  bt on|off                  name <text>"));
-        Serial.println(F("  bt pin on|off              pin <4-6 digits>     (save + reboot)"));
-        Serial.println(F("  bat sendv|alwaysv on|off"));
-        Serial.println(F("  bat sleepv <volts>          bat read"));
-        Serial.println(F("  ptt on|off                 pin <n>              reverse on|off"));
-        Serial.println(F("  ptt predelay <ms>          postdelay <ms>"));
-        Serial.println(F("\n-- multi-role --"));
-        Serial.println(F("  role show                  show current role and GPS source"));
-        Serial.println(F("  role set <tracker|igate|digipeater>"));
-        Serial.println(F("  role gps <internal|fixed|none>"));
-        Serial.println(F("  fixed latitude <dd.dddddd>  longitude <dd.dddddd>  elevation <m>"));
-        Serial.println(F("  wifista on|off"));
-        Serial.println(F("  wifista add <ssid...>        (appends a network, max 5; set password next)"));
-        Serial.println(F("  wifista remove <index>       ssid <index> <ssid...>  password <index> <text>"));
-        Serial.println(F("  wifista list                 (show all configured networks, masked passwords)"));
-        Serial.println(F("  wifista scan                 (2-4s blocking scan; lists nearby SSIDs)"));
-        Serial.println(F("  wifista status               (prints wifiSTA.connected=true/false, +ip= when connected)"));
-        Serial.println(F("  aprsiss server <host>       port <n>               passcode <n>"));
-        Serial.println(F("  aprsiss filter <filter>     aprsiss status"));
-        Serial.println(F("  aprsiss downlink on|off     (gate IS messages to a locally-heard station back to RF)"));
-        Serial.println(F("  tcpkiss port <n>             (TCP KISS port, default 8001; server auto-starts with WiFi STA)"));
-        Serial.println(F("  remotecfg show|on|off        remotecfg token <secret>   remotecfg window <60-3600 sec>"));
-        Serial.println(F("                               (compact remote read/write over APRS messages -- see SERIAL_SETUP.md)"));
-        Serial.println(F("\n-- transmit now (no timer reset) --"));
-        Serial.println(F("  tx comment                 send position+comment immediately"));
-        Serial.println(F("  tx status                  send status packet immediately"));
-        Serial.println(F("\n-- other --"));
-        Serial.println(F("  digi <off|wide1|wide1+wide2>  (works with any role)"));
-        Serial.println(F("  wifi password <text>       (AP password; AP triggers on NOCALL or USR button at boot)"));
-        Serial.println(F("  beaconpath <DIRECT|WIDE1-1|WIDE1-1,WIDE2-1|WIDE1-1,WIDE2-2>"));
-        Serial.println(F("  gps read                   print current GPS position (all sources)"));
-        Serial.println(F("  sendspeed on|off             sendalt on|off"));
-        Serial.println(F("  nonsmartrate <sec>"));
-        Serial.println(F("  commentafter <n>"));
-        Serial.println();
+        replyOut->println(F("  log <off|error|warn|info|debug>"));
+        replyOut->println(F("\n-- beacons --"));
+        replyOut->println(F("  beacon callsign <CALL-SSID>"));
+        replyOut->println(F("  beacon symbol <c>          overlay <c>          micE <0..7>"));
+        replyOut->println(F("  beacon comment <text...>   status <text...>     label <text...>"));
+        replyOut->println(F("  beacon tactical <text...>  (<=9 chars; empty = position report)"));
+        replyOut->println(F("  beacon smart on|off"));
+        replyOut->println(F("  beacon smartset <0..4>     (0=Runner 1=Bike 2=Car 3=Jetboat 4=Custom)"));
+        replyOut->println(F("\n-- smartcustom (used when beacon smartset = 4) --"));
+        replyOut->println(F("  smartcustom show"));
+        replyOut->println(F("  smartcustom slowrate <sec>     slowspeed <km/h>"));
+        replyOut->println(F("  smartcustom fastrate <sec>     fastspeed <km/h>"));
+        replyOut->println(F("  smartcustom turnmindeg <deg>   turnslope <n>"));
+        replyOut->println(F("  smartcustom turnmintime <sec>  (min spacing for corner beacons)"));
+        replyOut->println(F("\n-- lora --"));
+        replyOut->println(F("  lora freq <Hz>             sf <7..12>           bw <Hz>"));
+        replyOut->println(F("  lora cr <5..8>             power <dBm>"));
+        replyOut->println(F("  lora cad on|off            (Channel Activity Detection: listen before TX)"));
+        replyOut->println(F("\n-- peripherals --"));
+        replyOut->println(F("  display eco|turn180|led on|off"));
+        replyOut->println(F("  display timeout <sec>"));
+        replyOut->println(F("  bt on|off                  name <text>"));
+        replyOut->println(F("  bt pin on|off              pin <4-6 digits>     (save + reboot)"));
+        replyOut->println(F("  bat sendv|alwaysv on|off"));
+        replyOut->println(F("  bat sleepv <volts>          bat read"));
+        replyOut->println(F("  ptt on|off                 pin <n>              reverse on|off"));
+        replyOut->println(F("  ptt predelay <ms>          postdelay <ms>"));
+        replyOut->println(F("\n-- multi-role --"));
+        replyOut->println(F("  role show                  show current role and GPS source"));
+        replyOut->println(F("  role set <tracker|igate|digipeater>"));
+        replyOut->println(F("  role gps <internal|fixed|none>"));
+        replyOut->println(F("  fixed latitude <dd.dddddd>  longitude <dd.dddddd>  elevation <m>"));
+        replyOut->println(F("  wifista on|off"));
+        replyOut->println(F("  wifista add <ssid...>        (appends a network, max 5; set password next)"));
+        replyOut->println(F("  wifista remove <index>       ssid <index> <ssid...>  password <index> <text>"));
+        replyOut->println(F("  wifista list                 (show all configured networks, masked passwords)"));
+        replyOut->println(F("  wifista scan                 (2-4s blocking scan; lists nearby SSIDs)"));
+        replyOut->println(F("  wifista status               (prints wifiSTA.connected=true/false, +ip= ssid= when connected)"));
+        replyOut->println(F("  aprsiss server <host>       port <n>               passcode [<n>] (blank = auto)"));
+        replyOut->println(F("  aprsiss filter <filter>     aprsiss status  (+host= port= login= server= when connected)"));
+        replyOut->println(F("  aprsiss downlink on|off     (gate IS messages to a locally-heard station back to RF)"));
+        replyOut->println(F("  tcpkiss port <n>             (TCP KISS port, default 8001; server auto-starts with WiFi STA)"));
+        replyOut->println(F("  remotecfg show|on|off        remotecfg token <secret>   remotecfg window <60-3600 sec>"));
+        replyOut->println(F("                               (compact remote read/write over APRS messages -- see SERIAL_SETUP.md)"));
+        replyOut->println(F("\n-- transmit now (no timer reset) --"));
+        replyOut->println(F("  tx comment                 send position+comment immediately"));
+        replyOut->println(F("  tx status                  send status packet immediately"));
+        replyOut->println(F("\n-- other --"));
+        replyOut->println(F("  digi <off|wide1|wide1+wide2>  (works with any role)"));
+        replyOut->println(F("  wifi password <text>       (AP password; AP triggers on NOCALL or USR button at boot)"));
+        replyOut->println(F("  beaconpath <DIRECT|WIDE1-1|WIDE1-1,WIDE2-1|WIDE1-1,WIDE2-2>"));
+        replyOut->println(F("  gps read                   print current GPS position (all sources)"));
+        replyOut->println(F("  sendspeed on|off             sendalt on|off"));
+        replyOut->println(F("  nonsmartrate <sec>"));
+        replyOut->println(F("  commentafter <n>"));
+        replyOut->println();
     }
 
     static void kv(const char* key, const String& value) {
-        Serial.print("  ");
-        Serial.print(key);
-        Serial.print(" = ");
-        Serial.println(value);
+        replyOut->print("  ");
+        replyOut->print(key);
+        replyOut->print(" = ");
+        replyOut->println(value);
     }
     static void kv(const char* key, const char* value)  { kv(key, String(value)); }
     static void kv(const char* key, int value)          { kv(key, String(value)); }
@@ -212,16 +294,16 @@ namespace SERIAL_Setup {
     static void kv(const char* key, bool value)         { kv(key, value ? "on" : "off"); }
 
     static void hdr(const char* title) {
-        Serial.println();
-        Serial.print("[");
-        Serial.print(title);
-        Serial.println("]");
+        replyOut->println();
+        replyOut->print("[");
+        replyOut->print(title);
+        replyOut->println("]");
     }
 
     static void printBeacon(int i) {
         if (i < 0 || (size_t)i >= Config.beacons.size()) return;
         const Beacon& b = Config.beacons[i];
-        Serial.println("  beacon[" + String(i) + "]:");
+        replyOut->println("  beacon[" + String(i) + "]:");
         kv("    callsign", b.callsign);
         kv("    symbol  ", b.symbol);
         kv("    overlay ", b.overlay);
@@ -238,7 +320,7 @@ namespace SERIAL_Setup {
         if (i < 0 || (size_t)i >= Config.loraTypes.size()) return;
         const LoraType& l = Config.loraTypes[i];
         const char* region = (i == 0) ? "EU" : (i == 1) ? "PL" : (i == 2) ? "UK" : (i == 3) ? "US" : "??";
-        Serial.println("  lora[" + String(i) + "] " + region + ":");
+        replyOut->println("  lora[" + String(i) + "] " + region + ":");
         kv("    freq ", l.frequency);
         kv("    sf   ", l.spreadingFactor);
         kv("    bw   ", l.signalBandwidth);
@@ -249,7 +331,7 @@ namespace SERIAL_Setup {
 
     static void printSmartCustom() {
         SmartBeaconValues& s = Config.customSmartBeacon;
-        Serial.println("  customSmartBeacon (used when beacon smartset = 4):");
+        replyOut->println("  customSmartBeacon (used when beacon smartset = 4):");
         kv("    slowRate   ", s.slowRate);
         kv("    slowSpeed  ", s.slowSpeed);
         kv("    fastRate   ", s.fastRate);
@@ -258,7 +340,7 @@ namespace SERIAL_Setup {
         kv("    turnSlope  ", s.turnSlope);
         kv("    turnMinTime", s.turnMinTime);
         bool usedByBeacon0 = (Config.beacons.size() > 0 && Config.beacons[0].smartBeaconSetting == SMARTBEACON_CUSTOM_INDEX);
-        Serial.println(String("    used by beacon[0]: ") + (usedByBeacon0 ? "yes" : "no"));
+        replyOut->println(String("    used by beacon[0]: ") + (usedByBeacon0 ? "yes" : "no"));
     }
 
     static void printSection(const String& section) {
@@ -338,7 +420,7 @@ namespace SERIAL_Setup {
             kv("password  ", maskSecret(Config.wifiAP.password));
             kv("sta.enabled", Config.wifiSTA.enabled ? "true" : "false");
             for (size_t i = 0; i < Config.wifiSTA.networks.size(); i++) {
-                Serial.println("  sta.networks[" + String(i) + "] ssid=" + Config.wifiSTA.networks[i].ssid +
+                replyOut->println("  sta.networks[" + String(i) + "] ssid=" + Config.wifiSTA.networks[i].ssid +
                                 " password=" + maskSecret(Config.wifiSTA.networks[i].password));
             }
         }
@@ -356,49 +438,110 @@ namespace SERIAL_Setup {
     }
 
     // ---------------- entry/exit ----------------
-    static void enterSetup() {
-        serialMode = SerialMode::SETUP;
-        exitArmed = false;
-        dirty = false;
+    static void resetPasteState();   // defined with import/export below
+
+    // Returns the USB port to KISS mode with the logger muted, so log lines
+    // can't corrupt KISS frames for a TNC client.
+    static void returnUsbToKiss() {
+        logger.setDebugLevel(logging::LoggerLevel::LOGGER_LEVEL_ERROR);
+        serialMode    = SerialMode::KISS;
         kissSerialBuf = "";
-        buf = "";
+    }
+
+    // Ends the other transport's idle setup session so the requester can take
+    // it over. Unsaved edits stay in RAM (and `dirty` stays set), so the new
+    // owner is told about them on entry and can save or discard them.
+    static void takeOverIdleSession() {
+        resetPasteState();
+        if (usbOwnsSetup()) {
+            // Requester is BLE: tell whoever might still be on the USB port.
+            Serial.println(F("\n[setup] session idle -- taken over by BLE; returning to KISS TNC mode."));
+            returnUsbToKiss();
+            usbLine = "";
+        }
+        #ifdef HAS_BLE_CONFIG
+        if (bleInSetup) {
+            BLE_Utils::configOutput().println(F("\n[setup] session idle -- taken over by USB; config session closed."));
+            bleInSetup = false;
+            bleLine    = "";
+        }
+        #endif
+    }
+
+    // Opens the setup session for the transport supplying the current input.
+    // Fails (with an ERR line) while the other transport holds an active session.
+    static bool enterSetup() {
+        const bool otherOwns = (inputSource == InputSource::USB) ? bleOwnsSetup() : usbOwnsSetup();
+        if (otherOwns) {
+            if (millis() - lastSetupActivityMs < SETUP_TAKEOVER_IDLE_MS) {
+                err(String("config session busy on ") + (inputSource == InputSource::USB ? "BLE" : "USB")
+                    + " -- exit it there first, or retry after " + String(SETUP_TAKEOVER_IDLE_MS / 1000) + " s idle");
+                return false;
+            }
+            takeOverIdleSession();
+        }
+
+        if (inputSource == InputSource::USB) {
+            serialMode    = SerialMode::SETUP;
+            kissSerialBuf = "";
+        }
+        #ifdef HAS_BLE_CONFIG
+        else {
+            bleInSetup = true;
+        }
+        #endif
+        exitArmed           = false;
+        lastSetupActivityMs = millis();
         // Logger already suppressed from KISS mode; keep it that way during setup
         printBanner();
-        Serial.println();
-        Serial.println(F(">>> SETUP MODE ACTIVE <<<"));
+        replyOut->println();
+        replyOut->println(F(">>> SETUP MODE ACTIVE <<<"));
         if (Config.beacons.size() > 0) {
-            Serial.println("    callsign : " + Config.beacons[0].callsign);
+            replyOut->println("    callsign : " + Config.beacons[0].callsign);
         }
         if (Config.loraTypes.size() > 0) {
-            Serial.println("    lora     : " + String(Config.loraTypes[0].frequency) + " Hz");
+            replyOut->println("    lora     : " + String(Config.loraTypes[0].frequency) + " Hz");
         }
+        if (dirty) {
+            replyOut->println(F("    note     : unsaved edits from an interrupted session are still pending"));
+            replyOut->println(F("               -- 'save' to keep them or 'discard' to drop them"));
+        }
+        return true;
     }
 
     static void enterLog() {
         serialMode = SerialMode::LOG;
         kissSerialBuf = "";
-        buf = "";
         logger.setDebugLevel(currentLogLevel);
-        Serial.println(F("\n[LOG] Serial log output active."));
-        Serial.println(F("[LOG] 'log <off|error|warn|info|debug>'  'exit' to return to KISS TNC"));
+        replyOut->println(F("\n[LOG] Serial log output active."));
+        replyOut->println(F("[LOG] 'log <off|error|warn|info|debug>'  'exit' to return to KISS TNC"));
     }
 
+    // Leaves setup (or USB LOG mode) for the transport supplying the current input.
     static void doExit(bool force) {
-        if (serialMode == SerialMode::SETUP) {
+        if (sourceOwnsSetup()) {
             if (dirty && !force) {
                 err("unsaved changes -- type 'save' or 'discard' to leave");
                 return;
             }
-            Serial.println(F("\nReturning to KISS TNC mode.\n"));
-        } else if (serialMode == SerialMode::LOG) {
-            Serial.println(F("\n[LOG] Returning to KISS TNC mode."));
+            dirty = false;
+            if (inputSource == InputSource::USB) {
+                replyOut->println(F("\nReturning to KISS TNC mode.\n"));
+            } else {
+                replyOut->println(F("\nConfig session closed.\n"));
+            }
+        } else if (inputSource == InputSource::USB && serialMode == SerialMode::LOG) {
+            replyOut->println(F("\n[LOG] Returning to KISS TNC mode."));
         }
-        // Suppress logger so output doesn't corrupt KISS frames
-        logger.setDebugLevel(logging::LoggerLevel::LOGGER_LEVEL_ERROR);
-        serialMode = SerialMode::KISS;
-        dirty = false;
-        kissSerialBuf = "";
-        buf = "";
+
+        if (inputSource == InputSource::USB) {
+            returnUsbToKiss();
+        }
+        #ifdef HAS_BLE_CONFIG
+        else {
+            bleInSetup = false;
+        }
+        #endif
     }
 
     // ---------------- per-section dispatch ----------------
@@ -532,7 +675,7 @@ namespace SERIAL_Setup {
         // Not an error — the edit order is up to the user — but this pair
         // collapses the speed-interpolated band to a fixed fastRate.
         if (s.fastSpeed <= s.slowSpeed) {
-            Serial.println("  warning: fastSpeed (" + String(s.fastSpeed) + ") <= slowSpeed (" + String(s.slowSpeed)
+            replyOut->println("  warning: fastSpeed (" + String(s.fastSpeed) + ") <= slowSpeed (" + String(s.slowSpeed)
                            + "); interval will be fixed at fastRate while moving");
         }
     }
@@ -564,7 +707,7 @@ namespace SERIAL_Setup {
         }
         if (parseBoolTok(arg) < 0) { err("bt pin: expected on/off or 4-6 digits"); return; }
         if (applyBool(arg, Config.bluetooth.pinEnabled, "bt.pinEnabled")) {
-            Serial.println(F("   Save + reboot to apply; phones paired earlier must be forgotten and re-paired."));
+            replyOut->println(F("   Save + reboot to apply; phones paired earlier must be forgotten and re-paired."));
         }
     }
 
@@ -588,9 +731,9 @@ namespace SERIAL_Setup {
             if (bv.length() > 0 && bv.toFloat() > 1.5) {
                 String pct = BATTERY_Utils::getPercentVoltageBattery(bv.toFloat());
                 pct.trim();
-                Serial.println("bat.voltage=" + bv + " bat.percent=" + pct);
+                replyOut->println("bat.voltage=" + bv + " bat.percent=" + pct);
             } else {
-                Serial.println("bat.voltage=0.00 bat.percent=0");
+                replyOut->println("bat.voltage=0.00 bat.percent=0");
             }
             return;
         }
@@ -625,7 +768,7 @@ namespace SERIAL_Setup {
             snprintf(phgStr, sizeof(phgStr), "PHG%c%c%c%c",
                 '0' + (pg.power & 0x0F), '0' + (pg.height & 0x0F),
                 '0' + (pg.gain  & 0x0F), '0' + (pg.directivity & 0x0F));
-            Serial.println("phg.enabled=" + String(pg.enabled ? "true" : "false") +
+            replyOut->println("phg.enabled=" + String(pg.enabled ? "true" : "false") +
                 " power=" + pg.power + " height=" + pg.height +
                 " gain=" + pg.gain + " dir=" + pg.directivity +
                 " rate=" + pg.beaconRate + "min  string=" + phgStr);
@@ -682,24 +825,24 @@ namespace SERIAL_Setup {
 
     static void exportConfig() {
         File f = SPIFFS.open("/tracker_conf.json", "r");
-        Serial.println(F("---- BEGIN tracker_conf.json ----"));
+        replyOut->println(F("---- BEGIN tracker_conf.json ----"));
         if (!f) {
-            Serial.println(F("(no saved config -- use 'save' first)"));
+            replyOut->println(F("(no saved config -- use 'save' first)"));
         } else {
-            while (f.available()) Serial.write(f.read());
+            while (f.available()) replyOut->write(f.read());
             f.close();
-            Serial.println();
+            replyOut->println();
         }
-        Serial.println(F("---- END tracker_conf.json ----"));
+        replyOut->println(F("---- END tracker_conf.json ----"));
     }
 
     static void beginImport() {
         resetPasteState();
         pasting = true;
         pasteBuf.reserve(4096);
-        Serial.println(F("\nPaste full tracker_conf.json now."));
-        Serial.println(F("End auto-detected on balanced braces. Ctrl-C aborts."));
-        Serial.println(F("Note: existing config is overwritten and device reboots on success.\n"));
+        replyOut->println(F("\nPaste full tracker_conf.json now."));
+        replyOut->println(F("End auto-detected on balanced braces. Ctrl-C aborts."));
+        replyOut->println(F("Note: existing config is overwritten and device reboots on success.\n"));
     }
 
     static void commitImport() {
@@ -708,9 +851,9 @@ namespace SERIAL_Setup {
         JsonDocument doc;
         DeserializationError jerr = deserializeJson(doc, pasteBuf);
         if (jerr) {
-            Serial.print(F("[import] parse failed: "));
-            Serial.println(jerr.c_str());
-            Serial.println(F("[import] existing config unchanged"));
+            replyOut->print(F("[import] parse failed: "));
+            replyOut->println(jerr.c_str());
+            replyOut->println(F("[import] existing config unchanged"));
             resetPasteState();
             return;
         }
@@ -718,13 +861,13 @@ namespace SERIAL_Setup {
         // minimum viability: at least one beacon with a non-empty callsign
         JsonArrayConst beaconsArr = doc["beacons"];
         if (beaconsArr.size() == 0) {
-            Serial.println(F("[import] rejected: no beacons[] array"));
+            replyOut->println(F("[import] rejected: no beacons[] array"));
             resetPasteState();
             return;
         }
         const char* cs0 = beaconsArr[0]["callsign"] | "";
         if (cs0[0] == '\0') {
-            Serial.println(F("[import] rejected: beacons[0].callsign is empty"));
+            replyOut->println(F("[import] rejected: beacons[0].callsign is empty"));
             resetPasteState();
             return;
         }
@@ -734,23 +877,23 @@ namespace SERIAL_Setup {
         #endif
         File f = SPIFFS.open("/tracker_conf.json", "w");
         if (!f) {
-            Serial.println(F("[import] failed to open file for write"));
+            replyOut->println(F("[import] failed to open file for write"));
             resetPasteState();
             return;
         }
         size_t written = serializeJson(doc, f);
         f.close();
         if (written == 0) {
-            Serial.println(F("[import] write failed (0 bytes)"));
+            replyOut->println(F("[import] write failed (0 bytes)"));
             resetPasteState();
             return;
         }
         resetPasteState();
 
-        Serial.print(F("[import] config written ("));
-        Serial.print((unsigned)written);
-        Serial.println(F(" bytes). Rebooting to apply..."));
-        delay(300);
+        replyOut->print(F("[import] config written ("));
+        replyOut->print((unsigned)written);
+        replyOut->println(F(" bytes). Rebooting to apply..."));
+        flushRepliesBeforeRestart(); delay(300);
         #ifdef ARDUINO_ARCH_NRF52
             NVIC_SystemReset();
         #else
@@ -766,19 +909,22 @@ namespace SERIAL_Setup {
 
         if (c == 0x03) { // Ctrl-C
             resetPasteState();
-            Serial.println(F("\r\n[import] aborted"));
+            replyOut->println(F("\r\n[import] aborted"));
             return true;
         }
         if (pasteBuf.length() >= PASTE_MAX_BYTES) {
             resetPasteState();
-            Serial.print(F("\r\n[import] buffer overflow (>"));
-            Serial.print((unsigned)PASTE_MAX_BYTES);
-            Serial.println(F(" bytes) -- aborted"));
+            replyOut->print(F("\r\n[import] buffer overflow (>"));
+            replyOut->print((unsigned)PASTE_MAX_BYTES);
+            replyOut->println(F(" bytes) -- aborted"));
             return true;
         }
 
         pasteBuf += c;
-        Serial.write(c); // local echo so paste is visible
+        // Local echo so a paste is visible in a USB terminal. Not over BLE:
+        // it would double the traffic of an import on a ~20-byte-per-packet
+        // link, and BLE clients (the app, nRF Connect) show what they sent.
+        if (inputSource == InputSource::USB) replyOut->write(c);
 
         // brace tracker, string-aware
         if (pasteEscapeNext) {
@@ -792,7 +938,7 @@ namespace SERIAL_Setup {
             else if (c == '}') {
                 if (pasteBraceDepth > 0) pasteBraceDepth--;
                 if (pasteBraceDepth == 0 && pasteSawOpen) {
-                    Serial.println(F("\r\n[import] braces balanced, parsing..."));
+                    replyOut->println(F("\r\n[import] braces balanced, parsing..."));
                     commitImport();
                 }
             }
@@ -895,12 +1041,12 @@ namespace SERIAL_Setup {
             Config.wifiSTA.networks[idx].password = restOfLine(line, 3);
             ok("wifiSTA.networks[" + String(idx) + "].password updated");
         } else if (sub == "list") {
-            Serial.println("wifiSTA.enabled=" + String(Config.wifiSTA.enabled ? "true" : "false"));
+            replyOut->println("wifiSTA.enabled=" + String(Config.wifiSTA.enabled ? "true" : "false"));
             if (Config.wifiSTA.networks.empty()) {
-                Serial.println("wifiSTA.networks: (none)");
+                replyOut->println("wifiSTA.networks: (none)");
             } else {
                 for (size_t i = 0; i < Config.wifiSTA.networks.size(); i++) {
-                    Serial.println("wifiSTA.networks[" + String(i) + "]: ssid=" + Config.wifiSTA.networks[i].ssid +
+                    replyOut->println("wifiSTA.networks[" + String(i) + "]: ssid=" + Config.wifiSTA.networks[i].ssid +
                                     " password=" + maskSecret(Config.wifiSTA.networks[i].password));
                 }
             }
@@ -913,25 +1059,29 @@ namespace SERIAL_Setup {
                 // connectSTA() at boot (up to 10s).
                 std::vector<WIFI_Utils::ScanResult> results;
                 int found = WIFI_Utils::scanNetworks(results, 20);
-                Serial.println("wifiSTA.scan.count=" + String(found));
+                replyOut->println("wifiSTA.scan.count=" + String(found));
                 for (auto& r : results) {
                     // key=value tokens, ssid= last (unbounded) so SSIDs
                     // containing spaces aren't truncated by the parser.
-                    Serial.println("wifiSTA.scan: rssi=" + String(r.rssi) +
+                    replyOut->println("wifiSTA.scan: rssi=" + String(r.rssi) +
                                     " secure=" + String(r.secure ? "1" : "0") +
                                     " ssid=" + r.ssid);
                 }
             #else
-                Serial.println("wifiSTA.scan.count=0");
+                replyOut->println("wifiSTA.scan.count=0");
             #endif
         } else if (sub == "status") {
             #ifdef HAS_WIFI
                 bool connected = WIFI_Utils::isSTAConnected();
                 String line = connected ? "wifiSTA.connected=true" : "wifiSTA.connected=false";
-                if (connected) line += " ip=" + WiFi.localIP().toString();
-                Serial.println(line);
+                if (connected) {
+                    line += " ip=" + WiFi.localIP().toString();
+                    // ssid= last (unbounded) so SSIDs containing spaces survive parsing.
+                    line += " ssid=" + WiFi.SSID();
+                }
+                replyOut->println(line);
             #else
-                Serial.println("wifiSTA.connected=false");
+                replyOut->println("wifiSTA.connected=false");
             #endif
         } else {
             err("unknown wifista subcommand: " + sub);
@@ -943,14 +1093,33 @@ namespace SERIAL_Setup {
         const String& sub = tk[1];
         if      (sub == "server")   { if (n < 3) { err("aprsiss server <hostname>"); return; } Config.aprsIS.server  = tk[2];                ok("aprsIS.server = "  + Config.aprsIS.server); }
         else if (sub == "port")     { if (n < 3) { err("aprsiss port <port>");    return; } Config.aprsIS.port    = tk[2].toInt();          ok("aprsIS.port = "    + String(Config.aprsIS.port)); }
-        else if (sub == "passcode") { if (n < 3) { err("aprsiss passcode <code>"); return; } Config.aprsIS.passcode = tk[2];                ok("aprsIS.passcode updated"); }
-        else if (sub == "filter")   { if (n < 3) { err("aprsiss filter <filter>"); return; } Config.aprsIS.filter  = restOfLine(line, 2);   ok("aprsIS.filter = "  + Config.aprsIS.filter); }
+        // Passcode and filter may be cleared by giving no value: an empty passcode
+        // means "auto-compute from the callsign", an empty filter means "no filter".
+        else if (sub == "passcode") {
+            if (n < 3) { Config.aprsIS.passcode = ""; ok("aprsIS.passcode cleared (auto from callsign)"); }
+            else       { Config.aprsIS.passcode = tk[2]; ok("aprsIS.passcode updated"); }
+        }
+        else if (sub == "filter") {
+            Config.aprsIS.filter = restOfLine(line, 2);
+            ok(Config.aprsIS.filter.length() ? "aprsIS.filter = " + Config.aprsIS.filter : String("aprsIS.filter cleared (no filter)"));
+        }
         else if (sub == "downlink") { if (n < 3) { err("aprsiss downlink on|off"); return; } applyBool(tk[2], Config.aprsIS.downlinkEnabled, "aprsIS.downlinkEnabled"); }
         else if (sub == "status")   {
             #ifdef HAS_WIFI
-                Serial.println(APRS_IS_Utils::isConnected() ? "aprsIS.connected=true" : "aprsIS.connected=false");
+                if (APRS_IS_Utils::isConnected()) {
+                    // host:port as dialed (often a rotate pool); server= is the pool
+                    // member the login landed on, present once its logresp arrived.
+                    String line = "aprsIS.connected=true host=" + APRS_IS_Utils::getConnectedHost()
+                                + " port=" + String(APRS_IS_Utils::getConnectedPort())
+                                + " login=" + APRS_IS_Utils::getLoginState();
+                    const String serverName = APRS_IS_Utils::getServerName();
+                    if (serverName.length() > 0) line += " server=" + serverName;
+                    replyOut->println(line);
+                } else {
+                    replyOut->println("aprsIS.connected=false");
+                }
             #else
-                Serial.println("aprsIS.connected=false");
+                replyOut->println("aprsIS.connected=false");
             #endif
         }
         else err("unknown aprsiss subcommand: " + sub);
@@ -1022,8 +1191,8 @@ namespace SERIAL_Setup {
         }
         else if (cmd == "discard") {
             if (!dirty) { okClean("nothing to discard"); doExit(true); return; }
-            Serial.println(F("Discarding unsaved changes -- rebooting to reload config..."));
-            delay(200);
+            replyOut->println(F("Discarding unsaved changes -- rebooting to reload config..."));
+            flushRepliesBeforeRestart(); delay(200);
             #ifdef ARDUINO_ARCH_NRF52
                 NVIC_SystemReset();
             #else
@@ -1032,7 +1201,8 @@ namespace SERIAL_Setup {
         }
         else if (cmd == "exit" || cmd == "quit")    doExit(false);
         else if (cmd == "reboot")                   {
-            Serial.println(F("Rebooting...")); delay(200);
+            replyOut->println(F("Rebooting..."));
+            flushRepliesBeforeRestart(); delay(200);
             #ifdef ARDUINO_ARCH_NRF52
                 NVIC_SystemReset();
             #else
@@ -1045,20 +1215,20 @@ namespace SERIAL_Setup {
             // re-creates tracker_conf.json from embedded defaults.
             // Requires an explicit hard-to-mistype confirmation token.
             if (n < 2 || String(tk[1]) != "YES-ERASE-ALL") {
-                Serial.println(F("WARNING: 'format' erases the on-device filesystem (config,"));
-                Serial.println(F("saved messages, indices). On reboot the firmware re-creates"));
-                Serial.println(F("config from embedded defaults — your callsign etc. resets."));
-                Serial.println(F("To proceed:  format YES-ERASE-ALL"));
+                replyOut->println(F("WARNING: 'format' erases the on-device filesystem (config,"));
+                replyOut->println(F("saved messages, indices). On reboot the firmware re-creates"));
+                replyOut->println(F("config from embedded defaults — your callsign etc. resets."));
+                replyOut->println(F("To proceed:  format YES-ERASE-ALL"));
             } else {
-                Serial.println(F("Formatting partition..."));
+                replyOut->println(F("Formatting partition..."));
                 delay(200);
                 #ifdef ARDUINO_ARCH_NRF52
                     InternalFS.format();
                 #else
                     SPIFFS.format();
                 #endif
-                Serial.println(F("Format done. Rebooting..."));
-                delay(500);
+                replyOut->println(F("Format done. Rebooting..."));
+                flushRepliesBeforeRestart(); delay(500);
                 #ifdef ARDUINO_ARCH_NRF52
                     NVIC_SystemReset();
                 #else
@@ -1087,7 +1257,7 @@ namespace SERIAL_Setup {
         else if (cmd == "beaconpath")               { Config.beaconPath = restOfLine(line, 1); ok("beaconPath = " + Config.beaconPath); }
         else if (cmd == "gps") {
             if (n >= 2 && tk[1] == "read") {
-                Serial.println(GPS_Utils::getStatusString());
+                replyOut->println(GPS_Utils::getStatusString());
             } else {
                 err("gps read");
             }
@@ -1103,10 +1273,10 @@ namespace SERIAL_Setup {
             String sub = tk[1]; sub.toLowerCase();
             if (sub == "comment") {
                 STATION_Utils::sendCommentBeaconNow();
-                Serial.println(F("OK tx comment beacon sent (timer unchanged)"));
+                replyOut->println(F("OK tx comment beacon sent (timer unchanged)"));
             } else if (sub == "status") {
                 STATION_Utils::sendStatusBeaconNow();
-                Serial.println(F("OK tx status beacon sent (timer unchanged)"));
+                replyOut->println(F("OK tx status beacon sent (timer unchanged)"));
             } else {
                 err("tx comment|status");
             }
@@ -1119,14 +1289,14 @@ namespace SERIAL_Setup {
         else if (cmd == "tcpkiss")  cmdTcpKiss(tk, n);
         else if (cmd == "remotecfg") cmdRemoteCfg(tk, n, line);
         else if (cmd == "version") {
-            Serial.println("version.date=" FIRMWARE_VERSION_DATE);
-            Serial.println("version.board=" BOARD_ENV_ID);
+            replyOut->println("version.date=" FIRMWARE_VERSION_DATE);
+            replyOut->println("version.board=" BOARD_ENV_ID);
         }
         #ifdef ARDUINO_ARCH_NRF52
         else if (cmd == "otadfu") {
             // Reset into Nordic OTA DFU bootloader mode; flash via nRF Connect app.
-            Serial.println(F("Entering OTA DFU mode — use Nordic nRF Connect app to upload firmware.zip"));
-            delay(200);
+            replyOut->println(F("Entering OTA DFU mode — use Nordic nRF Connect app to upload firmware.zip"));
+            flushRepliesBeforeRestart(); delay(200);
             enterOTADfu();
         }
         #endif
@@ -1139,120 +1309,204 @@ namespace SERIAL_Setup {
         // Suppress logger so output doesn't corrupt KISS frames on the USB port.
         savedLogLevel = currentLogLevel;
         logger.setDebugLevel(logging::LoggerLevel::LOGGER_LEVEL_ERROR);
-        Serial.println(F("\n[KISS TNC] Type 'setup' to configure, 'log' to monitor serial output."));
+        replyOut->println(F("\n[KISS TNC] Type 'setup' to configure, 'log' to monitor serial output."));
     }
 
-    bool isActive()   { return serialMode == SerialMode::SETUP; }
+    bool isActive()   { return usbOwnsSetup() || bleOwnsSetup(); }
     bool isKISSMode() { return serialMode == SerialMode::KISS; }
 
-    void loop() {
-        while (Serial.available()) {
-            int ch = Serial.read();
-            if (ch < 0) break;
-            char c = (char)ch;
+    // ---------------- input handling ----------------
 
-            // ── KISS mode (default) ─────────────────────────────────────────
-            // Route binary KISS frames to LoRa.  Non-FEND printable bytes
-            // accumulate in a small buffer to detect the 'setup' / 'log' triggers.
-            if (serialMode == SerialMode::KISS) {
-                if ((uint8_t)c == 0xC0 || kissSerialBuf.length() > 0) {
-                    kissSerialBuf += c;
-                    if ((uint8_t)c == 0xC0 && kissSerialBuf.length() > 1) {
-                        bool isData = false;
-                        String frame = KISS_Utils::decodeKISS(kissSerialBuf, isData);
-                        if (isData && frame.length() > 0) {
-                            LoRa_Utils::sendNewPacket(frame);
-                        }
-                        kissSerialBuf = "";
-                    }
-                    if (kissSerialBuf.length() > 512) kissSerialBuf = "";
-                    continue;
-                }
-                // Non-FEND: accumulate trigger word (no echo — keep port clean for TNC clients)
-                if (c == '\r' || c == '\n') {
-                    buf.trim();
-                    if (buf.equalsIgnoreCase("setup")) {
-                        buf = "";
-                        enterSetup();
-                        prompt();
-                    } else if (buf.equalsIgnoreCase("log")) {
-                        buf = "";
-                        enterLog();
-                    }
-                    buf = "";
-                } else if ((uint8_t)c >= 0x20 && (uint8_t)c < 0x7F) {
-                    if (buf.length() < 20) buf += c;   // enough for "setup" / "log"
-                }
-                continue;
+    // One byte for the transport that holds the setup session (USB or BLE).
+    // `line` is that transport's own line buffer.
+    static void feedSetupByte(char c, String& line) {
+        lastSetupActivityMs = millis();
+
+        // paste-import mode swallows everything until balanced or aborted
+        if (feedPasteByte(c)) {
+            if (!pasting) prompt();
+            return;
+        }
+        if (c == 0x03) {                       // Ctrl-C clears the typed line
+            line = "";
+            replyOut->println(F("^C"));
+            prompt();
+            return;
+        }
+        if (c == '\r' || c == '\n') {
+            replyOut->print(F("\r\n"));
+            // Take the line out of the buffer before dispatching, so a command
+            // that ends the session (exit/discard) can't race its own buffer.
+            String command = line;
+            line = "";
+            command.trim();
+            if (command.length() == 0) { prompt(); return; }
+            handleLine(command);
+            if (sourceOwnsSetup() && !pasting) prompt();
+        } else if (c == 0x08 || c == 0x7F) {
+            if (line.length()) {
+                line.remove(line.length() - 1);
+                replyOut->print(F("\b \b"));
             }
-
-            // ── SETUP mode ──────────────────────────────────────────────────
-            if (serialMode == SerialMode::SETUP) {
-                // paste-import mode swallows everything until balanced or aborted
-                if (feedPasteByte(c)) {
-                    if (!pasting) prompt();
-                    continue;
-                }
-                if (c == 0x03) {                       // Ctrl-C clears typed buf
-                    buf = "";
-                    Serial.println(F("^C"));
-                    prompt();
-                    continue;
-                }
-                if (c == '\r' || c == '\n') {
-                    Serial.print(F("\r\n"));
-                    if (buf.length() == 0) { prompt(); continue; }
-                    buf.trim();
-                    handleLine(buf);
-                    if (serialMode == SerialMode::SETUP && !pasting) prompt();
-                    buf = "";
-                } else if (c == 0x08 || c == 0x7F) {
-                    if (buf.length()) {
-                        buf.remove(buf.length() - 1);
-                        Serial.print(F("\b \b"));
-                    }
-                } else if ((uint8_t)c >= 0x20 && (uint8_t)c < 0x7F) {
-                    if (buf.length() < 200) {
-                        buf += c;
-                        Serial.write(c);
-                    }
-                }
-                continue;
-            }
-
-            // ── LOG mode ────────────────────────────────────────────────────
-            // Log messages stream freely; user types commands interspersed.
-            // Supports: 'log <level>'  and  'exit'
-            if (c == '\r' || c == '\n') {
-                if (buf.length() > 0) {
-                    Serial.print(F("\r\n"));
-                    buf.trim();
-                    if (buf.equalsIgnoreCase("exit") || buf.equalsIgnoreCase("quit")) {
-                        buf = "";
-                        doExit(true);
-                        // serialMode is now KISS; let remaining bytes be handled next call
-                        break;
-                    } else if (buf.startsWith("log") || buf.startsWith("LOG")) {
-                        String tk[2];
-                        int n = splitTokens(buf, tk, 2);
-                        cmdLog(tk, n);
-                    } else {
-                        Serial.println(F("[log] commands: 'log <off|error|warn|info|debug>'  'exit'"));
-                    }
-                    buf = "";
-                }
-            } else if (c == 0x08 || c == 0x7F) {
-                if (buf.length()) {
-                    buf.remove(buf.length() - 1);
-                    Serial.print(F("\b \b"));
-                }
-            } else if ((uint8_t)c >= 0x20 && (uint8_t)c < 0x7F) {
-                if (buf.length() < 200) {
-                    buf += c;
-                    Serial.write(c);
-                }
+        } else if ((uint8_t)c >= 0x20 && (uint8_t)c < 0x7F) {
+            if (line.length() < 200) {
+                line += c;
+                replyOut->write(c);
             }
         }
+    }
+
+    // One byte from USB serial. Returns false to stop reading for this pass.
+    static bool feedUsbByte(char c) {
+        // ── KISS mode (default) ─────────────────────────────────────────────
+        // Route binary KISS frames to LoRa. Frame bytes never take part in
+        // the text handling below (they may contain 0x0D / 0x0A).
+        if (serialMode == SerialMode::KISS && ((uint8_t)c == 0xC0 || kissSerialBuf.length() > 0)) {
+            usbLastByteWasCR = false;
+            kissSerialBuf += c;
+            if ((uint8_t)c == 0xC0 && kissSerialBuf.length() > 1) {
+                bool isData = false;
+                String frame = KISS_Utils::decodeKISS(kissSerialBuf, isData);
+                if (isData && frame.length() > 0) {
+                    LoRa_Utils::sendNewPacket(frame);
+                }
+                kissSerialBuf = "";
+            }
+            if (kissSerialBuf.length() > 512) kissSerialBuf = "";
+            return true;
+        }
+
+        if (isSecondHalfOfCRLF(c, usbLastByteWasCR)) return true;
+
+        if (serialMode == SerialMode::KISS) {
+            // Non-FEND: accumulate trigger word (no echo — keep port clean for TNC clients)
+            if (c == '\r' || c == '\n') {
+                String word = usbLine;
+                usbLine = "";
+                word.trim();
+                if (word.equalsIgnoreCase("setup")) {
+                    enterSetup();   // prints its own ERR line if BLE holds the session
+                    prompt();
+                } else if (word.equalsIgnoreCase("log")) {
+                    enterLog();
+                }
+            } else if ((uint8_t)c >= 0x20 && (uint8_t)c < 0x7F) {
+                if (usbLine.length() < 20) usbLine += c;   // enough for "setup" / "log"
+            }
+            return true;
+        }
+
+        // ── SETUP mode ──────────────────────────────────────────────────────
+        if (serialMode == SerialMode::SETUP) {
+            feedSetupByte(c, usbLine);
+            return true;
+        }
+
+        // ── LOG mode ────────────────────────────────────────────────────────
+        // Log messages stream freely; user types commands interspersed.
+        // Supports: 'log <level>'  and  'exit'
+        if (c == '\r' || c == '\n') {
+            if (usbLine.length() > 0) {
+                replyOut->print(F("\r\n"));
+                String command = usbLine;
+                usbLine = "";
+                command.trim();
+                if (command.equalsIgnoreCase("exit") || command.equalsIgnoreCase("quit")) {
+                    doExit(true);
+                    // serialMode is now KISS; let remaining bytes be handled next call
+                    return false;
+                } else if (command.startsWith("log") || command.startsWith("LOG")) {
+                    String tk[2];
+                    int n = splitTokens(command, tk, 2);
+                    cmdLog(tk, n);
+                } else {
+                    replyOut->println(F("[log] commands: 'log <off|error|warn|info|debug>'  'exit'"));
+                }
+            }
+        } else if (c == 0x08 || c == 0x7F) {
+            if (usbLine.length()) {
+                usbLine.remove(usbLine.length() - 1);
+                replyOut->print(F("\b \b"));
+            }
+        } else if ((uint8_t)c >= 0x20 && (uint8_t)c < 0x7F) {
+            if (usbLine.length() < 200) {
+                usbLine += c;
+                replyOut->write(c);
+            }
+        }
+        return true;
+    }
+
+    #ifdef HAS_BLE_CONFIG
+    // Ends the BLE setup session when the config link drops or is replaced by
+    // a new connection. Unsaved edits stay in RAM with `dirty` set, so the
+    // next session (USB or BLE) is told to save or discard them.
+    static void syncBleLinkState() {
+        const bool     linkOpen   = BLE_Utils::configLinkOpen();
+        const uint32_t generation = BLE_Utils::configLinkGeneration();
+        if (linkOpen && generation == bleSeenGeneration) return;   // same link, nothing to do
+
+        if (bleInSetup) {
+            resetPasteState();
+            bleInSetup = false;
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BLE CFG",
+                       dirty ? "config link closed, unsaved edits kept in RAM" : "config link closed");
+        }
+        bleLine          = "";
+        bleLastByteWasCR = false;
+        if (linkOpen) bleSeenGeneration = generation;
+    }
+
+    // One byte from the BLE config link.
+    static void feedBleByte(char c) {
+        if (isSecondHalfOfCRLF(c, bleLastByteWasCR)) return;
+
+        if (bleInSetup) {
+            feedSetupByte(c, bleLine);
+            return;
+        }
+
+        // Idle: wait for 'setup' and ignore everything else silently, exactly
+        // like USB KISS mode, so clients use the same discard/exit/setup entry
+        // handshake on both transports.
+        if (c == '\r' || c == '\n') {
+            String word = bleLine;
+            bleLine = "";
+            word.trim();
+            if (word.equalsIgnoreCase("setup")) {
+                enterSetup();   // prints its own ERR line if USB holds the session
+                prompt();
+            } else if (word.equalsIgnoreCase("log")) {
+                err("log mode is only available over USB");
+            }
+        } else if ((uint8_t)c >= 0x20 && (uint8_t)c < 0x7F) {
+            if (bleLine.length() < 20) bleLine += c;   // enough for "setup"
+        }
+    }
+
+    static void serviceBleInput() {
+        syncBleLinkState();
+        if (!BLE_Utils::configLinkOpen()) return;
+        ScopedInputSource scope(InputSource::BLE, BLE_Utils::configOutput());
+        int ch;
+        while ((ch = BLE_Utils::configRead()) >= 0) {
+            feedBleByte((char)ch);
+        }
+    }
+    #endif  // HAS_BLE_CONFIG
+
+    void loop() {
+        {
+            ScopedInputSource scope(InputSource::USB, Serial);
+            while (Serial.available()) {
+                int ch = Serial.read();
+                if (ch < 0) break;
+                if (!feedUsbByte((char)ch)) break;
+            }
+        }
+        #ifdef HAS_BLE_CONFIG
+            serviceBleInput();
+        #endif
     }
 
 }

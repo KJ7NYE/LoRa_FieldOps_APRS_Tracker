@@ -31,6 +31,11 @@ static uint32_t     lastConnectTry  = 0;
 static const uint32_t RECONNECT_MS  = 30000UL;   // retry interval
 static bool         _needsBeacon    = false;      // set true after each successful connect
 
+// Identity of the current connection, for status reporting only.
+static String       connectedHost;                // as dialed (may be a rotate pool)
+static uint16_t     connectedPort   = 0;
+static String       loginServerName;              // from "# logresp ... server NAME"
+
 // Post-login verification is polled non-blockingly across loop iterations
 // (see tickVerify()) instead of spin-waiting inside connect() — see comments
 // there for why.
@@ -113,6 +118,9 @@ namespace APRS_IS_Utils {
             LogBuffer::pushf(LogBuffer::TYPE_NET, "APRS-IS connect failed");
             return;
         }
+        connectedHost   = server;
+        connectedPort   = port;
+        loginServerName = "";   // filled in by tickVerify() from the logresp line
 
         // Login string: user CALL pass PASS vers FIRMWARE filter FILTER
         String login = "user ";
@@ -127,13 +135,30 @@ namespace APRS_IS_Utils {
         }
         upload(login);
 
-        // Passcode verification (server echoes "#" lines; look for "verified")
+        // Passcode verification (server answers with a "# logresp ... verified|unverified" line)
         // is polled non-blockingly from checkConnection() via tickVerify() on
         // subsequent loop iterations, rather than spin-waiting here.
         passcodeValid   = false;
         awaitingVerify  = true;
         verifyStartTime = millis();
     }
+
+    // Records the server name from the login response, e.g.
+    // "# logresp KJ7NYE-10 verified, server T2USASW" -> "T2USASW".
+    static void captureServerName(const String& line) {
+        if (line.indexOf("logresp") == -1) return;
+        static const char* marker = "server ";
+        int start = line.indexOf(marker);
+        if (start == -1) return;
+        start += strlen(marker);
+        int end = line.indexOf(' ', start);
+        loginServerName = (end == -1) ? line.substring(start) : line.substring(start, end);
+        loginServerName.trim();
+    }
+
+    String   getConnectedHost() { return connectedHost; }
+    uint16_t getConnectedPort() { return connectedPort; }
+    String   getServerName()    { return loginServerName; }
 
     // Non-blocking poll for the post-login "#" banner lines, run once per loop
     // iteration from checkConnection() while awaitingVerify is set. Only "#"
@@ -150,19 +175,31 @@ namespace APRS_IS_Utils {
             return;
         }
 
+        bool loginResponseSeen = false;
         while (aprsIsClient.available()) {
             String line = aprsIsClient.readStringUntil('\n');
             line.trim();
             if (line.startsWith("#")) {
                 logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS", "%s", line.c_str());
-                if (line.indexOf("verified") != -1) {
-                    passcodeValid = true;
+                captureServerName(line);
+                // The server answers the login with exactly one of
+                //   "# logresp CALL verified, server NAME"
+                //   "# logresp CALL unverified, server NAME"
+                // Match the whole word: a bare "verified" substring also matches
+                // "unverified", which used to mark a rejected passcode as valid
+                // (uploads then silently dropped by the server instead of the
+                // tracker falling back to Rx-only).
+                if (line.indexOf("logresp") != -1) {
+                    passcodeValid     = line.indexOf(" verified") != -1;
+                    loginResponseSeen = true;
                     break;
                 }
             }
         }
 
-        if (passcodeValid || (millis() - verifyStartTime) > VERIFY_TIMEOUT_MS) {
+        // Done once the login response has arrived (either verdict), or after
+        // the timeout with no response (treated as unverified, as before).
+        if (loginResponseSeen || (millis() - verifyStartTime) > VERIFY_TIMEOUT_MS) {
             awaitingVerify = false;
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "APRS-IS", "Connected. Passcode %s",
                        passcodeValid ? "VALID" : "INVALID (Rx only)");
@@ -287,6 +324,12 @@ namespace APRS_IS_Utils {
     String getConnectionState() {
         if (!aprsIsClient.connected()) return "DOWN";
         return (passcodeValid && Config.aprsIS.downlinkEnabled) ? "RW" : "R";
+    }
+
+    String getLoginState() {
+        if (!aprsIsClient.connected()) return "none";
+        if (awaitingVerify)            return "pending";
+        return passcodeValid ? "verified" : "unverified";
     }
 
     // Stations heard directly (no digi hop) within this window are treated

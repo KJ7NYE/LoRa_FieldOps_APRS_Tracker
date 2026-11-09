@@ -322,6 +322,10 @@ void loop() {
         #elif defined(HAS_BT_CLASSIC)
             BLUETOOTH_Utils::sendToLoRa();
         #endif
+        #ifdef HAS_BLE_CONFIG
+            // Send queued setup-CLI replies (input is read in SERIAL_Setup::loop()).
+            BLE_Utils::serviceConfigLink();
+        #endif
     }
 
     // ── Role periodic tasks (APRS-IS keepalive, TCP KISS clients) ───────

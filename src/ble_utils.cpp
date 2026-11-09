@@ -39,6 +39,10 @@
 #include "ble_pin.h"
 #include "log_buffer.h"
 #include <stdarg.h>
+#ifdef HAS_BLE_CONFIG
+    #include <atomic>
+    #include "byte_ring.h"
+#endif
 
 // APRS.fi GATT service — KISS TNC profile
 #define BLE_SERVICE_UUID    "00000001-ba2a-46c9-ae49-01b0961f68bb"
@@ -154,6 +158,183 @@ static void logAdvertisingStarted() {
     }
 }
 
+
+#ifdef HAS_BLE_CONFIG
+/* ══════════════════════════════════════════════════════════════════════════
+ *  BLE configuration link  —  shared by both platforms
+ *
+ *  A second GATT service, laid out like the Nordic UART Service, carries the
+ *  same text CLI as USB serial (serial_setup.cpp). Generic BLE terminals
+ *  (nRF Connect, Serial Bluetooth Terminal) can drive it by hand, and the
+ *  FieldOps app reuses its USB protocol handler unchanged.
+ *
+ *  Containment rules:
+ *   - Registered only when PIN pairing is required, and its characteristics
+ *     demand an authenticated (MITM) encrypted link, so only a phone that
+ *     knows the PIN can reach the CLI. With the PIN off, the GATT table is
+ *     exactly what it was before this feature existed.
+ *   - Registered AFTER the KISS service, so the KISS attribute handles are
+ *     unchanged and phones holding a cached GATT table for KISS keep working.
+ *   - Not advertised (the 31-byte advertisement is already full); clients
+ *     find the tracker by its KISS service UUID and discover this one.
+ *   - The BLE stack's task only copies bytes into / out of lock-free rings;
+ *     every CLI command (and so every Config access) runs on the main loop.
+ *   - The ring buffers are allocated the first time a phone subscribes and
+ *     then kept for the rest of the boot (see byte_ring.h for why).
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+// Nordic UART Service UUIDs (RX/TX named from the tracker's point of view of
+// the phone, as in Nordic's spec: the phone writes RX and subscribes to TX).
+#define CONFIG_SERVICE_UUID     "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define CONFIG_CHAR_UUID_RX     "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"  // write:  phone  → device
+#define CONFIG_CHAR_UUID_TX     "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"  // notify: device → phone
+
+// RX holds a whole tracker_conf.json import (~1.6 KB default) even if the
+// main loop is stalled for seconds by a long LoRa transmission.
+static constexpr size_t   CONFIG_RX_BUFFER_BYTES        = 4096;
+// TX only smooths bursts: when it fills, the writer drains it in place.
+static constexpr size_t   CONFIG_TX_BUFFER_BYTES        = 2048;
+// Largest notification payload we ever build (ATT MTU 247 - 3).
+static constexpr size_t   CONFIG_MAX_CHUNK_BYTES        = 244;
+// Main-loop time slice for sending queued replies on each pass.
+static constexpr uint32_t CONFIG_PUMP_BUDGET_MS         = 20;
+// How long a CLI print may wait for the phone to drain a full TX queue
+// before the rest of that print is dropped.
+static constexpr uint32_t CONFIG_BLOCKED_WRITE_TIMEOUT_MS = 3000;
+
+static ByteRing              configRx;                  // producer: BLE task, consumer: main loop
+static ByteRing              configTx;                  // producer and consumer: main loop
+static std::atomic<bool>     configSubscribed{false};   // phone has enabled notifications on TX
+static std::atomic<uint32_t> configGeneration{0};       // bumped on every new subscription
+static std::atomic<bool>     configRxOverflowed{false}; // set by BLE task, reported by main loop
+static uint32_t              configTxGeneration = 0;    // generation the queued TX bytes belong to
+
+// Platform hooks, implemented in each stack section below.
+static bool   platformConfigLinkUp();                                  // connected, authenticated, subscribed
+static size_t platformConfigChunkLimit();                              // ATT MTU - 3 for the active link
+static bool   platformSendConfigChunk(const uint8_t* data, size_t length);   // one notification; false = retry later
+
+// BLE task: phone enabled / disabled notifications on the config TX characteristic.
+static void onConfigSubscriptionChanged(bool subscribed) {
+    if (!subscribed) {
+        configSubscribed.store(false);
+        return;
+    }
+    // A repeated subscription (CCCD rewritten, or the post-authentication
+    // re-check below) must not restart a session that is already running.
+    if (configSubscribed.load()) return;
+    if (!configRx.allocate(CONFIG_RX_BUFFER_BYTES) || !configTx.allocate(CONFIG_TX_BUFFER_BYTES)) {
+        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Config link: out of memory for buffers, config over BLE unavailable");
+        return;
+    }
+    configGeneration.fetch_add(1);
+    configSubscribed.store(true);
+    bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Config link open (phone subscribed to the setup CLI)");
+}
+
+// BLE task: phone wrote CLI bytes. Callers have already verified the writer
+// is the active, PIN-authenticated phone.
+static void onConfigBytesReceived(const uint8_t* data, size_t length) {
+    if (!configSubscribed.load()) return;   // CLI replies would have nowhere to go
+    if (configRx.push(data, length) < length) configRxOverflowed.store(true);
+}
+
+// Main loop: replies queued for an earlier link must never reach a new one.
+static void discardStaleConfigOutput() {
+    const uint32_t currentGeneration = configGeneration.load();
+    if (configTxGeneration != currentGeneration) {
+        configTx.clear();
+        configTxGeneration = currentGeneration;
+    }
+}
+
+// Main loop: hands queued reply bytes to the BLE stack for up to `budgetMs`.
+static void pumpConfigOutput(uint32_t budgetMs) {
+    discardStaleConfigOutput();
+    if (configTx.available() == 0) return;
+    if (!platformConfigLinkUp()) { configTx.clear(); return; }
+
+    uint8_t chunk[CONFIG_MAX_CHUNK_BYTES];
+    const uint32_t startMs = millis();
+    while (configTx.available() > 0) {
+        size_t chunkLimit = platformConfigChunkLimit();
+        if (chunkLimit == 0) break;
+        if (chunkLimit > CONFIG_MAX_CHUNK_BYTES) chunkLimit = CONFIG_MAX_CHUNK_BYTES;
+        const size_t chunkLength = configTx.peek(chunk, chunkLimit);
+        if (platformSendConfigChunk(chunk, chunkLength)) {
+            configTx.drop(chunkLength);
+        } else {
+            delay(1);   // stack's TX queue is full: yield so it can drain
+        }
+        if (millis() - startMs >= budgetMs) break;
+        if (!platformConfigLinkUp()) { configTx.clear(); break; }
+    }
+}
+
+// Print sink handed to the CLI while it serves a BLE session.
+class ConfigReplyStream : public Print {
+public:
+    size_t write(uint8_t value) override { return write(&value, 1); }
+
+    size_t write(const uint8_t* data, size_t length) override {
+        discardStaleConfigOutput();
+        if (!platformConfigLinkUp()) return 0;   // nobody listening: drop
+        size_t queued = configTx.push(data, length);
+        const uint32_t startMs = millis();
+        while (queued < length) {
+            // Queue full (e.g. 'help' or 'export'): send some, then retry.
+            pumpConfigOutput(CONFIG_PUMP_BUDGET_MS);
+            queued += configTx.push(data + queued, length - queued);
+            if (queued >= length) break;
+            if (!platformConfigLinkUp() || millis() - startMs > CONFIG_BLOCKED_WRITE_TIMEOUT_MS) {
+                logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "BLE CFG",
+                           "reply output stalled, dropped %u bytes", (unsigned)(length - queued));
+                break;
+            }
+        }
+        return queued;
+    }
+};
+
+static ConfigReplyStream configReplyStream;
+
+namespace BLE_Utils {
+
+    bool configLinkOpen() { return platformConfigLinkUp(); }
+
+    uint32_t configLinkGeneration() { return configGeneration.load(); }
+
+    int configRead() {
+        if (configRxOverflowed.exchange(false)) {
+            // Lost input can't be recovered mid-command; the CLI's own state
+            // machine resyncs on the next line ending. Make the loss visible.
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "BLE CFG", "input buffer overflow, bytes dropped");
+            configReplyStream.println(F("\r\nERR: BLE input overflow -- bytes were dropped, resend the command"));
+        }
+        return configRx.pop();
+    }
+
+    Print& configOutput() { return configReplyStream; }
+
+    void serviceConfigLink() {
+        if (!configTx.isAllocated()) return;   // feature never used this boot
+        pumpConfigOutput(CONFIG_PUMP_BUDGET_MS);
+    }
+
+    void flushConfigOutput(uint32_t timeoutMs) {
+        if (!configTx.isAllocated()) return;
+        const uint32_t startMs = millis();
+        while (configTx.available() > 0 && platformConfigLinkUp() && millis() - startMs < timeoutMs) {
+            pumpConfigOutput(CONFIG_PUMP_BUDGET_MS);
+        }
+        // Notifications handed to the stack still need a connection event or
+        // two to go out over the air before the caller resets the chip.
+        delay(150);
+    }
+
+}   // namespace BLE_Utils
+#endif  // HAS_BLE_CONFIG
+
 /* ══════════════════════════════════════════════════════════════════════════
  *  nRF52840  —  Adafruit Bluefruit (built into Adafruit nRF52 BSP)
  * ══════════════════════════════════════════════════════════════════════════ */
@@ -171,6 +352,60 @@ static BLECharacteristic rxChar(BLE_CHAR_UUID_RX);
 static String   nrf52KissBuffer     = "";
 static bool     shouldSendToLoRa    = false;
 static String   kissPacketToLoRa    = "";
+
+#ifdef HAS_BLE_CONFIG
+// ── Config link (setup CLI over BLE) — see the shared section above ────────
+static BLEService        configService(CONFIG_SERVICE_UUID);
+static BLECharacteristic configTxChar(CONFIG_CHAR_UUID_TX);
+static BLECharacteristic configRxChar(CONFIG_CHAR_UUID_RX);
+
+static bool platformConfigLinkUp() {
+    return bluetoothConnected && configSubscribed.load() && Bluefruit.connected();
+}
+
+static size_t platformConfigChunkLimit() {
+    BLEConnection* connection = Bluefruit.Connection(Bluefruit.connHandle());
+    if (connection == nullptr) return 0;
+    const uint16_t mtu = connection->getMtu();
+    return mtu > 3 ? mtu - 3 : 0;
+}
+
+// The chunk never exceeds MTU - 3, so notify() sends exactly one packet and
+// its result is all-or-nothing. It waits up to BLE_GENERIC_TIMEOUT for a free
+// SoftDevice TX slot, which is the flow control.
+static bool platformSendConfigChunk(const uint8_t* data, size_t length) {
+    return configTxChar.notify(Bluefruit.connHandle(), data, (uint16_t)length);
+}
+
+static void configCccdWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr, uint16_t cccdValue) {
+    onConfigSubscriptionChanged((cccdValue & BLE_GATT_HVX_NOTIFICATION) != 0);
+}
+
+static void configRxWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr, uint8_t* data, uint16_t len) {
+    // Defence in depth: the SoftDevice already rejects writes from a link
+    // that is not MITM-authenticated (see the characteristic permissions).
+    if (!bluetoothConnected) return;
+    onConfigBytesReceived(data, len);
+}
+
+// Registers the config service. Must run after the KISS service so the KISS
+// attribute handles stay where bonded phones have them cached.
+static void beginConfigService() {
+    configService.begin();
+
+    configTxChar.setProperties(CHR_PROPS_NOTIFY);
+    configTxChar.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_NO_ACCESS);
+    configTxChar.setMaxLen(CONFIG_MAX_CHUNK_BYTES);
+    configTxChar.setCccdWriteCallback(configCccdWriteCallback);
+    configTxChar.begin();
+
+    configRxChar.setProperties(CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP);
+    configRxChar.setPermission(SECMODE_NO_ACCESS, SECMODE_ENC_WITH_MITM);
+    configRxChar.setMaxLen(CONFIG_MAX_CHUNK_BYTES);
+    configRxChar.setWriteCallback(configRxWriteCallback);
+    configRxChar.begin();
+}
+#endif  // HAS_BLE_CONFIG
 
 // ── Pairing-policy storage: a small file on InternalFS (LittleFS) ──────────
 // Bluefruit keeps its own bond keys on the same filesystem; clearBonds()
@@ -229,6 +464,9 @@ static void disconnectCallback(uint16_t conn_handle, uint8_t reason) {
     bluetoothConnected = false;
     nrf52KissBuffer    = "";
     shouldSendToLoRa   = false;
+    #ifdef HAS_BLE_CONFIG
+        onConfigSubscriptionChanged(false);
+    #endif
     bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Phone disconnected (reason 0x%02X), advertising again", reason);
     Bluefruit.Advertising.start(0);
 }
@@ -249,6 +487,11 @@ static void securedCallback(uint16_t conn_handle) {
     }
     bluetoothConnected = true;
     bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Phone authenticated with PIN, KISS link open");
+    #ifdef HAS_BLE_CONFIG
+        // A bonded phone's CCCD state is restored from the bond without a
+        // CCCD write, so the subscribe callback may never fire on reconnect.
+        if (configTxChar.notifyEnabled(conn_handle)) onConfigSubscriptionChanged(true);
+    #endif
 }
 
 static void pairCompleteCallback(uint16_t conn_handle, uint8_t auth_status) {
@@ -381,6 +624,11 @@ namespace BLE_Utils {
         rxChar.setWriteCallback(rxWriteCallback);
         rxChar.begin();
 
+        #ifdef HAS_BLE_CONFIG
+            // PIN-protected trackers only: never expose the CLI on an open link.
+            if (pinRequired) beginConfigService();
+        #endif
+
         Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
         Bluefruit.Advertising.addTxPower();
         Bluefruit.Advertising.addService(aprsService);
@@ -485,6 +733,82 @@ static bool deleteAllPhoneBonds() {
 static bool isPinAuthenticated(const ble_gap_conn_desc* desc) {
     return desc->sec_state.encrypted && desc->sec_state.authenticated;
 }
+
+#ifdef HAS_BLE_CONFIG
+// ── Config link (setup CLI over BLE) — see the shared section above ────────
+static NimBLECharacteristic* pConfigTx = nullptr;
+static NimBLECharacteristic* pConfigRx = nullptr;
+
+static bool platformConfigLinkUp() {
+    return bluetoothConnected && configSubscribed.load()
+        && activeConnHandle != BLE_HS_CONN_HANDLE_NONE && pConfigTx != nullptr;
+}
+
+static size_t platformConfigChunkLimit() {
+    if (pServer == nullptr) return 0;
+    const uint16_t mtu = pServer->getPeerMTU(activeConnHandle);
+    return mtu > 3 ? mtu - 3 : 0;
+}
+
+// Calls the host directly instead of NimBLECharacteristic::notify(), which
+// (NimBLE-Arduino 1.4.x) discards the result and so silently drops data when
+// the host is out of mbufs. ble_gattc_notify_custom() frees the mbuf on every
+// path, so a failed chunk is simply retried later.
+static bool platformSendConfigChunk(const uint8_t* data, size_t length) {
+    const uint16_t connHandle = activeConnHandle;
+    if (connHandle == BLE_HS_CONN_HANDLE_NONE) return false;
+    os_mbuf* packet = ble_hs_mbuf_from_flat(data, (uint16_t)length);
+    if (packet == nullptr) return false;
+    return ble_gattc_notify_custom(connHandle, pConfigTx->getHandle(), packet) == 0;
+}
+
+class ConfigCharacteristicCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* characteristic, ble_gap_conn_desc* desc) override {
+        // Same gate as KISS writes: only the active, PIN-authenticated phone.
+        if (desc->conn_handle != activeConnHandle) return;
+        if (!bluetoothConnected || !isPinAuthenticated(desc)) return;
+        const std::string received = characteristic->getValue();
+        onConfigBytesReceived(reinterpret_cast<const uint8_t*>(received.data()), received.size());
+    }
+
+    void onSubscribe(NimBLECharacteristic* characteristic, ble_gap_conn_desc* desc, uint16_t subValue) override {
+        if (desc->conn_handle != activeConnHandle) return;
+        // bit 0 = notifications. NimBLE registers every CCCD as open
+        // read/write regardless of the characteristic's security flags, so a
+        // phone can subscribe before pairing. That early subscription is
+        // ignored here; onAuthenticationComplete() opens the link once the
+        // PIN check passes (see openConfigLinkIfSubscribed()).
+        const bool subscribed = (subValue & 0x0001) != 0 && isPinAuthenticated(desc);
+        onConfigSubscriptionChanged(subscribed);
+    }
+};
+
+// Registers the config service. Must run after the KISS service is created so
+// the KISS attribute handles stay where bonded phones have them cached.
+static void beginConfigService() {
+    NimBLEService* service = pServer->createService(CONFIG_SERVICE_UUID);
+    pConfigTx = service->createCharacteristic(
+        CONFIG_CHAR_UUID_TX,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
+        NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
+    pConfigRx = service->createCharacteristic(
+        CONFIG_CHAR_UUID_RX,
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR |
+        NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
+    ConfigCharacteristicCallbacks* callbacks = new ConfigCharacteristicCallbacks();
+    pConfigTx->setCallbacks(callbacks);
+    pConfigRx->setCallbacks(callbacks);
+    service->start();
+}
+
+// Called once a link is PIN-authenticated: picks up a subscription the phone
+// made before pairing finished (ignored at the time, see onSubscribe()).
+static void openConfigLinkIfSubscribed() {
+    if (pConfigTx != nullptr && pConfigTx->getSubscribedCount() > 0) {
+        onConfigSubscriptionChanged(true);
+    }
+}
+#endif  // HAS_BLE_CONFIG
 
 // Human-readable text for an SMP pairing-failure reason (Core Spec Vol 3 Part H 3.5.5).
 static const char* smpReasonText(int reason) {
@@ -599,12 +923,18 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
         bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO,
                  desc->sec_state.bonded ? "Phone authenticated with PIN, KISS link open"
                                         : "Phone authenticated with PIN (not bonded), KISS link open");
+        #ifdef HAS_BLE_CONFIG
+            openConfigLinkIfSubscribed();
+        #endif
     }
 
     void onDisconnect(NimBLEServer* server, ble_gap_conn_desc* desc) override {
         if (desc->conn_handle != activeConnHandle) return;   // a refused second phone
         stopPinPairingTimer();
         bluetoothConnected  = false;
+        #ifdef HAS_BLE_CONFIG
+            onConfigSubscriptionChanged(false);
+        #endif
         activeConnHandle    = BLE_HS_CONN_HANDLE_NONE;
         shouldSendBLEtoLoRa = false;
         kissSerialBuffer    = "";
@@ -739,6 +1069,11 @@ namespace BLE_Utils {
         pCharacteristicRx->setCallbacks(new MyCallbacks());
 
         pService->start();
+
+        #ifdef HAS_BLE_CONFIG
+            // PIN-protected trackers only: never expose the CLI on an open link.
+            if (pinRequired) beginConfigService();
+        #endif
 
         NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(BLE_SERVICE_UUID);

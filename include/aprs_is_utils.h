@@ -56,6 +56,27 @@ namespace APRS_IS_Utils {
     // or "DOWN" (no TCP session).
     String  getConnectionState();
 
+    // Outcome of the APRS-IS login on the current connection:
+    //   "verified"   — passcode accepted, uploads are gated
+    //   "unverified" — passcode rejected (or no login response within the
+    //                  timeout): the server keeps the socket open but
+    //                  receive-only, so uploads are not accepted
+    //   "pending"    — waiting for the server's login response
+    //   "none"       — not connected
+    // Note: a changed passcode only takes effect on the next connect.
+    String   getLoginState();
+
+    // Host and port of the current (or most recent) connection, as dialed —
+    // may be a rotate pool name such as "rotate.aprs.net". Empty / 0 until
+    // the first successful TCP connect.
+    String   getConnectedHost();
+    uint16_t getConnectedPort();
+
+    // Name the server reported in its login response
+    // ("# logresp CALL verified, server T2USASW" -> "T2USASW"), i.e. which
+    // pool member this connection actually landed on. Empty until received.
+    String   getServerName();
+
 }
 
 #endif // HAS_WIFI
