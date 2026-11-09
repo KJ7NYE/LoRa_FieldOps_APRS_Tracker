@@ -1,6 +1,6 @@
 {
   "name": "LoRa FieldOps \u2014 Heltec Wireless Tracker (Firmware Update)",
-  "version": "v1.4.4",
+  "version": "v1.4.5",
   "new_install_prompt_erase": true,
   "builds": [
     {

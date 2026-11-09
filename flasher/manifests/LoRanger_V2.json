@@ -1,0 +1,15 @@
+{
+  "name": "LoRa FieldOps \u2014 KJ7NYE LoRanger V2",
+  "version": "v1.4.5",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/LoRanger_V2_web_factory.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

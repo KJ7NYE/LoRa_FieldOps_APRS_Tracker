@@ -1,6 +1,6 @@
 {
-  "version": "v1.4.4",
-  "published": "2026-11-06",
+  "version": "v1.4.5",
+  "published": "2026-11-09",
   "repo": "KJ7NYE/LoRa_FieldOps_APRS_Tracker",
   "targets": [
     {
@@ -73,6 +73,15 @@
       "manufacturer": "Custom",
       "manifest": "LoRanger_V1.json",
       "update_manifest": "LoRanger_V1_update.json"
+    },
+    {
+      "id": "LoRanger_V2",
+      "label": "KJ7NYE LoRanger V2",
+      "chip": "ESP32-S3",
+      "description": "KJ7NYE LoRanger V2 \u2014 ESP32-S3, E22-400M30S (SX1262, 1 W), ATGM336H GPS, STK8328-C accel, microSD. Optional 128x64 I2C OLED on J2 (runtime-detected).",
+      "manufacturer": "Custom",
+      "manifest": "LoRanger_V2.json",
+      "update_manifest": "LoRanger_V2_update.json"
     }
   ]
 }
