@@ -10,7 +10,7 @@ Handoff document covering ESP32 work that landed and the design decisions for an
 
 ### `import` / `export` commands in serial setup CLI
 
-Two new top-level commands in [src/serial_setup.cpp](src/serial_setup.cpp), documented in [SERIAL_SETUP.md](SERIAL_SETUP.md):
+Two new top-level commands in [src/serial_setup.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/serial_setup.cpp), documented in [SERIAL_SETUP.md](../reference/serial-cli.md):
 
 - **`export`** — streams the on-disk `tracker_conf.json` to the terminal between `---- BEGIN ----` / `---- END ----` markers.
 - **`import`** — accepts a pasted full JSON, auto-detects end via string-aware brace balancing, validates (parse + non-empty `beacons[0].callsign`), writes to SPIFFS, reboots on success. 16 KB cap; Ctrl-C aborts; refuses to start if there are unsaved CLI edits.
@@ -35,10 +35,10 @@ Five-step PR landed as four commits. Each step is a green-build checkpoint on it
 
 | Commit | Step | What |
 |---|---|---|
-| `9e64f69` | 1 + 2 | ESP32 capability flags (`HAS_WIFI` / `HAS_NIMBLE` / `HAS_WEB_UI` / `HAS_DISPLAY` in `[common].build_flags`) gating ESP-only subsystems behind `#ifdef`; new `[nrf52_common]` block in [common_settings.ini](common_settings.ini); [variants/heltec_t114/](variants/heltec_t114/); header shims under [include/nrf52_shims/](include/nrf52_shims/) intercepting `<SPIFFS.h>` and `<logger.h>` on nRF builds; `#ifdef ARDUINO_ARCH_NRF52` arms across 12 source files for SPIFFS↔InternalFS, ESP.restart↔NVIC_SystemReset, Wire/SPI.begin no-args, ledc PWM→`tone()`, gpsSerial→Serial1 macro, esp_sleep→SYSTEMOFF, etc. |
-| `ba83b1f` | 3 | ST7789 driver path in [src/display.cpp](src/display.cpp) behind `HAS_TFT_ST7789`. Hardware SPI on a second SPIM peripheral (`SPIClass SPI1` on `NRF_SPIM2`, since the primary `SPI` bus is owned by the SX1262 radio); Adafruit_GFX-based; text-only rendering. |
-| `247161e` | 4 | First-boot embedded defaults: [tools/embed_config.py](tools/embed_config.py) pre-build script reads [data/tracker_conf.json](data/tracker_conf.json) and emits `include/generated/default_config_embed.h` (gitignored). [src/configuration.cpp](src/configuration.cpp) writes `DEFAULT_CONFIG_JSON` straight to LittleFS on first boot; ESP32 path unchanged. |
-| `15c1a75` | 5 | FCC TX-gate at [src/lora_utils.cpp](src/lora_utils.cpp) `sendNewPacket` chokepoint, using existing `APRSPacketLib::checkNocall()` validator on the source-callsign field. Active on both platforms. |
+| `9e64f69` | 1 + 2 | ESP32 capability flags (`HAS_WIFI` / `HAS_NIMBLE` / `HAS_WEB_UI` / `HAS_DISPLAY` in `[common].build_flags`) gating ESP-only subsystems behind `#ifdef`; new `[nrf52_common]` block in [common_settings.ini](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/common_settings.ini); [variants/heltec_t114/](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/variants/heltec_t114/); header shims under [include/nrf52_shims/](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/include/nrf52_shims/) intercepting `<SPIFFS.h>` and `<logger.h>` on nRF builds; `#ifdef ARDUINO_ARCH_NRF52` arms across 12 source files for SPIFFS↔InternalFS, ESP.restart↔NVIC_SystemReset, Wire/SPI.begin no-args, ledc PWM→`tone()`, gpsSerial→Serial1 macro, esp_sleep→SYSTEMOFF, etc. |
+| `ba83b1f` | 3 | ST7789 driver path in [src/display.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/display.cpp) behind `HAS_TFT_ST7789`. Hardware SPI on a second SPIM peripheral (`SPIClass SPI1` on `NRF_SPIM2`, since the primary `SPI` bus is owned by the SX1262 radio); Adafruit_GFX-based; text-only rendering. |
+| `247161e` | 4 | First-boot embedded defaults: [tools/embed_config.py](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/tools/embed_config.py) pre-build script reads [data/tracker_conf.json](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/data/tracker_conf.json) and emits `include/generated/default_config_embed.h` (gitignored). [src/configuration.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/configuration.cpp) writes `DEFAULT_CONFIG_JSON` straight to LittleFS on first boot; ESP32 path unchanged. |
+| `15c1a75` | 5 | FCC TX-gate at [src/lora_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/lora_utils.cpp) `sendNewPacket` chokepoint, using existing `APRSPacketLib::checkNocall()` validator on the source-callsign field. Active on both platforms. |
 
 **T114 build (`heltec_t114` env, fresh from clean `pio run`):** Flash 40.9% (333 KB / 815), RAM 32.3% (80 KB / 248). UF2-flashable `firmware.zip` produced. Display body active, embedded defaults baked in, TX-gate enforcing.
 
@@ -46,7 +46,7 @@ Five-step PR landed as four commits. Each step is a green-build checkpoint on it
 
 ### Notes for future maintainers
 
-- **PIO LDF discovery quirk** — LDF doesn't crawl `#include`s reached via custom `-I` paths (like `include/nrf52_shims/`). Worked around by an explicit `#include <Adafruit_LittleFS.h>` in [src/configuration.cpp](src/configuration.cpp) gated on nRF, plus `lib_extra_dirs = ${platformio.packages_dir}/framework-arduinoadafruitnrf52/libraries` in the variant ini. If a future shim needs another BSP-bundled lib, repeat that pattern.
+- **PIO LDF discovery quirk** — LDF doesn't crawl `#include`s reached via custom `-I` paths (like `include/nrf52_shims/`). Worked around by an explicit `#include <Adafruit_LittleFS.h>` in [src/configuration.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/configuration.cpp) gated on nRF, plus `lib_extra_dirs = ${platformio.packages_dir}/framework-arduinoadafruitnrf52/libraries` in the variant ini. If a future shim needs another BSP-bundled lib, repeat that pattern.
 - **`-Wno-sign-compare` on nRF** — gcc-arm-none-eabi flags signed/unsigned comparisons that gcc-xtensa lets pass. Many `millis()/uint32_t vs signed-int * 1000` and `int i; i < container.size()` sites. Cleaning these up is its own follow-up that benefits both platforms.
 - **Hardware SPI for the T114 ST7789** — uses a second hardware SPI peripheral (`SPIClass SPI1` on `NRF_SPIM2`) rather than sharing the primary `SPI` bus the LoRa SX1262 owns. Adequate for text-only updates; revisit driver/layout choices if rich UI lands.
 - **Commit message style** — see `feedback_commit_style.md` in memory: omit `Co-Authored-By: Claude` trailer.
@@ -77,9 +77,9 @@ Same hardware concept as the ESP32 LoRanger V1 (ATGM336H GPS + EBYTE E22-400M30S
 The work splits into two layers, with the bigger investment going into the platform layer so future nRF52 boards (LoRanger V1 nRF, RAK4631, Adafruit Feather, …) drop in as ~2-file variants:
 
 **Platform layer (built once, used by all nRF52 boards):**
-- `[nrf52_common]` block in [common_settings.ini](common_settings.ini) — `platform = nordicnrf52`, Adafruit nRF52 BSP, InternalFileSystem, RadioLib subset, Adafruit_GFX
+- `[nrf52_common]` block in [common_settings.ini](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/common_settings.ini) — `platform = nordicnrf52`, Adafruit nRF52 BSP, InternalFileSystem, RadioLib subset, Adafruit_GFX
 - Capability macros: `HAS_WIFI`, `HAS_BT_CLASSIC`, `HAS_NIMBLE`, `HAS_WEB_UI`, `DISPLAY_DRIVER_*` — nRF52 platform turns ESP-only ones off; ESP32 sets per-board (matches existing partial gating)
-- Per-env `build_src_filter` template excluding [src/wifi_utils.cpp](src/wifi_utils.cpp), [src/web_utils.cpp](src/web_utils.cpp), [src/bluetooth_utils.cpp](src/bluetooth_utils.cpp), [src/ble_utils.cpp](src/ble_utils.cpp) for any nRF52 env
+- Per-env `build_src_filter` template excluding [src/wifi_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/wifi_utils.cpp), [src/web_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/web_utils.cpp), [src/bluetooth_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/bluetooth_utils.cpp), [src/ble_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/ble_utils.cpp) for any nRF52 env
 - `#ifdef ARDUINO_ARCH_NRF52` arms in the ~7 files identified below — keeping the doc's "no HAL abstraction layer" rule intact (capability flags ≠ HAL — they're feature gates, not new abstraction headers)
 - First-boot writer + `tools/embed_config.py` pre-build script (see "Defaults source" below)
 - TX-gate on callsign validity — added to *both* platforms (FCC-correctness on ESP32 too)
@@ -98,12 +98,12 @@ After the platform layer lands, adding any future nRF52 board is just dropping a
 | Web UI | **Delete entirely** on nRF | nRF52840 has no WiFi. AsyncTCP / ESPAsyncWebServer are ESP32-only. |
 | Subsystem capability flags | `HAS_WIFI`, `HAS_BT_CLASSIC`, `HAS_NIMBLE`, `HAS_WEB_UI` macros (plus `DISPLAY_DRIVER_*`) | Avoids per-variant `defined(HELTEC_T114) \|\| defined(LORANGER_V1_NRF) \|\| …` chains. New nRF52 boards drop in clean. |
 | MSC drag-drop drive | **Rejected** | Requires a QSPI flash chip (BOM addition), USB composite stack complexity, FAT-vs-LittleFS incoherence. The `import` command covers all the same use cases without new hardware. |
-| Defaults source | **Project-level [data/tracker_conf.json](data/tracker_conf.json)** (single source of truth, already exists) + new pre-build script `tools/embed_config.py` that emits a generated `DEFAULT_CONFIG_JSON` C string header for first-boot use | Matches the existing ESP32 `data/tracker_conf.json + uploadfs` convention — *no per-variant JSON files*. nRF52 has no clean PIO `uploadfs` equivalent for InternalFS, so first-boot writes the generated header to LittleFS, reboots, runs normally. `setDefaultValues()` C++ floor still backstops missing keys. ESP32 build can also use the embedded path as a fallback if `uploadfs` was skipped. |
-| Display driver | T114 ships ST7789 1.14" 240×135 TFT; LoRanger V1 nRF ships SSD1306. [src/display.cpp](src/display.cpp) body is gated behind `HAS_DISPLAY` (defined for ESP32 in `[common]`, undefined on nRF) with no-op stubs for headless variants. ST7789 driver path lands as its own step; layout/render code shared via Adafruit GFX. | T114 boots headless to USB serial during platform bring-up; display added in a follow-up step (see PR sequencing). Display driver polymorphic over hardware, not over board. |
+| Defaults source | **Project-level [data/tracker_conf.json](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/data/tracker_conf.json)** (single source of truth, already exists) + new pre-build script `tools/embed_config.py` that emits a generated `DEFAULT_CONFIG_JSON` C string header for first-boot use | Matches the existing ESP32 `data/tracker_conf.json + uploadfs` convention — *no per-variant JSON files*. nRF52 has no clean PIO `uploadfs` equivalent for InternalFS, so first-boot writes the generated header to LittleFS, reboots, runs normally. `setDefaultValues()` C++ floor still backstops missing keys. ESP32 build can also use the embedded path as a fallback if `uploadfs` was skipped. |
+| Display driver | T114 ships ST7789 1.14" 240×135 TFT; LoRanger V1 nRF ships SSD1306. [src/display.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/display.cpp) body is gated behind `HAS_DISPLAY` (defined for ESP32 in `[common]`, undefined on nRF) with no-op stubs for headless variants. ST7789 driver path lands as its own step; layout/render code shared via Adafruit GFX. | T114 boots headless to USB serial during platform bring-up; display added in a follow-up step (see PR sequencing). Display driver polymorphic over hardware, not over board. |
 | Repo structure | **One repo, variant pattern** | Deletions of WiFi/web/BT-Classic code are cheap (already partially `#ifdef`-gated). Per-env `build_src_filter` excludes those .cpp files entirely from nRF builds. Two repos would mean every shared-logic fix (e.g., the `import` command) needs porting both ways forever. |
 | Config replication across devices | `export` → copy → `import` | Already works; same path on both platforms. |
 | Filesystem image at flash time | **Skip** | First-boot writes embedded defaults to LittleFS. PlatformIO doesn't have a clean `uploadfs` equivalent for nRF52 + Adafruit BSP. |
-| FCC compliance | TX-gate at the [src/lora_utils.cpp](src/lora_utils.cpp) `sendNewPacket` chokepoint, using the existing `APRSPacketLib::checkNocall()` validator on the source-callsign field of the packet. Lands as part of the nRF platform PR (where boot-with-defaults makes it load-bearing); covers ESP32 for free since the chokepoint is shared. | Boot-with-defaults is fine *if and only if* transmit is blocked until callsign is valid. Boot/RX/display all run; carrier never keys until configured. |
+| FCC compliance | TX-gate at the [src/lora_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/lora_utils.cpp) `sendNewPacket` chokepoint, using the existing `APRSPacketLib::checkNocall()` validator on the source-callsign field of the packet. Lands as part of the nRF platform PR (where boot-with-defaults makes it load-bearing); covers ESP32 for free since the chokepoint is shared. | Boot-with-defaults is fine *if and only if* transmit is blocked until callsign is valid. Boot/RX/display all run; carrier never keys until configured. |
 
 ### Concrete port scope
 
@@ -115,23 +115,23 @@ treat exact paths/line numbers here as historical rather than current:
 
 | File | Change | Effort |
 |---|---|---|
-| [src/configuration.cpp](src/configuration.cpp) | `<SPIFFS.h>` ↔ `<InternalFileSystem.h>`, `SPIFFS.` ↔ `InternalFS.` (3 sites). New first-boot writer that pulls defaults from generated `default_config_embed.h` if no config on disk. | ~20 `#ifdef` lines + ~30-line first-boot writer |
-| [src/serial_setup.cpp](src/serial_setup.cpp) | Same SPIFFS swap; `ESP.restart()` ↔ `NVIC_SystemReset()` (2 sites) | ~6 `#ifdef` lines |
-| [src/msg_utils.cpp](src/msg_utils.cpp), [src/station_utils.cpp](src/station_utils.cpp) | SPIFFS swap | ~4 lines each |
-| [src/power_utils.cpp:462-464](src/power_utils.cpp#L462-L464) | `esp_sleep_*` block → `NRF_POWER->SYSTEMOFF` or `sd_power_system_off()` | 5 lines |
+| [src/configuration.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/configuration.cpp) | `<SPIFFS.h>` ↔ `<InternalFileSystem.h>`, `SPIFFS.` ↔ `InternalFS.` (3 sites). New first-boot writer that pulls defaults from generated `default_config_embed.h` if no config on disk. | ~20 `#ifdef` lines + ~30-line first-boot writer |
+| [src/serial_setup.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/serial_setup.cpp) | Same SPIFFS swap; `ESP.restart()` ↔ `NVIC_SystemReset()` (2 sites) | ~6 `#ifdef` lines |
+| [src/msg_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/msg_utils.cpp), [src/station_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/station_utils.cpp) | SPIFFS swap | ~4 lines each |
+| [src/power_utils.cpp:462-464](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/power_utils.cpp#L462-L464) | `esp_sleep_*` block → `NRF_POWER->SYSTEMOFF` or `sd_power_system_off()` | 5 lines |
 | `src/main.cpp` (entry point, formerly `LoRa_APRS_Tracker.cpp`) | Wrap `<WiFi.h>` and `<BluetoothSerial.h>` in `#ifdef HAS_WIFI` / `#ifdef HAS_BT_CLASSIC` (some already half-gated) | ~6 lines |
-| [src/display.cpp](src/display.cpp) | Step 2: gated body behind `HAS_DISPLAY`, added no-op stubs + `screenBrightness` / `symbolAvailable` globals so other TUs link. Step 3 (next): ST7789 driver path, Adafruit ST7789 lib added to nRF52 lib_deps, layout reused via Adafruit GFX with scale tweaks (240×135 vs 128×64). | Step 2: ~25 lines. Step 3: ~30-50 lines additional. |
-| [src/battery_utils.cpp](src/battery_utils.cpp) | nRF52840 ADC: 12-bit at 0.6 V Vref × gain. Different scale factor than ESP32. **Tune via existing `lora32BatReadingCorr` config — do not edit the formula** (per durable memory). | new `#ifdef ARDUINO_ARCH_NRF52` branch with different starting constant |
-| New: `tools/embed_config.py` | Reads [data/tracker_conf.json](data/tracker_conf.json), emits `default_config_embed.h` with `static const char DEFAULT_CONFIG_JSON[] = R"json(...)json";` for first-boot use. Wired into [platformio.ini](platformio.ini) `extra_scripts` for nRF52 envs (and optionally ESP32 as a `uploadfs`-skipped fallback). | ~30 lines |
-| [common_settings.ini](common_settings.ini) | Conditional `lib_deps` per platform | new `[nrf52_common]` block |
-| [platformio.ini](platformio.ini) | New `[env:nrf52_base]` + per-env `build_src_filter` to exclude wifi/web/bt files | ~15 lines |
+| [src/display.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/display.cpp) | Step 2: gated body behind `HAS_DISPLAY`, added no-op stubs + `screenBrightness` / `symbolAvailable` globals so other TUs link. Step 3 (next): ST7789 driver path, Adafruit ST7789 lib added to nRF52 lib_deps, layout reused via Adafruit GFX with scale tweaks (240×135 vs 128×64). | Step 2: ~25 lines. Step 3: ~30-50 lines additional. |
+| [src/battery_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/battery_utils.cpp) | nRF52840 ADC: 12-bit at 0.6 V Vref × gain. Different scale factor than ESP32. **Tune via existing `lora32BatReadingCorr` config — do not edit the formula** (per durable memory). | new `#ifdef ARDUINO_ARCH_NRF52` branch with different starting constant |
+| New: `tools/embed_config.py` | Reads [data/tracker_conf.json](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/data/tracker_conf.json), emits `default_config_embed.h` with `static const char DEFAULT_CONFIG_JSON[] = R"json(...)json";` for first-boot use. Wired into [platformio.ini](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/platformio.ini) `extra_scripts` for nRF52 envs (and optionally ESP32 as a `uploadfs`-skipped fallback). | ~30 lines |
+| [common_settings.ini](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/common_settings.ini) | Conditional `lib_deps` per platform | new `[nrf52_common]` block |
+| [platformio.ini](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/platformio.ini) | New `[env:nrf52_base]` + per-env `build_src_filter` to exclude wifi/web/bt files | ~15 lines |
 | `variants/heltec_t114/` (immediate), `variants/LoRanger_V1_nRF/` (later) | New variant dirs: `platformio.ini`, `board_pinout.h`. **No per-variant `default_config.h`** — defaults come from project-level `data/tracker_conf.json` via the pre-build script. | ~2 files per variant, ~50-80 lines each |
 
-The `import` and `export` commands ported in [src/serial_setup.cpp](src/serial_setup.cpp) require zero code changes other than the SPIFFS shim. The string-aware brace counter, validation gates, and reboot path are all platform-neutral.
+The `import` and `export` commands ported in [src/serial_setup.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/serial_setup.cpp) require zero code changes other than the SPIFFS shim. The string-aware brace counter, validation gates, and reboot path are all platform-neutral.
 
 ### What NOT to extend to nRF52 (per existing memory on LightTracker flag-split)
 
-Per [memory/project_lighttracker_flag_split.md](memory/project_lighttracker_flag_split.md), `LIGHTTRACKER_PLUS_1_0` historically gated four unrelated behaviors. LoRanger V1 reuses only the FSPI radio constructor branch. For nRF52 LoRanger:
+Historically, `LIGHTTRACKER_PLUS_1_0` gated four unrelated behaviors. LoRanger V1 reuses only the FSPI radio constructor branch. For nRF52 LoRanger:
 
 - **Reuse**: SPI radio init, APRS frame builder, SmartBeacon math, GPS parsing, button handling, battery formula structure, display layout/render code via Adafruit GFX (driver differs SSD1306 vs ST7789 — GFX calls don't).
 - **Don't extend**: `RADIO_VCC_PIN` / `GPS_VCC` / SHTC3 / 560k-100k divider branches — same reasoning as for the ESP32 LoRanger V1 (LDOs hardwired, no SHTC3, 100k/100k divider).
@@ -166,7 +166,7 @@ Remaining work:
 2. **Two repos** — divergence is shallow now (~25 `#ifdef` lines + a few deleted files via `build_src_filter`). Two-repo overhead would be cross-porting every shared-logic improvement forever.
 3. **HAL abstraction layer (`platform/storage.h` etc.)** — clean in theory, but breaks the upstream-merge story with CA2RXU's repo. Refactoring shared files for HAL adds merge conflicts at every upstream pull. (Note: the capability flags `HAS_WIFI` etc. are *not* HAL — they're feature gates, no new abstraction headers.)
 4. **PlatformIO `uploadfs` equivalent for nRF** — `mklittlefs` exists but flash-side tooling is rough; UF2 bootloader doesn't have a clean partition handoff for it. First-boot embedded-JSON write achieves the same goal with simpler tooling.
-5. ~~**BLE-based config** — would require Adafruit Bluefruit BLE stack and a phone app. Out of scope for serial-CLI design.~~ **Reversed** once both existed: the serial CLI is now also carried over a PIN-protected Nordic UART Service (see "Setup over Bluetooth" in [SERIAL_SETUP.md](SERIAL_SETUP.md)). It reuses the CLI unchanged rather than adding a second config protocol.
+5. ~~**BLE-based config** — would require Adafruit Bluefruit BLE stack and a phone app. Out of scope for serial-CLI design.~~ **Reversed** once both existed: the serial CLI is now also carried over a PIN-protected Nordic UART Service (see "Setup over Bluetooth" in [SERIAL_SETUP.md](../reference/serial-cli.md)). It reuses the CLI unchanged rather than adding a second config protocol.
 6. **Per-variant `default_config.h`** — would diverge from the existing single-source-of-truth `data/tracker_conf.json` ESP32 convention. Replaced with project-level JSON + pre-build script that generates the embedded header at build time.
 7. ~~**T114 headless first** — considered, rejected.~~ **Reversed in practice.** Splitting PR-1 into stepwise green-build commits made headless-first practical: the platform layer (Step 2) lands without a working display, USB serial gives enough bring-up debug visibility, and the ST7789 driver becomes its own focused follow-up (Step 3) instead of bloating the platform commit.
 8. **Standalone ESP32-only TX-gate PR** — considered, dropped. Existing soft-warning + auto-rightArrow UI in `src/main.cpp` (formerly `LoRa_APRS_Tracker.cpp`) is sufficient on a shipping ESP32 build that's past initial config. The hard gate is load-bearing only with boot-with-defaults; it travels with PR-1.
@@ -176,24 +176,24 @@ Remaining work:
 ## Open questions / not yet decided
 
 - ~~**Whether to actually do the port at all.**~~ **Resolved by doing it** — PR-1 landed (commits `9e64f69`, `ba83b1f`, `247161e`, `15c1a75`).
-- ~~**FCC TX-gate** — design agreed, implementation deferred to PR-1.~~ **Done in `15c1a75`** at [src/lora_utils.cpp](src/lora_utils.cpp) `sendNewPacket`.
-- **T114 board definition source** — currently using `board = adafruit_feather_nrf52840` for the SoC + bootloader / flash layout, with T114-specific pins overridden via [variants/heltec_t114/board_pinout.h](variants/heltec_t114/board_pinout.h). This compiles and links; whether the Adafruit Feather flash layout is *flash-time* compatible with whatever bootloader Heltec ships on the T114 needs hardware verification. Custom board JSON is the fallback if it isn't.
+- ~~**FCC TX-gate** — design agreed, implementation deferred to PR-1.~~ **Done in `15c1a75`** at [src/lora_utils.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/lora_utils.cpp) `sendNewPacket`.
+- **T114 board definition source** — currently using `board = adafruit_feather_nrf52840` for the SoC + bootloader / flash layout, with T114-specific pins overridden via [variants/heltec_t114/board_pinout.h](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/variants/heltec_t114/board_pinout.h). This compiles and links; whether the Adafruit Feather flash layout is *flash-time* compatible with whatever bootloader Heltec ships on the T114 needs hardware verification. Custom board JSON is the fallback if it isn't.
 - **Repo structure when port begins** — settled: `variants/heltec_t114/` lives alongside the 40+ existing variants. No shared-code restructuring needed at current `#ifdef` density.
 
 ---
 
 ## File pointers for the next conversation
 
-- [src/serial_setup.cpp](src/serial_setup.cpp) — the import/export implementation; ports nearly free to nRF52.
-- [src/configuration.cpp](src/configuration.cpp) — SPIFFS read/write path; primary shim site; first-boot writer lives here.
-- [src/display.cpp](src/display.cpp) — display driver path; body gated behind `HAS_DISPLAY` (Step 2). Step 3 adds ST7789 path for T114.
-- [data/tracker_conf.json](data/tracker_conf.json) — single source of truth for default config (both platforms).
+- [src/serial_setup.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/serial_setup.cpp) — the import/export implementation; ports nearly free to nRF52.
+- [src/configuration.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/configuration.cpp) — SPIFFS read/write path; primary shim site; first-boot writer lives here.
+- [src/display.cpp](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/src/display.cpp) — display driver path; body gated behind `HAS_DISPLAY` (Step 2). Step 3 adds ST7789 path for T114.
+- [data/tracker_conf.json](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/data/tracker_conf.json) — single source of truth for default config (both platforms).
 - *New:* `tools/embed_config.py` — pre-build script that emits `default_config_embed.h` from the JSON.
-- [variants/heltec_v3_433_aprs/](variants/heltec_v3_433_aprs/) — closest existing template for an off-the-shelf integrated tracker variant.
-- [variants/LoRanger_V1/](variants/LoRanger_V1/) — template for the eventual `LoRanger_V1_nRF` variant.
-- [SERIAL_SETUP.md](SERIAL_SETUP.md) — user-facing CLI reference, includes the new commands and the cloning example.
-- [CHANGELOG.md](CHANGELOG.md) — fork-overlay history.
-- [common_settings.ini](common_settings.ini) — current ESP32-only lib_deps; will need conditional sections.
+- [variants/heltec_v3_433_aprs/](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/variants/heltec_v3_433_aprs/) — closest existing template for an off-the-shelf integrated tracker variant.
+- [variants/LoRanger_V1/](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/variants/LoRanger_V1/) — template for the eventual `LoRanger_V1_nRF` variant.
+- [SERIAL_SETUP.md](../reference/serial-cli.md) — user-facing CLI reference, includes the new commands and the cloning example.
+- [CHANGELOG.md](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/CHANGELOG.md) — fork-overlay history.
+- [common_settings.ini](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/blob/main/common_settings.ini) — current ESP32-only lib_deps; will need conditional sections.
 - `~/.claude/projects/c--GitHub-LoRanger-APRS-Tracker/memory/project_lighttracker_flag_split.md` — flag-split rules to reapply for nRF.
 
 ## Memory-relevant constraints

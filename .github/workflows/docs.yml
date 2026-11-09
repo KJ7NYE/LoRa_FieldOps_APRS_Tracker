@@ -1,0 +1,79 @@
+name: Docs Site
+
+# Builds the MkDocs user manual (mkdocs.yml + docs/) and publishes it to
+# GitHub Pages at https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/.
+#
+# The Pages site also serves the standalone serial configuration tool and the
+# web flasher. Their URLs are hard-coded in serial_config.html, the flasher
+# manifests and the Android app, so both are copied into the built site at
+# their existing paths:
+#   /serial_config.html
+#   /flasher/...
+#
+# Pull requests only build (with --strict, so broken links fail the check);
+# pushes to main build and deploy. Requires Settings → Pages → Source set to
+# "GitHub Actions".
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        paths:
+            - 'docs/**'
+            - 'mkdocs.yml'
+            - '.github/workflows/docs.yml'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+# Never cancel a deploy part-way; let the newer run queue behind it.
+concurrency:
+    group: pages-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: actions/setup-python@v7
+              with:
+                  python-version: "3.13"
+                  cache: pip
+                  cache-dependency-path: docs/requirements.txt
+
+            - name: Install MkDocs
+              run: pip install -r docs/requirements.txt
+
+            - name: Build manual
+              run: mkdocs build --strict --site-dir site
+
+            - name: Add serial config tool and web flasher
+              run: |
+                  cp serial_config.html site/
+                  cp -r flasher site/
+                  # Serve files as-is; no Jekyll processing.
+                  touch site/.nojekyll
+
+            - name: Upload Pages artifact
+              if: github.event_name != 'pull_request'
+              uses: actions/upload-pages-artifact@v4
+              with:
+                  path: site
+
+    deploy:
+        if: github.event_name != 'pull_request'
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            pages: write
+            id-token: write
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - name: Deploy to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@v4

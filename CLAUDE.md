@@ -60,12 +60,12 @@ The nRF52 port uses:
 - BSP override in `variants_bsp/heltec_t114/`
 - LittleFS (via Adafruit InternalFileSystem) instead of SPIFFS
 
-See `NRF52_PORT_NOTES.md` for port decisions and known quirks.
+See `docs/developers/nrf52-port-notes.md` for port decisions and known quirks.
 
 ### Configuration System
 Runtime config is stored as `tracker_conf.json` on the filesystem. Three interfaces, all without reflashing:
 1. **Web UI** — WiFi AP at 192.168.4.1 (auto-starts on first boot or long button hold); served by `web_utils.cpp`
-2. **Serial CLI** — Type `setup` from serial KISS mode; see `serial_setup.cpp` and `SERIAL_SETUP.md`. The same CLI runs over BLE (Nordic UART Service, PIN-protected trackers only) for the FieldOps app; one transport holds the setup session at a time
+2. **Serial CLI** — Type `setup` from serial KISS mode; see `serial_setup.cpp` and `docs/reference/serial-cli.md`. The same CLI runs over BLE (Nordic UART Service, PIN-protected trackers only) for the FieldOps app; one transport holds the setup session at a time
 3. **Serial KISS** — Default mode; binary APRS passthrough
 
 **First-boot defaults:**
