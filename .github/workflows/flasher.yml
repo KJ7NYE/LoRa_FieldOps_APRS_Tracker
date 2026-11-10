@@ -71,14 +71,14 @@ jobs:
                     - name: LoRanger_V1
                       chip: esp32s3
                       flash_size: 8MB
-                      flash_mode: qio
+                      flash_mode: dio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
                       ota_partitions: true
 
                     - name: LoRanger_V2
                       chip: esp32s3
                       flash_size: 8MB
-                      flash_mode: qio
+                      flash_mode: dio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
                       ota_partitions: true
 
