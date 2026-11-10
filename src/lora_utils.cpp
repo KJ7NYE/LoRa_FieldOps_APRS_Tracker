@@ -185,6 +185,73 @@ namespace LoRa_Utils {
                 SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
             #endif
         #endif
+
+        #if defined(LORANGER_V1)
+            // ─── Bring-up probe: diagnose why radio.begin() returns -2 CHIP_NOT_FOUND.
+            //     Manual reset pulse + BUSY sampling + raw SPI GetStatus + VERSION_STRING read.
+            //     Expected on a healthy E22-400M30S: BUSY after = 0, status != 0x00/0xFF,
+            //     version = "SX1261 V2D 2D02". Remove once localized.
+            pinMode(RADIO_CS_PIN, OUTPUT);  digitalWrite(RADIO_CS_PIN, HIGH);
+            pinMode(RADIO_RST_PIN, OUTPUT); digitalWrite(RADIO_RST_PIN, HIGH);
+            pinMode(RADIO_BUSY_PIN, INPUT);
+            delay(20);
+            uint8_t busyBefore  = digitalRead(RADIO_BUSY_PIN);
+            digitalWrite(RADIO_RST_PIN, LOW);  delay(20);
+            uint8_t busyInReset = digitalRead(RADIO_BUSY_PIN);
+            digitalWrite(RADIO_RST_PIN, HIGH); delay(50);   // SX126x spec: ~5 ms wake; give margin
+            uint8_t busyAfter   = digitalRead(RADIO_BUSY_PIN);
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa-probe",
+                       "BUSY: before=%u in_reset=%u after=%u (want 0 for after)",
+                       busyBefore, busyInReset, busyAfter);
+
+            // Raw GetStatus (opcode 0xC0) — healthy chip returns non-0x00/0xFF status byte
+            loraSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+            digitalWrite(RADIO_CS_PIN, LOW);  delayMicroseconds(10);
+            uint8_t rawStatus = loraSPI.transfer(0xC0);
+            uint8_t rawPad    = loraSPI.transfer(0x00);
+            digitalWrite(RADIO_CS_PIN, HIGH); loraSPI.endTransaction();
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa-probe",
+                       "GetStatus bytes: 0x%02X 0x%02X (0x00/0xFF = no SPI reply)",
+                       rawStatus, rawPad);
+
+            // ReadRegister (opcode 0x1D) VERSION_STRING at 0x0320, 16 ASCII bytes
+            char ver[17] = {0};
+            loraSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+            digitalWrite(RADIO_CS_PIN, LOW);  delayMicroseconds(10);
+            loraSPI.transfer(0x1D);
+            loraSPI.transfer(0x03); loraSPI.transfer(0x20);
+            loraSPI.transfer(0x00);                            // required dummy
+            for (int i = 0; i < 16; i++) ver[i] = (char)loraSPI.transfer(0x00);
+            digitalWrite(RADIO_CS_PIN, HIGH); loraSPI.endTransaction();
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa-probe",
+                       "VERSION_STRING: '%s'", ver);
+
+            // Write/read-back probe — WriteRegister(0x0740 SyncWordMSB/LSB, 0xAB 0xCD)
+            // then ReadRegister the same two bytes. Separates "chip not responding" from
+            // "MISO broken": if we read back 0xAB 0xCD, MOSI+SCK+CS all work and only
+            // MISO (or the chip's version-string register access) is suspect.
+            loraSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+            digitalWrite(RADIO_CS_PIN, LOW);  delayMicroseconds(10);
+            loraSPI.transfer(0x0D);                            // WriteRegister
+            loraSPI.transfer(0x07); loraSPI.transfer(0x40);    // SyncWord addr
+            loraSPI.transfer(0xAB); loraSPI.transfer(0xCD);    // test pattern
+            digitalWrite(RADIO_CS_PIN, HIGH); loraSPI.endTransaction();
+            delay(5);
+
+            uint8_t rb0 = 0, rb1 = 0;
+            loraSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+            digitalWrite(RADIO_CS_PIN, LOW);  delayMicroseconds(10);
+            loraSPI.transfer(0x1D);
+            loraSPI.transfer(0x07); loraSPI.transfer(0x40);
+            loraSPI.transfer(0x00);                            // required dummy
+            rb0 = loraSPI.transfer(0x00);
+            rb1 = loraSPI.transfer(0x00);
+            digitalWrite(RADIO_CS_PIN, HIGH); loraSPI.endTransaction();
+            logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa-probe",
+                       "Write 0xAB 0xCD -> read 0x%02X 0x%02X (match = full SPI works)",
+                       rb0, rb1);
+        #endif
+
         float freq = (float)currentLoRaType->frequency/1000000;
         #if defined(RADIO_HAS_XTAL)
             radio.XTAL = true;
