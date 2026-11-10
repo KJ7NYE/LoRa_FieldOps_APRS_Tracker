@@ -11,10 +11,18 @@ import sys
 
 tag       = sys.argv[1]
 published = sys.argv[2]
-# Firmware is served from GitHub Pages (flasher/firmware/) for CORS compatibility.
-# github.com release download URLs redirect without CORS headers and are blocked
-# by browser CORS policy when fetched from kj7nye.github.io.
-base = "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware"
+# Firmware is served from raw.githubusercontent.com @main, NOT from GitHub Pages.
+#
+# Pages used to host the binaries, but the merged factory images (~60 MB across
+# all targets, growing with each new variant) pushed actions/deploy-pages past
+# its deploy timeout on every release — the artifact uploaded fine, but Pages'
+# backend never acked the deploy, so the site kept serving the previous
+# release's firmware. Direct github.com release-asset URLs aren't usable either:
+# they redirect without CORS headers and the browser blocks them when fetched
+# from kj7nye.github.io. raw.githubusercontent.com serves the committed files
+# with `Access-Control-Allow-Origin: *` and a 5-minute edge cache, so new
+# binaries propagate quickly after each release's publish-manifests commit.
+base = "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware"
 
 # "manufacturer" drives the <optgroup> grouping in the flasher's board dropdown
 # (flasher/index.html, serial_config.html) — purely a UI concern, kept here so

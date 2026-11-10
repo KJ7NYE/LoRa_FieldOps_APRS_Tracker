@@ -54,6 +54,14 @@ jobs:
               run: |
                   cp serial_config.html site/
                   cp -r flasher site/
+                  # Firmware binaries are served from raw.githubusercontent.com @main
+                  # (URLs baked into each manifest JSON by tools/generate_manifests.py)
+                  # so they don't need to ship in the Pages artifact. Keeping them in
+                  # bloated the deploy to ~80 MB and tripped actions/deploy-pages'
+                  # ack timeout on every release — Pages uploaded fine but never
+                  # finalized, so the site kept serving the previous release's
+                  # firmware. Dropping them here shrinks the artifact to ~10 MB.
+                  rm -rf site/flasher/firmware
                   # Serve files as-is; no Jekyll processing.
                   touch site/.nojekyll
 

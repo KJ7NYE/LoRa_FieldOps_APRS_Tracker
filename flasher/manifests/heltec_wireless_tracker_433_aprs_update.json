@@ -7,7 +7,7 @@
       "chipFamily": "ESP32-S3",
       "parts": [
         {
-          "path": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/heltec_wireless_tracker_433_aprs_ota_update.bin",
+          "path": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_wireless_tracker_433_aprs_ota_update.bin",
           "offset": 0
         }
       ]
