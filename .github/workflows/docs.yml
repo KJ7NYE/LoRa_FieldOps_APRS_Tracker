@@ -77,3 +77,10 @@ jobs:
             - name: Deploy to GitHub Pages
               id: deployment
               uses: actions/deploy-pages@v4
+              with:
+                  # Pages deploys of the merged factory binaries (~60 MB total
+                  # across all targets) sometimes exceed the action's 10 min
+                  # default wait and report "Timeout reached, aborting!" even
+                  # though the server-side deploy is still in flight. 20 min
+                  # gives Pages enough room on heavy days.
+                  timeout: 1200000
