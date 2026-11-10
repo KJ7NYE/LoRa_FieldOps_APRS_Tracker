@@ -120,6 +120,18 @@
         <esp-web-install-button id="install-btn"></esp-web-install-button>
         <span class="text-muted status-msg">Chrome / Edge only · USB cable required</span>
       </div>
+
+      <!-- Revealed after a successful flash: forward the user to the serial
+           configuration tool so they can set callsign/WiFi without hunting
+           for the next step. Hidden on target change (see JS). -->
+      <div id="post-flash-row" class="mt-3 pt-3" style="display:none; border-top:1px solid #30363d">
+        <p class="mb-2" style="font-size:0.9rem; color:#8b949e">
+          Flash complete. Continue to configure your device:
+        </p>
+        <a id="next-config-btn" href="../serial_config.html" class="btn btn-primary">
+          Open Serial Config →
+        </a>
+      </div>
     </div>
 
     <!-- nRF52: UF2 drag-and-drop -->
@@ -183,6 +195,7 @@
   const elFooterVer    = document.getElementById('footer-version');
   const elFooterDate   = document.getElementById('footer-date');
   const elFooterLink   = document.getElementById('footer-release-link');
+  const elPostFlashRow = document.getElementById('post-flash-row');
 
   let targetsData  = null;
   let currentTarget = null;
@@ -199,6 +212,17 @@
 
   document.querySelectorAll('input[name="flashMode"]').forEach(radio => {
     radio.addEventListener('change', updateInstallManifest);
+  });
+
+  // esp-web-tools emits `state-changed` as it moves through INITIALIZING /
+  // PREPARING / ERASING / WRITING / FINISHED / ERROR. Surface the "Next →
+  // Serial Config" button once FINISHED, so the user has an obvious next
+  // step instead of just the esp-web-tools "install again" dialog.
+  elInstallBtn.addEventListener('state-changed', (ev) => {
+    const state = ev.detail && ev.detail.state;
+    if (state === 'FINISHED') {
+      elPostFlashRow.style.display = '';
+    }
   });
 
   // ── Load targets.json ──────────────────────────────────────────────────
@@ -277,6 +301,7 @@
     elEspPanel.style.display    = 'none';
     elNrfPanel.style.display    = 'none';
     elDesc.style.display        = 'none';
+    elPostFlashRow.style.display = 'none';   // reset "Next → Serial Config" button per-target
 
     if (!id || !targetsData) return;
 
