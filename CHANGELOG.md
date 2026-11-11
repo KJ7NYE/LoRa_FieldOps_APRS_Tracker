@@ -41,6 +41,19 @@ junk frames:
   raw `Serial`, so they're muted in KISS mode too.
 - `KISS_Utils::encodeKISS()` returns nothing for a packet that isn't valid TNC2,
   instead of an empty data frame (`C0 00 C0`); every caller skips an empty result.
+## 2026-11-09 — Fix LoRanger V1/V2 flasher factory binaries boot-looping (`6e854b4`)
+
+The `LoRanger_V1_web_factory.bin` and `LoRanger_V2_web_factory.bin` published
+with v1.4.5 were built in QIO flash mode, which the LoRanger flash chip can't
+service — devices flashed from the web flasher got stuck in a ROM-bootloader
+reboot loop at `ets_loader.c:78` ([#20](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/issues/20)).
+Switched both the compiled bootloader header (`board_build.flash_mode`) and
+the CI `esptool merge_bin --flash_mode` to DIO, matching the T-Beam 1W /
+Heltec V3 fix path (commit `435991a`). V2 was flipped at the same time —
+same flash chip family, same latent bug, no V2 hardware had been flashed yet.
+No firmware behavior change; purely a build-config fix.
+
+---
 
 ## 2026-11-09 — Setup over Bluetooth; WiFi/APRS-IS status details; APRS-IS login fixes (`c4156a2`)
 

@@ -54,6 +54,14 @@ jobs:
               run: |
                   cp serial_config.html site/
                   cp -r flasher site/
+                  # Firmware binaries are served from raw.githubusercontent.com @main
+                  # (URLs baked into each manifest JSON by tools/generate_manifests.py)
+                  # so they don't need to ship in the Pages artifact. Keeping them in
+                  # bloated the deploy to ~80 MB and tripped actions/deploy-pages'
+                  # ack timeout on every release — Pages uploaded fine but never
+                  # finalized, so the site kept serving the previous release's
+                  # firmware. Dropping them here shrinks the artifact to ~10 MB.
+                  rm -rf site/flasher/firmware
                   # Serve files as-is; no Jekyll processing.
                   touch site/.nojekyll
 
@@ -77,3 +85,10 @@ jobs:
             - name: Deploy to GitHub Pages
               id: deployment
               uses: actions/deploy-pages@v4
+              with:
+                  # Pages deploys of the merged factory binaries (~60 MB total
+                  # across all targets) sometimes exceed the action's 10 min
+                  # default wait and report "Timeout reached, aborting!" even
+                  # though the server-side deploy is still in flight. 20 min
+                  # gives Pages enough room on heavy days.
+                  timeout: 1200000

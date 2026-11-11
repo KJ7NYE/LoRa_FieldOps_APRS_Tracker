@@ -1,5 +1,5 @@
 {
-  "version": "v1.4.5",
+  "version": "v1.4.6",
   "published": "2026-11-09",
   "repo": "KJ7NYE/LoRa_FieldOps_APRS_Tracker",
   "targets": [
@@ -27,7 +27,7 @@
       "chip": "nRF52840",
       "description": "Heltec T114 \u2014 nRF52840, SX1262, Quectel L76K GPS, ST7789 TFT. Use UF2 drag-and-drop \u2014 Web Serial is not supported on nRF52.",
       "manufacturer": "Heltec",
-      "uf2_url": "https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/firmware/heltec_t114_firmware.uf2"
+      "uf2_url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_t114_firmware.uf2"
     },
     {
       "id": "tbeam_433_aprs",

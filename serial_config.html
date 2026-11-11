@@ -727,16 +727,34 @@ async function connectSerial() {
   }
 }
 
+// Web Serial line errors that leave the port open. The spec errors only the
+// current ReadableStream; port.readable then hands back a fresh stream and
+// reading can continue. These are routine on bridge-chip boards (CP210x on
+// the Heltec V3) while the ESP32 resets and powers up its peripheral rail
+// (VEXT/OLED inrush), which can corrupt a single UART character mid-boot.
+const NON_FATAL_SERIAL_ERRORS = new Set([
+  'FramingError', 'ParityError', 'BreakError', 'BufferOverrunError',
+]);
+
 async function _readLoop() {
   const dec = new TextDecoder();
-  try {
-    while (connected) {
+  while (connected) {
+    try {
       const { value, done } = await reader.read();
       if (done) break;
       if (value) onData(dec.decode(value, { stream: true }));
+    } catch (e) {
+      if (!connected) break;
+      if (NON_FATAL_SERIAL_ERRORS.has(e.name) && port && port.readable) {
+        // Drop the errored reader and resume on the replacement stream.
+        logInfo('Serial line glitch (' + e.name + ') — resuming.');
+        try { reader.releaseLock(); } catch {}
+        reader = port.readable.getReader();
+        continue;
+      }
+      logErr('Read error: ' + e.message);
+      break;
     }
-  } catch (e) {
-    if (connected) logErr('Read error: ' + e.message);
   }
   // Port closed (device rebooted, unplugged, or stream ended)
   if (connected) {

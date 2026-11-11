@@ -71,14 +71,14 @@ jobs:
                     - name: LoRanger_V1
                       chip: esp32s3
                       flash_size: 8MB
-                      flash_mode: qio
+                      flash_mode: dio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
                       ota_partitions: true
 
                     - name: LoRanger_V2
                       chip: esp32s3
                       flash_size: 8MB
-                      flash_mode: qio
+                      flash_mode: dio
                       spiffs_offset: "0x5F0000"   # partitions_8mb_ota.csv
                       ota_partitions: true
 
@@ -256,7 +256,8 @@ jobs:
         needs: build
         runs-on: ubuntu-latest
         permissions:
-            contents: write
+            contents: write    # commit refreshed manifests + firmware blobs to main
+            actions: write     # dispatch docs.yml so Pages redeploys the new blobs
         steps:
             - uses: actions/checkout@v5
               with:
@@ -294,3 +295,14 @@ jobs:
                   git add flasher/manifests/ flasher/firmware/
                   git diff --staged --quiet || git commit -m "chore: update flasher manifests and firmware for ${TAG}"
                   git push
+
+            # GitHub suppresses `on: push` for commits authored by GITHUB_TOKEN
+            # (anti-recursion), so the commit above never fires docs.yml and the
+            # Pages site keeps serving the previous deploy's stale firmware
+            # (hit this with v1.4.6 — issue #20 "fix" served the old QIO
+            # binary until docs.yml was manually re-run). workflow_dispatch
+            # *does* fire from GITHUB_TOKEN, so dispatch docs.yml explicitly.
+            - name: Trigger Pages redeploy
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: gh workflow run docs.yml --ref main
