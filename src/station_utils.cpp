@@ -101,7 +101,9 @@ namespace STATION_Utils {
         #endif
         if (SERIAL_Setup::isKISSMode()) {
             String kissFrame = KISS_Utils::encodeKISS(packet);
-            Serial.write((const uint8_t*)kissFrame.c_str(), kissFrame.length());
+            if (kissFrame.length() > 0) {
+                Serial.write((const uint8_t*)kissFrame.c_str(), kissFrame.length());
+            }
         }
         if (Config.bluetooth.active && bluetoothConnected) {
             #if defined(ARDUINO_ARCH_NRF52) || defined(HAS_NIMBLE)

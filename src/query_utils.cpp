@@ -31,7 +31,13 @@
  * When this device is an iGate, sendReply() also pushes the same packet
  * directly to APRS-IS — a query addressed to the iGate's own callsign may
  * have arrived over APRS-IS rather than RF, and the iGate cannot hear its
- * own RF transmission to gate the reply back up the normal way.
+ * own RF transmission to gate the reply back up the normal way. For the
+ * same reason every reply is also mirrored to attached KISS hosts, so an
+ * external iGate (aprx etc.) can gate it.
+ *
+ * Packets a KISS host asks us to transmit pass through
+ * processKissHostPacket() first: messages addressed to this device are
+ * answered here instead of being transmitted to ourselves.
  * Duplicate queries/messages from the same sender are suppressed for 60 s.
  */
 
@@ -192,41 +198,101 @@ namespace QUERY_Utils {
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
         #endif
+        // Mirror the reply to attached KISS hosts, the same way the device's
+        // own beacons are mirrored. An external iGate (e.g. aprx on serial
+        // KISS) can only gate what it sees on its KISS port; it never hears
+        // this device's RF transmission, so without this a query that arrived
+        // from APRS-IS through that iGate would never get its ack/reply back.
+        // Mirrored at queue time, slightly ahead of the actual RF TX.
+        STATION_Utils::forwardToKissClients(packet);
     }
 
 
-    // ── Public entry point ────────────────────────────────────────────────────
+    // ── Message parsing helpers ───────────────────────────────────────────────
 
-    void processLoRaPacket(const String& rawPacket) {
-        // Unwrap third-party format (an iGate gating an APRS-IS message down
-        // to RF wraps it as GATE>DEST,PATH:}ORIGSENDER>ORIGDEST,PATH::ADDR :payload
-        // — see the txPacket construction in aprs_is_utils.cpp's listenAPRSIS()).
-        // The wrapping gate's callsign is not the message's real sender, so
-        // everything below must parse the inner packet, not the outer one.
-        String packet = rawPacket;
-        int wrapColon = packet.indexOf(':');
-        if (wrapColon >= 3 && packet.charAt(wrapColon + 1) == '}') {
-            packet = packet.substring(wrapColon + 2);
+    // Unwrap third-party format (an iGate gating an APRS-IS message down to RF,
+    // or an external iGate handing one to us over KISS, wraps it as
+    // GATE>DEST,PATH:}ORIGSENDER>ORIGDEST,PATH::ADDR :payload — see the txPacket
+    // construction in aprs_is_utils.cpp's listenAPRSIS()). The wrapping gate's
+    // callsign is not the message's real sender, so callers must parse the
+    // inner packet, not the outer one. Non-wrapped packets are returned as-is.
+    static String unwrapThirdParty(const String& rawPacket) {
+        int wrapColon = rawPacket.indexOf(':');
+        if (wrapColon >= 3 && rawPacket.charAt(wrapColon + 1) == '}') {
+            return rawPacket.substring(wrapColon + 2);
         }
+        return rawPacket;
+    }
 
-        // Message packets have the format:
-        //   SENDER>DEST,PATH::ADDRESSEE :payload
-        //                   ^^ two colons mark message type
-        //
-        // Find the AX.25 info field start: first ':' after the header.
+    // Message packets have the format:
+    //   SENDER>DEST,PATH::ADDRESSEE :payload
+    //                   ^^ two colons mark message type
+    // Returns the index of the first ':' (end of the header) if `packet` is a
+    // well-formed APRS message, or -1 otherwise. The 9-character addressee
+    // field sits between that index + 2 and index + 11, followed by ':'.
+    static int messageHeaderEnd(const String& packet) {
         int firstColon = packet.indexOf(':');
-        if (firstColon < 3) return;
-
+        if (firstColon < 3) return -1;
         // Must be a message: info field starts with ':' immediately after the first.
-        if (packet.charAt(firstColon + 1) != ':') return;
-
+        if (packet.charAt(firstColon + 1) != ':') return -1;
         // Addressee is 9 characters after '::'; the 11th char must be ':'.
-        if (packet.charAt(firstColon + 11) != ':') return;
+        if (packet.charAt(firstColon + 11) != ':') return -1;
+        return firstColon;
+    }
 
+    // Trimmed, upper-cased addressee of a message whose header ends at `firstColon`.
+    static String messageAddressee(const String& packet, int firstColon) {
         String addressee = packet.substring(firstColon + 2, firstColon + 11);
         addressee.trim();
         addressee.toUpperCase();
+        return addressee;
+    }
 
+    // True if `addressee` names this device: its callsign, or its tactical
+    // object name when one is configured. Excludes the APRS/IGATE aliases.
+    static bool isOwnAddressee(const String& addressee) {
+        if (addressee == Config.beacons[0].callsign) return true;
+        String tactical = Config.beacons[0].tacticalCallsign;
+        tactical.trim();
+        tactical.toUpperCase();
+        return tactical.length() > 0 && addressee == tactical;
+    }
+
+
+    // ── Public entry points ───────────────────────────────────────────────────
+
+    bool processKissHostPacket(const String& packet) {
+        const String inner = unwrapThirdParty(packet);
+        const int firstColon = messageHeaderEnd(inner);
+        if (firstColon < 0) return false;            // not a message: just transmit it
+
+        const String addressee = messageAddressee(inner, firstColon);
+        const bool toUs        = isOwnAddressee(addressee);
+        const bool toBroadcast = (addressee == "APRS") || (addressee == "IGATE");
+        if (!toUs && !toBroadcast) return false;     // for another station: transmit it
+
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "KISS",
+                   "Message to \"%s\" from KISS host handled locally%s",
+                   addressee.c_str(), toUs ? "" : " (also transmitted)");
+        // Remote-config commands (CSR/CSU/CSW) are handled exactly as if heard
+        // on RF: writes still require the CSU unlock, and there is no APRS-IS
+        // passcode check here because the KISS host's own login is invisible
+        // to us (unlike the built-in WiFi iGate path in aprs_is_utils.cpp).
+        processLoRaPacket(packet);
+
+        // A message addressed to this device is consumed here — transmitting it
+        // would only put a packet on air that no one else wants and that we
+        // can't hear ourselves. Broadcast queries (?APRS, ?IGATE) are meant for
+        // every station in range, so those still go out on RF.
+        return toUs;
+    }
+
+    void processLoRaPacket(const String& rawPacket) {
+        const String packet   = unwrapThirdParty(rawPacket);
+        const int firstColon  = messageHeaderEnd(packet);
+        if (firstColon < 0) return;
+
+        String addressee  = messageAddressee(packet, firstColon);
         String msgPayload = packet.substring(firstColon + 12);
 
         // Extract sender callsign (before '>'). For an unwrapped third-party
@@ -239,12 +305,7 @@ namespace QUERY_Utils {
         // Route: addressed to us directly (real callsign or tactical object
         // name, if configured), or to the broadcast aliases.
         const String& myCall = Config.beacons[0].callsign;
-        String tactical = Config.beacons[0].tacticalCallsign;
-        tactical.trim();
-        tactical.toUpperCase();
-
-        bool toUs    = (addressee == myCall) ||
-                       (tactical.length() > 0 && addressee == tactical);
+        bool toUs    = isOwnAddressee(addressee);
         bool toAPRS  = (addressee == "APRS");
         bool toIGATE = (addressee == "IGATE");
 

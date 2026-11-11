@@ -10,6 +10,15 @@ The tracker works as a KISS TNC, so APRS apps on a phone or computer can send an
 
 Bluetooth Classic SPP is also available on ESP32 boards built with `HAS_BT_CLASSIC`.
 
+## Using an external iGate (aprx, Direwolf)
+
+Where the site has no WiFi for the built-in iGate, the tracker can act as the radio for an iGate program such as aprx on a host computer. The host gates what the tracker hears to APRS-IS, and hands it messages from APRS-IS to transmit.
+
+- **Packets the tracker hears, and its own transmissions** (beacons, acks, query and remote-config replies) are copied to the KISS link, so the host can gate them to APRS-IS.
+- **Messages addressed to the tracker itself** (its callsign or tactical name), including ones the host has wrapped in third-party format (`}`), are answered by the tracker instead of being transmitted. This covers queries such as `?PING` and [remote configuration](remote-config.md) commands sent over APRS-IS.
+- **Messages to the `APRS` or `IGATE` broadcast aliases** are answered and also transmitted, so other stations in range can answer too.
+- **Everything else** is transmitted on LoRa as usual.
+
 ## USB serial modes
 
 The USB serial port has three modes. You can switch between them at any time without reconnecting:
@@ -20,7 +29,7 @@ KISS mode (default)  →  type "setup"  →  Setup mode
 Setup / Log mode     →  type "exit"   →  KISS mode (also on disconnect or reboot)
 ```
 
-- **KISS mode** (default): binary APRS TNC passthrough for KISS clients.
+- **KISS mode** (default): binary APRS TNC passthrough for KISS clients. Log output is fully muted, so nothing but KISS frames reaches the client.
 - **Setup mode**: the interactive [configuration CLI](../reference/serial-cli.md). Changes take effect immediately; `save` writes them to flash.
 - **Log mode**: live firmware log output. Set the detail level with `log off|error|warn|info|debug`.
 

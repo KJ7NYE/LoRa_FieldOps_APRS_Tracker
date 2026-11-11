@@ -9,6 +9,38 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-09 — Answer messages addressed to the tracker over KISS
+
+With the tracker as the radio for an external iGate (e.g. aprx on serial KISS), a
+message from APRS-IS addressed to the tracker — a `?PING`, a remote-config `CSR`, or
+any message needing an ack — got no response. The host passes the message to the
+tracker over KISS, and every KISS input (USB serial, TCP, BLE, BT Classic) simply
+transmitted it on LoRa, where the tracker can't hear its own packet.
+
+- New `QUERY_Utils::processKissHostPacket()`, called by all four KISS inputs before
+  transmitting. Messages to the tracker's callsign or tactical name (third-party
+  `}` wrapped or not) are answered locally and not transmitted. Messages to the
+  `APRS`/`IGATE` aliases are answered and still transmitted. Everything else is
+  transmitted as before.
+- Query/message acks and replies are now copied to KISS clients like the tracker's own
+  beacons, so the external iGate can gate them back to APRS-IS.
+- Remote-config `CSU`/`CSW` over KISS is treated like RF (token still required); the
+  built-in iGate's unverified-passcode refusal can't apply, since the host's login
+  status isn't visible to the tracker.
+- TCP KISS: the self-addressed check runs before the own-callsign loop guard, which
+  would otherwise drop the host's third-party frames (their outer source is our callsign).
+
+Also cleans up the serial KISS byte stream, where stray text showed up on the host as
+junk frames:
+
+- The logger now has a real `LOGGER_LEVEL_OFF`, used in KISS mode. It was only lowered
+  to ERROR before, so ERROR lines — notably `Rx failed, code -7` on every LoRa CRC
+  failure — still landed between KISS FENDs. `log off` now really means off.
+- Config saves (`Configuration::writeFile()`, also reached by a remote-config `CSW`
+  arriving over KISS) and the web UI save handler log through the logger instead of
+  raw `Serial`, so they're muted in KISS mode too.
+- `KISS_Utils::encodeKISS()` returns nothing for a packet that isn't valid TNC2,
+  instead of an empty data frame (`C0 00 C0`); every caller skips an empty result.
 ## 2026-11-09 — Fix LoRanger V1/V2 flasher factory binaries boot-looping (`6e854b4`)
 
 The `LoRanger_V1_web_factory.bin` and `LoRanger_V2_web_factory.bin` published

@@ -23,6 +23,7 @@
 #include "battery_utils.h"
 #include "gps_utils.h"
 #include "station_utils.h"
+#include "query_utils.h"
 #include "version.h"
 #include "ble_utils.h"
 #ifdef HAS_WIFI
@@ -440,10 +441,11 @@ namespace SERIAL_Setup {
     // ---------------- entry/exit ----------------
     static void resetPasteState();   // defined with import/export below
 
-    // Returns the USB port to KISS mode with the logger muted, so log lines
-    // can't corrupt KISS frames for a TNC client.
+    // Returns the USB port to KISS mode with the logger fully muted. Any text
+    // on the port — even an ERROR line such as the per-CRC-failure "Rx failed"
+    // — lands between KISS FENDs, where the host decodes it as a junk frame.
     static void returnUsbToKiss() {
-        logger.setDebugLevel(logging::LoggerLevel::LOGGER_LEVEL_ERROR);
+        logger.setDebugLevel(logging::LoggerLevel::LOGGER_LEVEL_OFF);
         serialMode    = SerialMode::KISS;
         kissSerialBuf = "";
     }
@@ -800,7 +802,8 @@ namespace SERIAL_Setup {
         if (n < 2) { err("log <off|error|warn|info|debug>"); return; }
         String lv = tk[1]; lv.toLowerCase();
         logging::LoggerLevel target = currentLogLevel;
-        if      (lv == "off"   || lv == "error") target = logging::LoggerLevel::LOGGER_LEVEL_ERROR;
+        if      (lv == "off")                    target = logging::LoggerLevel::LOGGER_LEVEL_OFF;
+        else if (lv == "error")                  target = logging::LoggerLevel::LOGGER_LEVEL_ERROR;
         else if (lv == "warn")                   target = logging::LoggerLevel::LOGGER_LEVEL_WARN;
         else if (lv == "info")                   target = logging::LoggerLevel::LOGGER_LEVEL_INFO;
         else if (lv == "debug")                  target = logging::LoggerLevel::LOGGER_LEVEL_DEBUG;
@@ -1306,9 +1309,10 @@ namespace SERIAL_Setup {
     // ---------------- public ----------------
     void setup() {
         // Serial KISS is the default mode.
-        // Suppress logger so output doesn't corrupt KISS frames on the USB port.
+        // Mute the logger entirely so output doesn't corrupt KISS frames on
+        // the USB port (see returnUsbToKiss()).
         savedLogLevel = currentLogLevel;
-        logger.setDebugLevel(logging::LoggerLevel::LOGGER_LEVEL_ERROR);
+        logger.setDebugLevel(logging::LoggerLevel::LOGGER_LEVEL_OFF);
         replyOut->println(F("\n[KISS TNC] Type 'setup' to configure, 'log' to monitor serial output."));
     }
 
@@ -1367,7 +1371,9 @@ namespace SERIAL_Setup {
             if ((uint8_t)c == 0xC0 && kissSerialBuf.length() > 1) {
                 bool isData = false;
                 String frame = KISS_Utils::decodeKISS(kissSerialBuf, isData);
-                if (isData && frame.length() > 0) {
+                // Messages addressed to this device (e.g. a query an external
+                // iGate gated down from APRS-IS) are answered locally, not TX'd.
+                if (isData && frame.length() > 0 && !QUERY_Utils::processKissHostPacket(frame)) {
                     LoRa_Utils::sendNewPacket(frame);
                 }
                 kissSerialBuf = "";

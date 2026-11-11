@@ -32,6 +32,7 @@
 #include <Arduino.h>
 #include "configuration.h"
 #include "lora_utils.h"
+#include "query_utils.h"
 #include "kiss_utils.h"
 #include "ble_utils.h"
 #include "display.h"
@@ -644,7 +645,9 @@ namespace BLE_Utils {
     void sendToLoRa() {
         if (!shouldSendToLoRa || !bluetoothConnected) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BLE TX", "decoded: \"%s\"", kissPacketToLoRa.c_str());
-        LoRa_Utils::sendNewPacket(kissPacketToLoRa);   // displayTx() fires inside sendNewPacket
+        if (!QUERY_Utils::processKissHostPacket(kissPacketToLoRa)) {   // addressed to us: answered locally
+            LoRa_Utils::sendNewPacket(kissPacketToLoRa);   // displayTx() fires inside sendNewPacket
+        }
         kissPacketToLoRa    = "";
         shouldSendToLoRa    = false;
     }
@@ -652,6 +655,7 @@ namespace BLE_Utils {
     void sendToPhone(const String& packet) {
         if (packet.length() == 0 || !bluetoothConnected) return;
         const String kissFrame = KISS_Utils::encodeKISS(packet);
+        if (kissFrame.length() == 0) return;   // not valid TNC2: nothing to send
         txChar.notify((const uint8_t*)kissFrame.c_str(), kissFrame.length());
     }
 
@@ -1088,7 +1092,9 @@ namespace BLE_Utils {
     void sendToLoRa() {
         if (!shouldSendBLEtoLoRa || !bluetoothConnected) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BLE TX", "decoded: \"%s\"", BLEToLoRaPacket.c_str());
-        LoRa_Utils::sendNewPacket(BLEToLoRaPacket);   // displayTx() fires inside sendNewPacket
+        if (!QUERY_Utils::processKissHostPacket(BLEToLoRaPacket)) {   // addressed to us: answered locally
+            LoRa_Utils::sendNewPacket(BLEToLoRaPacket);   // displayTx() fires inside sendNewPacket
+        }
         BLEToLoRaPacket         = "";
         shouldSendBLEtoLoRa     = false;
     }

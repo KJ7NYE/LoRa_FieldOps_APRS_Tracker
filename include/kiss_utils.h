@@ -47,6 +47,7 @@ namespace KISS_Utils {
     bool validateTNC2Frame(const String& tnc2FormattedFrame);
     bool validateKISSFrame(const String& kissFormattedFrame);
 
+    // TNC2 text -> KISS data frame. Returns "" if `frame` is not valid TNC2.
     String encodeKISS(const String& frame);
     String decodeKISS(const String& inputFrame, bool& dataFrame);
 
