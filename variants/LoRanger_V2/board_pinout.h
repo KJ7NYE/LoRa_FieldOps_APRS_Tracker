@@ -74,8 +74,16 @@
     //  Stage 0 raises GPS_VCC in setup() and leaves it on, matching V1.
     //  Stage 1 (HAS_RAIL_SWITCHING) adds the shutoff ordering (drive UART TX
     //  low/input before dropping the rail, to stop back-powering through RXD).
-    #define GPS_RX              39      // ESP RX  (receives from GPS TX)
-    #define GPS_TX              38      // ESP TX  (drives GPS RX)
+    //
+    //  Naming convention: GPS_RX / GPS_TX are labeled from the GPS's perspective
+    //  (matches T114, tbeam_1w, etc.). The shared code in gps_utils.cpp does
+    //  gpsSerial.begin(baud, cfg, GPS_TX, GPS_RX) which maps to
+    //  HardwareSerial::begin(baud, cfg, rxPin, txPin) — so GPS_TX must be the
+    //  pin where the GPS transmits (wired to ESP's RX) and GPS_RX the pin where
+    //  the GPS receives (wired to ESP's TX). Inverting these produces silent
+    //  NMEA even when the module is powered and has a fix.
+    #define GPS_RX              38      // GPS RX (ATGM336H RXD ← ESP TX on IO38)
+    #define GPS_TX              39      // GPS TX (ATGM336H TXD → ESP RX on IO39)
     #define GPS_VCC             36      // rail enable
 
     //  microSD (SPI) — Stage 5 (HAS_SDCARD)
