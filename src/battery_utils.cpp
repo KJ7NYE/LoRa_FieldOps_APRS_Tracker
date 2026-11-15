@@ -41,20 +41,60 @@ bool        batteryConnected      = false;
 
 extern      String                  batteryChargeDischargeCurrent;
 
-float       lora32BatReadingCorr    = 6.5; // % of correction to higher value to reflect the real battery voltage (adjust this to your needs)
 
 
 namespace BATTERY_Utils {
 
+    // Number of Li-ion cells in series in the board's pack. The state-of-charge
+    // curve below is per cell, so pack voltage is divided by this first.
+    #ifdef TTGO_T_BEAM_1W
+        static const float kCellsInSeries = 2.0f;   // 2S pack
+    #else
+        static const float kCellsInSeries = 1.0f;
+    #endif
+
+    // Resting-voltage → state-of-charge curve for a single Li-ion / LiPo cell.
+    // Li-ion discharge is strongly non-linear: the top ~20% of capacity is
+    // spent between 4.20 V and 4.00 V, then the curve flattens across
+    // 3.9–3.7 V and falls off a cliff below ~3.6 V. A straight-line map over
+    // a narrow window pins the reading at 100% for a large part of the run
+    // (the previous 3.4–4.0 V linear map reported 100% for everything above
+    // 4.00 V). The 0% point is 3.40 V rather than the cell's ~3.0 V absolute
+    // cutoff because the radio rail browns out well before then, so this is
+    // "usable" capacity. Entries must be in descending voltage order.
+    struct CellSocPoint { float volts; float percent; };
+    static const CellSocPoint kCellSocCurve[] = {
+        { 4.20f, 100.0f },
+        { 4.10f,  90.0f },
+        { 4.00f,  79.0f },
+        { 3.92f,  68.0f },
+        { 3.86f,  58.0f },
+        { 3.82f,  48.0f },
+        { 3.79f,  39.0f },
+        { 3.76f,  29.0f },
+        { 3.73f,  19.0f },
+        { 3.69f,  10.0f },
+        { 3.60f,   4.0f },
+        { 3.40f,   0.0f },
+    };
+    static const int kCellSocCurveLength = sizeof(kCellSocCurve) / sizeof(kCellSocCurve[0]);
+
+    // Linear interpolation between the two curve points bracketing cellVolts.
+    static int cellVoltageToPercent(float cellVolts) {
+        if (cellVolts >= kCellSocCurve[0].volts) return 100;
+        for (int i = 1; i < kCellSocCurveLength; i++) {
+            const CellSocPoint& upper = kCellSocCurve[i - 1];
+            const CellSocPoint& lower = kCellSocCurve[i];
+            if (cellVolts >= lower.volts) {
+                float fraction = (cellVolts - lower.volts) / (upper.volts - lower.volts);
+                return (int)(lower.percent + fraction * (upper.percent - lower.percent) + 0.5f);
+            }
+        }
+        return 0;
+    }
+
     String getPercentVoltageBattery(float voltage) {
-        #ifdef TTGO_T_BEAM_1W
-            // 2S Li-ion pack
-            int percent = ((voltage - 6.8f) / (8.0f - 6.8f)) * 100;
-        #else
-            int percent = ((voltage - 3.4) / (4.0 - 3.4)) * 100;
-        #endif
-        if (percent < 0)   percent = 0;
-        if (percent > 100) percent = 100;
+        int percent = cellVoltageToPercent(voltage / kCellsInSeries);
         return (percent < 100) ? (((percent < 10) ? "  ": " ") + String(percent)) : "100";
     }
 
@@ -67,88 +107,82 @@ namespace BATTERY_Utils {
         return getPercentVoltageBattery(batteryVoltage.toFloat()).toInt();
     }
 
+    // ── Battery divider ratio (VBAT / ADC-pin voltage) ───────────────────
+    // Taken from each board's schematic resistor values. With calibrated
+    // millivolt reads (see readBatteryVoltage) no empirical offsets are
+    // needed; residual per-unit error is trimmed with kBatteryCalibration.
+    #if defined(TTGO_T_BEAM_1W)
+        static const float kBatteryDividerRatio = 3.0f;     // 300k + 150k
+    #elif defined(HELTEC_T114)
+        static const float kBatteryDividerRatio = 4.916f;   // per Heltec/Meshtastic T114 variant
+    #elif defined(HELTEC_V3_433_APRS) || defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC) || defined(HELTEC_WSL_V3_GPS_DISPLAY) || defined(ESP32_C3_DIY_LoRa_GPS) || defined(ESP32_C3_DIY_LoRa_GPS_915) || defined(WEMOS_ESP32_Bat_LoRa_GPS)
+        static const float kBatteryDividerRatio = 4.9f;     // 390k + 100k
+    #elif defined(HELTEC_V2_GPS) || defined(HELTEC_V2_GPS_915) || defined(HELTEC_V2_TNC) || defined(F4GOH_1W_LoRa_Tracker) || defined(F4GOH_1W_LoRa_Tracker_LLCC68)
+        static const float kBatteryDividerRatio = 3.2f;     // 220k + 100k
+    #elif defined(LIGHTTRACKER_PLUS_1_0)
+        static const float kBatteryDividerRatio = 6.6f;     // 560k + 100k
+    #else
+        // LoRanger V1, LilyGo T3 / T3-S3 and the upstream DIY/T-Deck family.
+        static const float kBatteryDividerRatio = 2.0f;     // 100k + 100k
+    #endif
+
+    // Multiplicative trim for divider-resistor tolerance (1% parts can be off
+    // by up to ~2% combined). Leave at 1.0 unless a multimeter across the
+    // cell disagrees with `bat read`; then set to (meter V / reported V).
+    static const float kBatteryCalibration = 1.0f;
+
     float readBatteryVoltage() {
         #if defined(HAS_AXP192) || defined(HAS_AXP2101)
             return (PMU.getBattVoltage() / 1000.0);
-        #else
-            #ifdef BATTERY_PIN
-                #if defined(TTGO_T_BEAM_1W)
-                    // analogReadMilliVolts uses ESP32-S3 eFuse calibration tables,
-                    // avoiding the ~0.6 V raw-ADC offset that makes 0 V VBAT read as
-                    // ~2.2 V and display "B:-66%" when running on USB with no battery.
-                    // 300 kΩ + 150 kΩ divider: VBAT = ADC_mV × (300+150)/150 = ADC_mV × 3.
-                    uint32_t mvSum = 0;
-                    analogReadMilliVolts(BATTERY_PIN);  // dummy read to settle ADC
-                    delay(1);
-                    for (int i = 0; i < averageReadings; i++) {
-                        mvSum += analogReadMilliVolts(BATTERY_PIN);
-                        delay(3);
-                    }
-                    return (float)(mvSum / averageReadings) / 1000.0f * 3.0f;
-                #else
-                #ifdef ADC_CTRL_PIN
-                    // T114-style boards: a discrete FET gates the battery
-                    // divider so it doesn't bleed current continuously.
-                    // Drive ADC_CTRL_PIN to the enable level only while
-                    // sampling, then back off.
-                    pinMode(ADC_CTRL_PIN, OUTPUT);
-                    digitalWrite(ADC_CTRL_PIN, ADC_CTRL_ENABLED);
-                    delay(2);
-                #elif defined(ADC_CTRL)
-                    // All other ADC_CTRL boards (Heltec V3 family etc.):
-                    // enable the divider FET, wait for the node to settle,
-                    // then read.  adc_ctrl_ON/OFF handle board-specific
-                    // polarity (HIGH or LOW) so this site stays generic.
-                    POWER_Utils::adc_ctrl_ON();
-                    delay(50);
-                #endif
-                int sampleSum = 0;
-                analogRead(BATTERY_PIN);    // Dummy Read
+        #elif defined(BATTERY_PIN)
+            // Enable the divider (on boards that gate it to avoid a constant
+            // drain) and let the node settle before sampling.
+            #ifdef ADC_CTRL_PIN
+                pinMode(ADC_CTRL_PIN, OUTPUT);
+                digitalWrite(ADC_CTRL_PIN, ADC_CTRL_ENABLED);
+                delay(2);
+            #elif defined(ADC_CTRL)
+                POWER_Utils::adc_ctrl_ON();   // handles board-specific polarity
+                delay(50);
+            #endif
+
+            #ifdef ARDUINO_ARCH_NRF52
+                // nRF52 SAADC is linear enough to use raw counts. Scale matches
+                // POWER_Utils::setup's analogReference(AR_INTERNAL_3_0) +
+                // analogReadResolution(12).
+                uint32_t rawSum = 0;
+                analogRead(BATTERY_PIN);    // dummy read to settle the S/H cap
                 delay(1);
                 for (int i = 0; i < averageReadings; i++) {
-                    sampleSum += analogRead(BATTERY_PIN);
+                    rawSum += analogRead(BATTERY_PIN);
                     delay(3);
                 }
-                int adc_value = sampleSum/averageReadings;
-                #ifdef ADC_CTRL_PIN
-                    digitalWrite(ADC_CTRL_PIN, !ADC_CTRL_ENABLED);
-                #elif defined(ADC_CTRL)
-                    POWER_Utils::adc_ctrl_OFF();
-                #endif
-                #ifdef ARDUINO_ARCH_NRF52
-                    // Matches POWER_Utils::setup's analogReference(AR_INTERNAL_3_0)
-                    // + analogReadResolution(12). Without those, this formula
-                    // would be off by ~5x.
-                    double voltage = (adc_value * 3.0) / 4095.0;
-                #else
-                    double voltage = (adc_value * 3.3) / 4095.0;
-                #endif
-
-                #ifdef LIGHTTRACKER_PLUS_1_0
-                    double inputDivider = (1.0 / (560.0 + 100.0)) * 100.0;  // The voltage divider is a 560k + 100k resistor in series, 100k on the low side.
-                    return ((voltage / inputDivider) * 1.11029) + 0.14431;
-                #endif
-                #if defined(TTGO_T_Beam_V0_7) || defined(TTGO_T_LORA32_V2_1_GPS) || defined(TTGO_T_LORA32_V2_1_GPS_915) || defined(TTGO_T_LORA32_V2_1_TNC) || defined(TTGO_T_LORA32_V2_1_TNC_915) || defined(ESP32_DIY_LoRa_GPS) || defined(ESP32_DIY_LoRa_GPS_915) || defined(ESP32_DIY_1W_LoRa_GPS) || defined(ESP32_DIY_1W_LoRa_GPS_915) || defined(ESP32_DIY_1W_LoRa_GPS_LLCC68) || defined(OE5HWN_MeshCom) || defined(TTGO_T_DECK_GPS) || defined(TTGO_T_DECK_PLUS) || defined(ESP32S3_DIY_LoRa_GPS) || defined(ESP32S3_DIY_LoRa_GPS_915) || defined(TROY_LoRa_APRS) || defined(RPC_Electronics_1W_LoRa_GPS) || defined(TTGO_LORA32_T3S3_V1_2_GPS) || defined(LORANGER_V1) || defined(LILYGO_T3_433_APRS) || defined(LILYGO_T3S3_433_APRS)
-                    return (2 * (voltage + 0.1)) * (1 + (lora32BatReadingCorr/100)); // (2 x 100k voltage divider) 2 x voltage divider/+0.1 because ESP32 nonlinearity ~100mV ADC offset/extra correction
-                #endif
-                #if defined(HELTEC_V3_GPS) || defined(HELTEC_V3_TNC) || defined(HELTEC_V3_2_GPS) || defined(HELTEC_V3_2_TNC) || defined(HELTEC_WIRELESS_TRACKER) || defined(HELTEC_WSL_V3_GPS_DISPLAY) || defined(ESP32_C3_DIY_LoRa_GPS) || defined(ESP32_C3_DIY_LoRa_GPS_915) || defined(WEMOS_ESP32_Bat_LoRa_GPS) || defined(HELTEC_V3_433_APRS)
-                    double inputDivider = (1.0 / (390.0 + 100.0)) * 100.0;  // The voltage divider is a 390k + 100k resistor in series, 100k on the low side.
-                    return (voltage / inputDivider) + 0.285; // Yes, this offset is excessive, but the ADC on the ESP32s3 is quite inaccurate and noisy. Adjust to own measurements.
-                #endif
-                #if defined(HELTEC_V2_GPS) || defined(HELTEC_V2_GPS_915) || defined(HELTEC_V2_TNC) || defined(F4GOH_1W_LoRa_Tracker) || defined(F4GOH_1W_LoRa_Tracker_LLCC68)
-                    double inputDivider = (1.0 / (220.0 + 100.0)) * 100.0;  // The voltage divider is a 220k + 100k resistor in series, 100k on the low side.
-                    return (voltage / inputDivider) + 0.285; // Yes, this offset is excessive, but the ADC on the ESP32 is quite inaccurate and noisy. Adjust to own measurements.
-                #endif
-                #ifdef HELTEC_T114
-                    // T114 hardware divider multiplier per meshtastic variant.h is 4.916.
-                    // ADC_CTRL_PIN gating (HIGH-before-read) not yet wired — readings will be
-                    // approximate until that lands. Tune via lora32BatReadingCorr config.
-                    return (voltage * 4.916F) * (1 + (lora32BatReadingCorr/100));
-                #endif
-                #endif  // !TTGO_T_BEAM_1W
+                float pinVolts = ((float)rawSum / averageReadings) * 3.0f / 4095.0f;
             #else
-                return 0.0;
+                // ESP32 raw ADC counts are offset and non-linear (and the
+                // S3's full scale at 12 dB is ~3.1 V, not 3.3 V), which is
+                // what the old hand-fitted "+0.1 V / +6.5 % / +0.285 V"
+                // corrections were chasing. analogReadMilliVolts applies the
+                // chip's factory eFuse calibration curve instead.
+                uint32_t mvSum = 0;
+                analogReadMilliVolts(BATTERY_PIN);  // dummy read to settle ADC
+                delay(1);
+                for (int i = 0; i < averageReadings; i++) {
+                    mvSum += analogReadMilliVolts(BATTERY_PIN);
+                    delay(3);
+                }
+                float pinVolts = ((float)mvSum / averageReadings) / 1000.0f;
             #endif
+
+            #ifdef ADC_CTRL_PIN
+                digitalWrite(ADC_CTRL_PIN, !ADC_CTRL_ENABLED);
+            #elif defined(ADC_CTRL)
+                POWER_Utils::adc_ctrl_OFF();
+            #endif
+
+            return pinVolts * kBatteryDividerRatio * kBatteryCalibration;
+        #else
+            return 0.0;
         #endif
     }
 
