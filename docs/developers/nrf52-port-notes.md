@@ -199,5 +199,5 @@ Remaining work:
 ## Memory-relevant constraints
 
 - **Battery voltage** is pin voltage × the board's schematic divider ratio (`kBatteryDividerRatio`). ESP32 boards read through `analogReadMilliVolts()` (eFuse-calibrated), so the upstream hand-fitted offsets were removed; residual per-unit error is trimmed with `kBatteryCalibration`. Percent comes from a per-cell Li-ion discharge curve, not a linear map.
-- **Commit messages omit `Co-Authored-By: Claude` trailer** — durable preference.
+- **Commit messages may include the `Co-Authored-By: Claude` trailer.**
 - **Active dev/test board (ESP32 side) is `heltec_v3_433_aprs`** — daily flashing happens there, not LoRanger_V1 (which is still being built). On the nRF52 side, **`heltec_t114` plays the same role** — the off-the-shelf bring-up board, not the future custom `LoRanger_V1_nRF`.
