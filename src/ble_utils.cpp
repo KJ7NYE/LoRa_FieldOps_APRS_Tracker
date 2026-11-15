@@ -121,8 +121,15 @@ static bool loadPinPolicy() {
         bleEvent(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "PIN is enabled but not 4-6 digits; BLE disabled until the PIN is fixed");
         return false;
     }
-    snprintf(blePasskeyDigits, sizeof(blePasskeyDigits), "%s",
-             BlePin::passkeyDigits(Config.bluetooth.pin).c_str());
+    // GCC 14 (pioarduino's xtensa-esp-elf 14.2.0) tightened -Wformat-truncation
+    // and can't prove the std::string returned by passkeyDigits() fits the
+    // 7-byte dest. BlePin::isValid() already guarantees 4-6 ASCII digits above,
+    // so a manual bounded copy makes the invariant visible to the compiler.
+    const String digits = BlePin::passkeyDigits(Config.bluetooth.pin);
+    const size_t copyLen = (digits.length() < sizeof(blePasskeyDigits))
+                         ? digits.length() : sizeof(blePasskeyDigits) - 1;
+    memcpy(blePasskeyDigits, digits.c_str(), copyLen);
+    blePasskeyDigits[copyLen] = '\0';
     return true;
 }
 
@@ -734,14 +741,22 @@ static bool deleteAllPhoneBonds() {
 }
 
 // True when the link was encrypted with a key that only PIN (MITM) pairing produces.
-static bool isPinAuthenticated(const ble_gap_conn_desc* desc) {
-    return desc->sec_state.encrypted && desc->sec_state.authenticated;
+// NimBLEConnInfo wraps the ble_gap_conn_desc underneath; the `isEncrypted()` /
+// `isAuthenticated()` accessors read the same `sec_state` fields as before.
+static bool isPinAuthenticated(const NimBLEConnInfo& connInfo) {
+    return connInfo.isEncrypted() && connInfo.isAuthenticated();
 }
 
 #ifdef HAS_BLE_CONFIG
 // ── Config link (setup CLI over BLE) — see the shared section above ────────
 static NimBLECharacteristic* pConfigTx = nullptr;
 static NimBLECharacteristic* pConfigRx = nullptr;
+// NimBLE 2.x removed NimBLECharacteristic::getSubscribedCount(), which we used
+// in 1.x to re-check a bonded phone's restored CCCD state after authentication
+// completed. We now record the phone's last-seen CCCD write ourselves — set
+// unconditionally in onSubscribe() (before auth is checked), read in
+// onAuthenticationComplete() once the link is PIN-authenticated.
+static std::atomic<bool>     configCccdSubscribed{false};
 
 static bool platformConfigLinkUp() {
     return bluetoothConnected && configSubscribed.load()
@@ -767,23 +782,33 @@ static bool platformSendConfigChunk(const uint8_t* data, size_t length) {
 }
 
 class ConfigCharacteristicCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* characteristic, ble_gap_conn_desc* desc) override {
+    // NimBLE 2.x (2.5.2 registry build): onWrite now takes NimBLEConnInfo&
+    // instead of the 1.x ble_gap_conn_desc*, but keeps the 1.x void return
+    // and still requires reading the written value via characteristic->getValue().
+    // (Master-branch builds add a NimBLEAttValue& parameter with a uint8_t
+    // status return — not yet shipped in 2.5.x.)
+    void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
         // Same gate as KISS writes: only the active, PIN-authenticated phone.
-        if (desc->conn_handle != activeConnHandle) return;
-        if (!bluetoothConnected || !isPinAuthenticated(desc)) return;
-        const std::string received = characteristic->getValue();
-        onConfigBytesReceived(reinterpret_cast<const uint8_t*>(received.data()), received.size());
+        if (connInfo.getConnHandle() != activeConnHandle) return;
+        if (!bluetoothConnected || !isPinAuthenticated(connInfo)) return;
+        const NimBLEAttValue value = characteristic->getValue();
+        onConfigBytesReceived(value.data(), value.size());
     }
 
-    void onSubscribe(NimBLECharacteristic* characteristic, ble_gap_conn_desc* desc, uint16_t subValue) override {
-        if (desc->conn_handle != activeConnHandle) return;
+    void onSubscribe(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo, uint16_t subValue) override {
+        if (connInfo.getConnHandle() != activeConnHandle) return;
         // bit 0 = notifications. NimBLE registers every CCCD as open
         // read/write regardless of the characteristic's security flags, so a
         // phone can subscribe before pairing. That early subscription is
         // ignored here; onAuthenticationComplete() opens the link once the
         // PIN check passes (see openConfigLinkIfSubscribed()).
-        const bool subscribed = (subValue & 0x0001) != 0 && isPinAuthenticated(desc);
-        onConfigSubscriptionChanged(subscribed);
+        //
+        // Record the CCCD bit unconditionally so a bonded phone reconnecting
+        // with a restored CCCD state can be picked up post-authentication
+        // without needing getSubscribedCount() (removed in NimBLE 2.x).
+        const bool subscribed    = (subValue & 0x0001) != 0;
+        configCccdSubscribed.store(subscribed);
+        onConfigSubscriptionChanged(subscribed && isPinAuthenticated(connInfo));
     }
 };
 
@@ -799,16 +824,26 @@ static void beginConfigService() {
         CONFIG_CHAR_UUID_RX,
         NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR |
         NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
+    // NimBLE 2.5.x still takes a pointer here (master's reference-based API
+    // hasn't been released yet). Use a single heap-allocated instance shared
+    // between TX and RX — ownership is kept by the characteristics; NimBLE
+    // deletes callbacks with deleteCallbacks=true by default, so passing the
+    // same pointer to two setCallbacks() calls would double-free. Guard against
+    // that by letting only one characteristic own it.
     ConfigCharacteristicCallbacks* callbacks = new ConfigCharacteristicCallbacks();
     pConfigTx->setCallbacks(callbacks);
     pConfigRx->setCallbacks(callbacks);
-    service->start();
+    // NimBLEService::start() was a no-op in 2.x and is marked deprecated in
+    // 2.5.x; services auto-start when the server starts. Dropping the call
+    // keeps -Werror happy.
 }
 
 // Called once a link is PIN-authenticated: picks up a subscription the phone
 // made before pairing finished (ignored at the time, see onSubscribe()).
+// NimBLE 2.x removed getSubscribedCount(); we use our own configCccdSubscribed
+// flag which onSubscribe() updates unconditionally.
 static void openConfigLinkIfSubscribed() {
-    if (pConfigTx != nullptr && pConfigTx->getSubscribedCount() > 0) {
+    if (pConfigTx != nullptr && configCccdSubscribed.load()) {
         onConfigSubscriptionChanged(true);
     }
 }
@@ -865,16 +900,19 @@ static int blePairingDiagnostics(ble_gap_event* event, void*) {
 }
 
 class MyServerCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* server, ble_gap_conn_desc* desc) override {
+    void onConnect(NimBLEServer* server, NimBLEConnInfo& connInfo) override {
         if (activeConnHandle != BLE_HS_CONN_HANDLE_NONE) {
             bleEvent(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Second phone tried to connect while one is active, refusing it");
-            server->disconnect(desc->conn_handle);
+            server->disconnect(connInfo.getConnHandle());
             return;
         }
-        activeConnHandle    = desc->conn_handle;
+        activeConnHandle    = connInfo.getConnHandle();
         kissSerialBuffer    = "";
         shouldSendBLEtoLoRa = false;
         loggedUnpairedWrite = false;
+        #ifdef HAS_BLE_CONFIG
+            configCccdSubscribed.store(false);   // fresh connection: wait for a fresh CCCD write (or bonded restore)
+        #endif
 
         if (!pinRequired) {
             bluetoothConnected = true;
@@ -896,7 +934,9 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
 
     // Static passkey the phone user must type. Overridden explicitly because
     // NimBLE falls back to this callback (default 123456) in some code paths.
-    uint32_t onPassKeyRequest() override {
+    // NimBLE 2.x renamed the server-side variant from onPassKeyRequest() to
+    // onPassKeyDisplay().
+    uint32_t onPassKeyDisplay() override {
         bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Phone is asking for the PIN, waiting for entry");
         return BlePin::passkeyValue(String(blePasskeyDigits));
     }
@@ -912,12 +952,12 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
     // KISS traffic stays blocked (bluetoothConnected=false, and the GATT
     // characteristics require authenticated encryption), and the pairing
     // timer frees the slot if the phone never succeeds.
-    void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
-        if (desc->conn_handle != activeConnHandle || !pinRequired) return;
-        if (!isPinAuthenticated(desc)) {
+    void onAuthenticationComplete(NimBLEConnInfo& connInfo) override {
+        if (connInfo.getConnHandle() != activeConnHandle || !pinRequired) return;
+        if (!isPinAuthenticated(connInfo)) {
             bluetoothConnected = false;
             bleEvent(logging::LoggerLevel::LOGGER_LEVEL_WARN,
-                     desc->sec_state.encrypted
+                     connInfo.isEncrypted()
                          ? "Phone used a pairing made without the PIN; waiting for it to pair again with the PIN"
                          : "Pairing failed (wrong PIN, cancelled, or a stale pairing on the phone); waiting for the phone to retry");
             return;
@@ -925,33 +965,37 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
         stopPinPairingTimer();
         bluetoothConnected = true;
         bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO,
-                 desc->sec_state.bonded ? "Phone authenticated with PIN, KISS link open"
-                                        : "Phone authenticated with PIN (not bonded), KISS link open");
+                 connInfo.isBonded() ? "Phone authenticated with PIN, KISS link open"
+                                     : "Phone authenticated with PIN (not bonded), KISS link open");
         #ifdef HAS_BLE_CONFIG
             openConfigLinkIfSubscribed();
         #endif
     }
 
-    void onDisconnect(NimBLEServer* server, ble_gap_conn_desc* desc) override {
-        if (desc->conn_handle != activeConnHandle) return;   // a refused second phone
+    void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
+        if (connInfo.getConnHandle() != activeConnHandle) return;   // a refused second phone
         stopPinPairingTimer();
         bluetoothConnected  = false;
         #ifdef HAS_BLE_CONFIG
             onConfigSubscriptionChanged(false);
+            configCccdSubscribed.store(false);
         #endif
         activeConnHandle    = BLE_HS_CONN_HANDLE_NONE;
         shouldSendBLEtoLoRa = false;
         kissSerialBuffer    = "";
-        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Phone disconnected, advertising again");
+        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Phone disconnected (reason 0x%02X), advertising again", reason);
         server->startAdvertising();
     }
 };
 
 class MyCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
+    // NimBLE 2.x (2.5.2 registry build): onWrite now takes NimBLEConnInfo&
+    // instead of the 1.x ble_gap_conn_desc*, but keeps the 1.x void return
+    // and still reads the written value via pCharacteristic->getValue().
+    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
         // Ignore writes from anything but the active (and, if required, PIN-authenticated) phone.
-        if (desc->conn_handle != activeConnHandle) return;
-        if (!bluetoothConnected || (pinRequired && !isPinAuthenticated(desc))) {
+        if (connInfo.getConnHandle() != activeConnHandle) return;
+        if (!bluetoothConnected || (pinRequired && !isPinAuthenticated(connInfo))) {
             if (!loggedUnpairedWrite) {
                 loggedUnpairedWrite = true;
                 bleEvent(logging::LoggerLevel::LOGGER_LEVEL_WARN,
@@ -959,11 +1003,11 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
             }
             return;
         }
-        std::string receivedData = pCharacteristic->getValue();
-        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BLE RX", "write callback fired, %d bytes", (int)receivedData.size());
+        const NimBLEAttValue value = pCharacteristic->getValue();
+        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "BLE RX", "write callback fired, %d bytes", (int)value.size());
 
-        for (uint8_t c : receivedData) {
-            kissSerialBuffer += (char)c;
+        for (size_t i = 0; i < value.size(); ++i) {
+            kissSerialBuffer += (char)value.data()[i];
         }
         if (kissSerialBuffer.length() > MAX_KISS_BUFFER) {
             kissSerialBuffer = "";
@@ -1059,6 +1103,10 @@ namespace BLE_Utils {
         }
 
         pServer = NimBLEDevice::createServer();
+        // NimBLE 2.5.x setCallbacks still takes a pointer; by default
+        // `deleteCallbacks=true` so the stack owns and frees the instance
+        // on deinit. (master-branch 3.x switches to a reference-based API —
+        // revisit when that releases.)
         pServer->setCallbacks(new MyServerCallbacks());
 
         NimBLEService* pService = pServer->createService(BLE_SERVICE_UUID);
@@ -1072,7 +1120,9 @@ namespace BLE_Utils {
             (pinRequired ? (NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN) : 0));
         pCharacteristicRx->setCallbacks(new MyCallbacks());
 
-        pService->start();
+        // NimBLEService::start() is a no-op / deprecated in 2.5.x; services
+        // auto-start when the server starts. Dropping the call keeps -Werror
+        // happy.
 
         #ifdef HAS_BLE_CONFIG
             // PIN-protected trackers only: never expose the CLI on an open link.
@@ -1081,9 +1131,12 @@ namespace BLE_Utils {
 
         NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
-        pServer->getAdvertising()->setScanResponse(true);
-        pServer->getAdvertising()->setMinPreferred(0x06);
-        pServer->getAdvertising()->setMaxPreferred(0x0C);
+        // NimBLE 2.x renames/consolidates the preferred-connection-params
+        // advisories: setScanResponse(bool) -> enableScanResponse(bool), and
+        // the two setMin/MaxPreferred calls become one setPreferredParams
+        // (values are 1.25 ms units, matching the 1.x defaults).
+        pAdvertising->enableScanResponse(true);
+        pAdvertising->setPreferredParams(0x06, 0x0C);
         pAdvertising->start();
 
         logAdvertisingStarted();
@@ -1103,15 +1156,14 @@ namespace BLE_Utils {
         if (packet.length() == 0 || !bluetoothConnected) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BLE RX", "%s", packet.c_str());
         const String kissFrame = KISS_Utils::encodeKISS(packet);
-        const char* t   = kissFrame.c_str();
-        int length      = kissFrame.length();
+        const char* bytes = kissFrame.c_str();
+        const int   length = kissFrame.length();
+        // NimBLE 2.x exposes notify(data, length) directly; the 1.x two-step
+        // of setValue + notify() is no longer required. Sending straight from
+        // the frame buffer also eliminates the per-chunk heap allocation.
         for (int i = 0; i < length; i += BLE_CHUNK_SIZE) {
-            int chunkSize = min(BLE_CHUNK_SIZE, length - i);
-            uint8_t* chunk = new uint8_t[chunkSize];
-            memcpy(chunk, t + i, chunkSize);
-            pCharacteristicTx->setValue(chunk, chunkSize);
-            pCharacteristicTx->notify();
-            delete[] chunk;
+            const int chunkSize = min(BLE_CHUNK_SIZE, length - i);
+            pCharacteristicTx->notify(reinterpret_cast<const uint8_t*>(bytes + i), chunkSize);
             delay(200);
         }
     }

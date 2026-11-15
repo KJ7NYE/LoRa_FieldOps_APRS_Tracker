@@ -528,20 +528,26 @@ void Configuration::setDefaultValues() {
 }
 
 Configuration::Configuration() {
-    #ifdef ARDUINO_ARCH_NRF52
-        // SPIFFS / InternalFS access is deferred to Configuration::init() on
-        // nRF52 because file-scope globals run their constructors before
-        // FreeRTOS is up, and InternalFS.begin() uses xSemaphoreCreateMutex.
-        // Populate in-memory defaults so other file-scope globals
-        // (myBeaconsSize, currentBeacon, etc.) get sane values; setup() calls
-        // init() once FreeRTOS / InternalFS is ready.
-        setDefaultValues();
-        return;
-    #endif
+    // All filesystem access is deferred to Configuration::init() on every
+    // platform. File-scope globals run their constructors before the FreeRTOS
+    // scheduler is fully usable — on nRF52 InternalFS.begin() needs the
+    // scheduler up for its mutex, and under Arduino-ESP32 3.x SPIFFS.begin()'s
+    // format-on-fail path calls disableCore0WDT() which asserts on a missing
+    // idle task. The previous ESP32-side comment claiming the framework
+    // started FreeRTOS before static init was never quite right; core 3.x
+    // just made the symptom visible.
+    //
+    // Populate in-memory defaults so other file-scope globals (myBeaconsSize,
+    // currentBeacon, etc.) get sane values. setup() calls init() once the
+    // scheduler is running and FS access is safe.
+    setDefaultValues();
+}
 
-    // ESP32 path — Arduino-ESP32 starts FreeRTOS before static init runs, so
-    // it's safe to do filesystem work right here. Keeps merge surface against
-    // upstream small (no setup()-side restructuring needed for ESP32).
+void Configuration::init() {
+#ifndef ARDUINO_ARCH_NRF52
+    // ESP32 path — mount SPIFFS, format on first-ever boot (idle task is now
+    // guaranteed to exist here because setup() has started), and create the
+    // default config file if the filesystem image wasn't flashed.
     if (!SPIFFS.begin(false)) {
         Serial.println("SPIFFS Mount Failed, formatting...");
 
@@ -557,16 +563,13 @@ Configuration::Configuration() {
         setDefaultValues();
         writeFile();
         delay(500);
-        #ifndef ARDUINO_ARCH_NRF52
-            ESP.restart();
-        #endif
+        ESP.restart();
     }
 
     readFile();
-}
-
-#ifdef ARDUINO_ARCH_NRF52
-void Configuration::init() {
+    return;
+#else
+    // nRF52 path — InternalFS (Adafruit LittleFS) mount + first-boot seed.
     if (!SPIFFS.begin(false)) {
         Serial.println("SPIFFS Mount Failed, formatting...");
 
@@ -620,5 +623,5 @@ void Configuration::init() {
         NVIC_SystemReset();
     }
     readFile();
+#endif  // ARDUINO_ARCH_NRF52
 }
-#endif

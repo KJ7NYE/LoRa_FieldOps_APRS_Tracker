@@ -140,11 +140,12 @@ void setup() {
     }
     #endif
 
-    #ifdef ARDUINO_ARCH_NRF52
-        Config.init();
-    #else
-        // Config constructor handles SPIFFS init on ESP32
-    #endif
+    // Config.init() does platform-specific filesystem work (LittleFS on nRF52,
+    // SPIFFS on ESP32). It runs here — AFTER Serial.begin() and once the
+    // FreeRTOS scheduler is fully usable — because the SPIFFS format path
+    // calls disableCore0WDT() which on Arduino-ESP32 3.x asserts if the idle
+    // task isn't set up yet (globals' ctors run too early for that).
+    Config.init();
 
     // Set currentBeacon and currentLoRaType pointers after Config is loaded.
     currentBeacon    = &Config.beacons[0];

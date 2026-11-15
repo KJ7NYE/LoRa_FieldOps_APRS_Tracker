@@ -203,12 +203,12 @@ public:
     void setDefaultValues();
     bool writeFile();
     Configuration();
-    // nRF52-only: filesystem-backed setup deferred from the constructor because
-    // static init runs before FreeRTOS / InternalFS is up. ESP32 builds run the
-    // same logic from the constructor as before. Call once early in setup().
-    #ifdef ARDUINO_ARCH_NRF52
+    // Filesystem-backed setup — deferred from the constructor on both platforms.
+    // Static init runs before the FreeRTOS scheduler is usable; nRF52's
+    // InternalFS.begin() needs the scheduler for its mutex, and Arduino-ESP32
+    // 3.x's SPIFFS.begin(true) format path asserts on a missing idle task.
+    // Call once early in setup().
     void init();
-    #endif
 
 private:
     bool readFile();

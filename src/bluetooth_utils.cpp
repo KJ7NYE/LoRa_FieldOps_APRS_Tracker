@@ -21,10 +21,22 @@
  * Used only on boards where HAS_BT_CLASSIC is defined and HAS_NIMBLE is not
  * (i.e. plain ESP32 boards without NimBLE in their build flags).
  * Always uses KISS (AX.25) framing — compatible with APRSDroid, Pinpoint, etc.
+ *
+ * The entire translation unit is guarded by HAS_BT_CLASSIC. Arduino-ESP32
+ * 3.x's BluetoothSerial.h is a soft-fail stub on chips without BT Classic
+ * hardware (ESP32-S3 / -C3 / -C6 / -H2): the header still defines the
+ * BluetoothSerial type for forward compatibility but its member functions
+ * aren't linkable, so referencing a SerialBT object would fail at link time
+ * (and in -Werror builds, at compile time). The guard keeps the whole file
+ * out of the build on those boards, where the shared NimBLE path handles BT.
  */
 
+#include "board_pinout.h"   // defines HAS_BT_CLASSIC per-variant
+
+#ifdef HAS_BT_CLASSIC
+
+#include "bluetooth_utils.h"   // pulls in <BluetoothSerial.h>; S3/C3/etc. ship a stub
 #include <esp_bt.h>
-#include "bluetooth_utils.h"
 #include "configuration.h"
 #include "lora_utils.h"
 #include "query_utils.h"
@@ -127,3 +139,5 @@ namespace BLUETOOTH_Utils {
     }
 
 }
+
+#endif  // HAS_BT_CLASSIC
