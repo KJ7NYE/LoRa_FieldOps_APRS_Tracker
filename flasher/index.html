@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
   <!-- ESP Web Tools: drives Web Serial flashing for ESP32 targets -->
   <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js"></script>
+  <!-- nRF52 serial DFU (Heltec T114): 1200-baud touch + adafruit-nrfutil protocol -->
+  <script src="./nrf52_dfu.js"></script>
   <style>
     body { background: #0d1117; color: #c9d1d9; min-height: 100vh; }
 
@@ -70,7 +72,7 @@
   <!-- Requirements notice -->
   <div class="alert alert-info border-0 mb-4" style="background:#0c2d48; border-left:3px solid #58a6ff !important; border-radius:6px; font-size:0.85rem">
     <strong>Requirements:</strong> Chrome or Edge browser with Web Serial support.
-    ESP32 targets flash over USB; nRF52 (Heltec T114) uses UF2 drag-and-drop instead.
+    All targets flash over USB; the Heltec T114 can also be installed by UF2 drag-and-drop.
     Firefox and mobile browsers are not supported for Web Serial.
   </div>
 
@@ -120,43 +122,86 @@
         <esp-web-install-button id="install-btn"></esp-web-install-button>
         <span class="text-muted status-msg">Chrome / Edge only · USB cable required</span>
       </div>
-
-      <!-- Revealed after a successful flash: forward the user to the serial
-           configuration tool so they can set callsign/WiFi without hunting
-           for the next step. Hidden on target change (see JS). -->
-      <div id="post-flash-row" class="mt-3 pt-3" style="display:none; border-top:1px solid #30363d">
-        <p class="mb-2" style="font-size:0.9rem; color:#8b949e">
-          Flash complete. Continue to configure your device:
-        </p>
-        <a id="next-config-btn" href="../serial_config.html" class="btn btn-primary">
-          Open Serial Config →
-        </a>
-      </div>
     </div>
 
-    <!-- nRF52: UF2 drag-and-drop -->
+    <!-- nRF52: Web Serial DFU (flasher/nrf52_dfu.js) with UF2 drag-and-drop fallback -->
     <div id="nrf-panel" style="display:none">
-      <div class="alert alert-warning border-0 mb-3"
-           style="background:#2d1f0a; border-left:3px solid #d29922 !important; border-radius:6px; font-size:0.85rem">
-        <strong>Web Serial cannot flash nRF52 boards.</strong>
-        Use the UF2 bootloader drag-and-drop method below.
+
+      <!-- Web Serial path: 1200-baud touch into the bootloader, then serial DFU.
+           Same mechanism as `pio run -t upload`, so no RESET double-tap needed. -->
+      <div id="nrf-webserial" style="display:none">
+        <p class="mb-2" style="font-size:0.9rem">
+          Connect your T114 via USB, then click <strong>Install</strong>.
+          Updates the firmware only — <strong>your saved configuration is preserved</strong>.
+        </p>
+        <p class="text-muted mb-3" style="font-size:0.8rem">
+          The board reboots into its bootloader and reconnects as a different USB device, so the
+          first time you'll be asked to pick a serial port twice: once for the tracker, then once
+          for the bootloader.
+        </p>
+
+        <div class="form-check mb-3" style="font-size:0.85rem">
+          <input class="form-check-input" type="checkbox" id="nrf-in-bootloader">
+          <label class="form-check-label" for="nrf-in-bootloader">
+            Board is already in bootloader mode (I double-tapped RESET)
+          </label>
+        </div>
+
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          <button id="nrf-install-btn" type="button" class="btn btn-success">Install</button>
+          <button id="nrf-select-bl-btn" type="button" class="btn btn-primary" style="display:none">
+            Select bootloader port
+          </button>
+          <span class="text-muted status-msg">Chrome / Edge only · USB cable required</span>
+        </div>
+
+        <div id="nrf-progress-row" class="mt-3" style="display:none">
+          <div class="progress mb-2" role="progressbar" aria-label="Flash progress" style="height:8px; background:#0d1117">
+            <div id="nrf-progress-bar" class="progress-bar bg-success" style="width:0%"></div>
+          </div>
+        </div>
+        <div id="nrf-status" class="status-msg" style="display:none"></div>
       </div>
 
-      <p class="fw-semibold mb-2" style="font-size:0.9rem">How to flash the Heltec T114</p>
-      <ol class="uf2-steps p-3 ps-4 mb-3">
-        <li><strong>Double-tap RESET</strong> quickly — the board enters UF2 bootloader mode.
-            A USB drive named <code>T114BOOT</code> (or similar) appears on your computer.</li>
-        <li>Click <strong>Download UF2</strong> below to save the firmware file.</li>
-        <li><strong>Drag</strong> the downloaded <code>.uf2</code> file onto the USB drive.</li>
-        <li>The drive disappears and the board reboots automatically into the new firmware.</li>
-      </ol>
+      <div id="nrf-no-webserial" class="alert alert-warning border-0 mb-3" style="display:none; background:#2d1f0a; border-left:3px solid #d29922 !important; border-radius:6px; font-size:0.85rem">
+        <strong>This browser doesn't support Web Serial.</strong>
+        Use Chrome or Edge to install over USB, or use the UF2 drag-and-drop method below.
+      </div>
 
-      <a id="uf2-download-btn" href="#" class="btn btn-warning" download>
-        ⬇ Download UF2
+      <details id="nrf-manual" class="mt-3">
+        <summary class="fw-semibold mb-2" style="font-size:0.9rem; cursor:pointer">
+          Manual install (UF2 drag-and-drop)
+        </summary>
+        <ol class="uf2-steps p-3 ps-4 mb-3 mt-2">
+          <li><strong>Double-tap RESET</strong> quickly — the board enters UF2 bootloader mode.
+              A USB drive named <code>T114BOOT</code> (or similar) appears on your computer.</li>
+          <li>Download <strong>Firmware (.uf2)</strong> from <em>Download firmware files</em> below.</li>
+          <li><strong>Drag</strong> the downloaded <code>.uf2</code> file onto the USB drive.</li>
+          <li>The drive disappears and the board reboots automatically into the new firmware.</li>
+        </ol>
+      </details>
+    </div>
+
+    <!-- Direct downloads, shown for every target: the raw release files from
+         targets.json "downloads" (generated by tools/generate_manifests.py),
+         for esptool / device web UI OTA / UF2 drag-and-drop users. -->
+    <div id="download-row" class="mt-3 pt-3" style="display:none; border-top:1px solid #30363d">
+      <div class="fw-semibold mb-2" style="font-size:0.82rem; text-transform:uppercase; letter-spacing:0.05em; color:#8b949e">
+        Download firmware files
+      </div>
+      <div id="download-list" class="d-flex flex-column gap-2"></div>
+    </div>
+
+    <!-- Revealed after a successful flash (either path): forward the user to
+         the serial configuration tool so they can set callsign/WiFi without
+         hunting for the next step. Hidden on target change (see JS). -->
+    <div id="post-flash-row" class="mt-3 pt-3" style="display:none; border-top:1px solid #30363d">
+      <p class="mb-2" style="font-size:0.9rem; color:#8b949e">
+        Flash complete. Continue to configure your device:
+      </p>
+      <a id="next-config-btn" href="../serial_config.html" class="btn btn-primary">
+        Open Serial Config →
       </a>
-      <div class="text-muted status-msg mt-2" style="font-size:0.78rem">
-        File saves to your Downloads folder — drag it onto the bootloader USB drive.
-      </div>
     </div>
 
   </div><!-- /flash-panel -->
@@ -189,7 +234,8 @@
   const elEspPanel    = document.getElementById('esp-panel');
   const elNrfPanel    = document.getElementById('nrf-panel');
   const elInstallBtn  = document.getElementById('install-btn');
-  const elUf2Btn      = document.getElementById('uf2-download-btn');
+  const elDownloadRow  = document.getElementById('download-row');
+  const elDownloadList = document.getElementById('download-list');
   const elVersionBadge = document.getElementById('version-badge');
   const elFooter       = document.getElementById('manifest-footer');
   const elFooterVer    = document.getElementById('footer-version');
@@ -202,7 +248,7 @@
 
   // ── Flash mode helpers ─────────────────────────────────────────────────
   function updateInstallManifest() {
-    if (!currentTarget) return;
+    if (!currentTarget || !currentTarget.manifest) return;   // nRF52 targets have no ESP manifest
     const mode = document.querySelector('input[name="flashMode"]:checked').value;
     const file = (mode === 'update' && currentTarget.update_manifest)
       ? currentTarget.update_manifest
@@ -292,6 +338,39 @@
     }
   }
 
+  // ── Direct firmware downloads (every target) ───────────────────────────
+  // Lists target.downloads from targets.json. The `download` attribute is
+  // ignored for cross-origin URLs (raw.githubusercontent.com), but those
+  // files are served as application/octet-stream, so the browser saves them
+  // rather than navigating away.
+  function renderDownloads(target) {
+    elDownloadList.replaceChildren();
+    // Older targets.json (pre-"downloads") still carried uf2_url for the T114.
+    const downloads = target.downloads
+      || (target.uf2_url ? [{ label: 'Firmware (.uf2)', url: target.uf2_url }] : []);
+    downloads.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'd-flex align-items-center gap-2 flex-wrap';
+
+      const link = document.createElement('a');
+      link.className = 'btn btn-sm btn-outline-warning';
+      link.href = d.url;
+      link.download = d.url.split('/').pop();
+      link.textContent = `⬇ ${d.label}`;
+      row.appendChild(link);
+
+      if (d.note) {
+        const note = document.createElement('span');
+        note.className = 'text-muted';
+        note.style.fontSize = '0.78rem';
+        note.textContent = d.note;
+        row.appendChild(note);
+      }
+      elDownloadList.appendChild(row);
+    });
+    elDownloadRow.style.display = downloads.length ? '' : 'none';
+  }
+
   // ── Target selection change ────────────────────────────────────────────
   elSelect.addEventListener('change', () => {
     const id = elSelect.value;
@@ -317,11 +396,15 @@
     }
 
     elFlashPanel.style.display = '';
+    renderDownloads(target);
 
     if (target.uf2_url) {
-      // nRF52 — UF2 download
-      elUf2Btn.href = target.uf2_url;
-      elUf2Btn.download = `${target.id}_firmware.uf2`;
+      // nRF52 — Web Serial DFU when available, UF2 download as fallback
+      currentTarget = target;
+      resetNrfUi();
+      elNrfWebSerial.style.display   = HAS_WEB_SERIAL ? '' : 'none';
+      elNrfNoWebSerial.style.display = HAS_WEB_SERIAL ? 'none' : '';
+      elNrfManual.open = !HAS_WEB_SERIAL;
       elNrfPanel.style.display = '';
     } else if (target.manifest) {
       // ESP32 — Web Serial via ESP Web Tools
@@ -336,6 +419,182 @@
       updateInstallManifest();
       elEspPanel.style.display = '';
     }
+  });
+
+  // ── nRF52 (Heltec T114) Web Serial install ─────────────────────────────
+  // Flow: user picks the running tracker's port → 1200-baud touch reboots it
+  // into the bootloader → bootloader re-enumerates as a new USB device →
+  // we pick that port up automatically if this browser was granted it before,
+  // otherwise ask the user to select it (requestPort needs a click) → serial
+  // DFU. See flasher/nrf52_dfu.js for the protocol.
+  const HAS_WEB_SERIAL = 'serial' in navigator;
+  const BOOTLOADER_APPEAR_TIMEOUT_MS = 8000;
+  const BOOTLOADER_POLL_INTERVAL_MS  = 250;
+
+  const elNrfWebSerial   = document.getElementById('nrf-webserial');
+  const elNrfNoWebSerial = document.getElementById('nrf-no-webserial');
+  const elNrfManual      = document.getElementById('nrf-manual');
+  const elNrfInBootloader = document.getElementById('nrf-in-bootloader');
+  const elNrfInstallBtn  = document.getElementById('nrf-install-btn');
+  const elNrfSelectBlBtn = document.getElementById('nrf-select-bl-btn');
+  const elNrfProgressRow = document.getElementById('nrf-progress-row');
+  const elNrfProgressBar = document.getElementById('nrf-progress-bar');
+  const elNrfStatus      = document.getElementById('nrf-status');
+
+  // Firmware image cache, keyed by UF2 URL, so a retry doesn't re-download.
+  const nrfImageCache = new Map();
+
+  function loadNrfImage(url) {
+    if (!nrfImageCache.has(url)) {
+      const promise = fetch(url, { cache: 'no-cache' })
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status} downloading firmware`);
+          return r.arrayBuffer();
+        })
+        .then(buf => window.Nrf52SerialDfu.uf2ToAppImage(buf));
+      promise.catch(() => nrfImageCache.delete(url));   // allow a retry after a failed download
+      nrfImageCache.set(url, promise);
+    }
+    return nrfImageCache.get(url);
+  }
+
+  function setNrfStatus(message, kind = 'muted') {
+    elNrfStatus.className = `status-msg mt-1 text-${kind}`;
+    elNrfStatus.textContent = message;
+    elNrfStatus.style.display = message ? '' : 'none';
+  }
+
+  function setNrfProgress(fraction) {
+    elNrfProgressRow.style.display = '';
+    elNrfProgressBar.style.width = `${Math.round(fraction * 100)}%`;
+  }
+
+  function setNrfBusy(busy) {
+    elNrfInstallBtn.disabled = busy;
+    elNrfSelectBlBtn.disabled = busy;
+    elNrfInBootloader.disabled = busy;
+    elSelect.disabled = busy;   // switching targets mid-flash would orphan the session
+  }
+
+  function resetNrfUi() {
+    setNrfBusy(false);
+    elNrfSelectBlBtn.style.display = 'none';
+    elNrfProgressRow.style.display = 'none';
+    elNrfProgressBar.style.width = '0%';
+    setNrfStatus('');
+  }
+
+  /** Translate Web Serial / DFU errors into something actionable. */
+  function describeNrfError(err) {
+    const msg = (err && err.message) || String(err);
+    if (err && err.name === 'InvalidStateError') {
+      return 'The serial port is already open. Close any other tab or app using it '
+        + '(Serial Config, a terminal, PlatformIO monitor) and try again.';
+    }
+    if (err && err.name === 'NetworkError') {
+      return 'Could not open the serial port — the device may have disconnected. Reconnect it and try again.';
+    }
+    return msg;
+  }
+
+  /**
+   * After the touch, wait for a newly-connected port this origin already has
+   * permission for (true on repeat visits). Ports present before the touch
+   * are excluded so another connected board can't be mistaken for the
+   * bootloader. Resolves null on timeout → user must pick it manually.
+   */
+  async function waitForBootloaderPort(portsBeforeTouch) {
+    const deadline = performance.now() + BOOTLOADER_APPEAR_TIMEOUT_MS;
+    while (performance.now() < deadline) {
+      await new Promise(r => setTimeout(r, BOOTLOADER_POLL_INTERVAL_MS));
+      const ports = await navigator.serial.getPorts();
+      const fresh = ports.filter(p => !portsBeforeTouch.has(p));
+      if (fresh.length === 1) {
+        // Let the bootloader's CDC interface finish coming up before opening.
+        await new Promise(r => setTimeout(r, 500));
+        return fresh[0];
+      }
+    }
+    return null;
+  }
+
+  async function flashNrfThroughBootloader(port) {
+    setNrfBusy(true);
+    elNrfSelectBlBtn.style.display = 'none';
+    try {
+      setNrfStatus('Downloading firmware…');
+      const image = await loadNrfImage(currentTarget.uf2_url);
+      await window.Nrf52SerialDfu.flashApplication(port, image, (fraction, message) => {
+        setNrfProgress(fraction);
+        setNrfStatus(message);
+      });
+      setNrfStatus('Install complete — the tracker is restarting into the new firmware.', 'success');
+      elPostFlashRow.style.display = '';
+    } catch (err) {
+      console.error('nRF DFU failed', err);
+      setNrfStatus(`Install failed: ${describeNrfError(err)} — If this repeats, double-tap RESET, `
+        + 'tick "already in bootloader mode", and try again (or use the manual install below).', 'danger');
+    } finally {
+      setNrfBusy(false);
+    }
+  }
+
+  elNrfInstallBtn.addEventListener('click', async () => {
+    if (!currentTarget || !currentTarget.uf2_url) return;
+    resetNrfUi();
+    elPostFlashRow.style.display = 'none';
+    // Start the download now so it overlaps the port picker / reboot.
+    loadNrfImage(currentTarget.uf2_url).catch(() => {});
+
+    let port;
+    try {
+      // requestPort must run first, while the click's user activation is live.
+      port = await navigator.serial.requestPort();
+    } catch (err) {
+      if (err && err.name === 'NotFoundError') return;   // user cancelled the picker
+      setNrfStatus(describeNrfError(err), 'danger');
+      return;
+    }
+
+    if (elNrfInBootloader.checked) {
+      await flashNrfThroughBootloader(port);
+      return;
+    }
+
+    setNrfBusy(true);
+    try {
+      const portsBeforeTouch = new Set(await navigator.serial.getPorts());
+      setNrfStatus('Rebooting the tracker into its bootloader…');
+      await window.Nrf52SerialDfu.touchToBootloader(port);
+      const bootloaderPort = await waitForBootloaderPort(portsBeforeTouch);
+      setNrfBusy(false);
+      if (bootloaderPort) {
+        await flashNrfThroughBootloader(bootloaderPort);
+      } else {
+        // First time on this computer: the browser needs explicit permission
+        // for the bootloader's USB identity, which requires another click.
+        elNrfSelectBlBtn.style.display = '';
+        setNrfStatus('The tracker should now be in bootloader mode. Click "Select bootloader port" '
+          + 'and choose the port that just appeared (it has a different name than the tracker\'s). '
+          + 'If no new port appears, double-tap RESET and use "already in bootloader mode".', 'warning');
+      }
+    } catch (err) {
+      console.error('nRF bootloader touch failed', err);
+      setNrfBusy(false);
+      setNrfStatus(describeNrfError(err), 'danger');
+    }
+  });
+
+  elNrfSelectBlBtn.addEventListener('click', async () => {
+    let port;
+    try {
+      port = await navigator.serial.requestPort();
+    } catch (err) {
+      if (err && err.name === 'NotFoundError') return;
+      setNrfStatus(describeNrfError(err), 'danger');
+      return;
+    }
+    await flashNrfThroughBootloader(port);
   });
 
 })();

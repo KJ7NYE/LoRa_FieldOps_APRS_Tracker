@@ -36,6 +36,7 @@ Two files are published for each ESP32 board:
 
 | Method | Steps | File |
 |---|---|---|
+| **Web flasher (recommended)** | Connect over USB, open the [web flasher](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/) in Chrome or Edge, choose **Heltec T114** and click **Install**. The flasher reboots the board into its bootloader itself, with no RESET double-tap needed. The bootloader reconnects as a new USB device, so the first time the browser asks you to pick a port twice. Your configuration is kept. | Fetched automatically |
 | **USB drag-and-drop** | Double-tap **RESET**, then drag the `.uf2` file onto the USB drive that appears. | `heltec_t114_firmware.uf2` |
 | **Bluetooth update** | Type `otadfu` in the [serial CLI](../reference/serial-cli.md). In [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile) (iOS/Android), scan, connect to the DFU target, open the **DFU** tab and select the zip. | `heltec_t114_dfu.zip` |
 

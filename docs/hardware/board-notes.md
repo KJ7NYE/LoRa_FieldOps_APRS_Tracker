@@ -40,7 +40,7 @@ Firmware target `lilygo_t3s3_433_aprs` supports the T3-S3 **V1.2 and V1.3** with
 ## Heltec T114 (nRF52840)
 
 - **No WiFi.** The T114 can't be an iGate and has no web UI. Configure it with the [serial configuration tool](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/serial_config.html), the serial CLI, or the Android app over Bluetooth.
-- **Firmware updates** are by USB drag-and-drop (`.uf2`) or over Bluetooth with `otadfu`. See [Install firmware](../getting-started/flashing.md#heltec-t114-nrf52840).
+- **Firmware updates** are by the web flasher over USB (no RESET double-tap needed), USB drag-and-drop (`.uf2`), or over Bluetooth with `otadfu`. See [Install firmware](../getting-started/flashing.md#heltec-t114-nrf52840).
 - **Slower Bluetooth setup.** Long CLI output over Bluetooth takes a few seconds because of the default 23-byte packet size.
 
 ## Heltec WiFi LoRa 32 V3.2

@@ -10,7 +10,19 @@
       "description": "Heltec WiFi LoRa 32 V3.2 \u2014 ESP32-S3, SX1262, SSD1306 OLED, WiFi/BLE.",
       "manufacturer": "Heltec",
       "manifest": "heltec_v3_433_aprs.json",
-      "update_manifest": "heltec_v3_433_aprs_update.json"
+      "update_manifest": "heltec_v3_433_aprs_update.json",
+      "downloads": [
+        {
+          "label": "Factory image (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_v3_433_aprs_web_factory.bin",
+          "note": "Complete flash image for esptool at offset 0x0. Resets configuration."
+        },
+        {
+          "label": "App update (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_v3_433_aprs_firmware.bin",
+          "note": "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration."
+        }
+      ]
     },
     {
       "id": "heltec_wireless_tracker_433_aprs",
@@ -19,15 +31,34 @@
       "description": "Heltec Wireless Tracker V1.1 \u2014 ESP32-S3, SX1262, onboard UC6580 GNSS, 0.96\" ST7735 TFT, WiFi/BLE.",
       "manufacturer": "Heltec",
       "manifest": "heltec_wireless_tracker_433_aprs.json",
-      "update_manifest": "heltec_wireless_tracker_433_aprs_update.json"
+      "update_manifest": "heltec_wireless_tracker_433_aprs_update.json",
+      "downloads": [
+        {
+          "label": "Factory image (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_wireless_tracker_433_aprs_web_factory.bin",
+          "note": "Complete flash image for esptool at offset 0x0. Resets configuration."
+        },
+        {
+          "label": "App update (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_wireless_tracker_433_aprs_firmware.bin",
+          "note": "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration."
+        }
+      ]
     },
     {
       "id": "heltec_t114",
       "label": "Heltec T114",
       "chip": "nRF52840",
-      "description": "Heltec T114 \u2014 nRF52840, SX1262, Quectel L76K GPS, ST7789 TFT. Use UF2 drag-and-drop \u2014 Web Serial is not supported on nRF52.",
+      "description": "Heltec T114 \u2014 nRF52840, SX1262, Quectel L76K GPS, ST7789 TFT. Installs over USB (Web Serial DFU) or UF2 drag-and-drop; configuration is preserved.",
       "manufacturer": "Heltec",
-      "uf2_url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_t114_firmware.uf2"
+      "uf2_url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_t114_firmware.uf2",
+      "downloads": [
+        {
+          "label": "Firmware (.uf2)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/heltec_t114_firmware.uf2",
+          "note": "Drag onto the T114BOOT drive after double-tapping RESET."
+        }
+      ]
     },
     {
       "id": "tbeam_433_aprs",
@@ -36,7 +67,19 @@
       "description": "TTGO T-Beam V1.2 \u2014 ESP32, SX1278, u-blox GPS, SSD1306 OLED, WiFi/BLE.",
       "manufacturer": "LilyGo",
       "manifest": "tbeam_433_aprs.json",
-      "update_manifest": "tbeam_433_aprs_update.json"
+      "update_manifest": "tbeam_433_aprs_update.json",
+      "downloads": [
+        {
+          "label": "Factory image (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/tbeam_433_aprs_web_factory.bin",
+          "note": "Complete flash image for esptool at offset 0x0. Resets configuration."
+        },
+        {
+          "label": "App update (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/tbeam_433_aprs_firmware.bin",
+          "note": "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration."
+        }
+      ]
     },
     {
       "id": "lilygo_t3_433_aprs",
@@ -45,7 +88,19 @@
       "description": "LilyGo T3 \u2014 ESP32, SX1278, SSD1306 OLED, WiFi/BLE. No onboard GPS.",
       "manufacturer": "LilyGo",
       "manifest": "lilygo_t3_433_aprs.json",
-      "update_manifest": "lilygo_t3_433_aprs_update.json"
+      "update_manifest": "lilygo_t3_433_aprs_update.json",
+      "downloads": [
+        {
+          "label": "Factory image (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/lilygo_t3_433_aprs_web_factory.bin",
+          "note": "Complete flash image for esptool at offset 0x0. Resets configuration."
+        },
+        {
+          "label": "App update (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/lilygo_t3_433_aprs_firmware.bin",
+          "note": "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration."
+        }
+      ]
     },
     {
       "id": "lilygo_t3s3_433_aprs",
@@ -54,7 +109,19 @@
       "description": "LilyGo T3-S3 V1.2/V1.3 \u2014 ESP32-S3, SX1262 (433 MHz version), SSD1306 OLED, WiFi/BLE. No onboard GPS.",
       "manufacturer": "LilyGo",
       "manifest": "lilygo_t3s3_433_aprs.json",
-      "update_manifest": "lilygo_t3s3_433_aprs_update.json"
+      "update_manifest": "lilygo_t3s3_433_aprs_update.json",
+      "downloads": [
+        {
+          "label": "Factory image (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/lilygo_t3s3_433_aprs_web_factory.bin",
+          "note": "Complete flash image for esptool at offset 0x0. Resets configuration."
+        },
+        {
+          "label": "App update (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/lilygo_t3s3_433_aprs_firmware.bin",
+          "note": "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration."
+        }
+      ]
     },
     {
       "id": "tbeam_433_1w_aprs",
@@ -63,7 +130,19 @@
       "description": "LilyGo T-Beam 1W \u2014 ESP32-S3, SX1262 (1 W), onboard GNSS, SH1106 OLED, WiFi/BLE.",
       "manufacturer": "LilyGo",
       "manifest": "tbeam_433_1w_aprs.json",
-      "update_manifest": "tbeam_433_1w_aprs_update.json"
+      "update_manifest": "tbeam_433_1w_aprs_update.json",
+      "downloads": [
+        {
+          "label": "Factory image (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/tbeam_433_1w_aprs_web_factory.bin",
+          "note": "Complete flash image for esptool at offset 0x0. Resets configuration."
+        },
+        {
+          "label": "App update (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/tbeam_433_1w_aprs_firmware.bin",
+          "note": "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration."
+        }
+      ]
     },
     {
       "id": "LoRanger_V1",
@@ -72,7 +151,19 @@
       "description": "KJ7NYE LoRanger V1 \u2014 ESP32-S3, E22-400M30S (SX1262), ATGM336H GPS. Headless (no display).",
       "manufacturer": "Custom",
       "manifest": "LoRanger_V1.json",
-      "update_manifest": "LoRanger_V1_update.json"
+      "update_manifest": "LoRanger_V1_update.json",
+      "downloads": [
+        {
+          "label": "Factory image (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/LoRanger_V1_web_factory.bin",
+          "note": "Complete flash image for esptool at offset 0x0. Resets configuration."
+        },
+        {
+          "label": "App update (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/LoRanger_V1_firmware.bin",
+          "note": "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration."
+        }
+      ]
     },
     {
       "id": "LoRanger_V2",
@@ -81,7 +172,19 @@
       "description": "KJ7NYE LoRanger V2 \u2014 ESP32-S3, E22-400M30S (SX1262, 1 W), ATGM336H GPS, STK8328-C accel, microSD. Optional 128x64 I2C OLED on J2 (runtime-detected).",
       "manufacturer": "Custom",
       "manifest": "LoRanger_V2.json",
-      "update_manifest": "LoRanger_V2_update.json"
+      "update_manifest": "LoRanger_V2_update.json",
+      "downloads": [
+        {
+          "label": "Factory image (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/LoRanger_V2_web_factory.bin",
+          "note": "Complete flash image for esptool at offset 0x0. Resets configuration."
+        },
+        {
+          "label": "App update (.bin)",
+          "url": "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware/LoRanger_V2_firmware.bin",
+          "note": "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration."
+        }
+      ]
     }
   ]
 }
