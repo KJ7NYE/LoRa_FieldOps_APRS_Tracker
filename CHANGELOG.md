@@ -9,6 +9,26 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-15 — Web flasher installs the Heltec T114 over USB
+
+The web flasher can now flash the T114 directly instead of only offering a UF2
+download. It does what `pio run -t upload` does: a 1200-baud touch reboots the
+running tracker into its bootloader (no RESET double-tap), then the firmware is sent
+with the legacy Nordic serial DFU protocol used by `adafruit-nrfutil`.
+
+- New `flasher/nrf52_dfu.js`. It builds the application image from the published
+  `.uf2`, so no new release artifact is needed. The image, init packet and HCI/SLIP
+  framing were checked byte-for-byte against `adafruit-nrfutil`. Only the application
+  is written, so saved configuration is kept.
+- The bootloader re-enumerates as a new USB device. The first time on a computer the
+  browser asks for that port once; after that the flasher continues to it
+  automatically. "Board is already in bootloader mode" covers boards that won't
+  reboot on their own. UF2 drag-and-drop stays as a fallback and is shown first in
+  browsers without Web Serial.
+- Every target now has a **Download firmware files** section: the factory image and
+  app-only `.bin` for ESP32 boards, the `.uf2` for the T114. The list comes from a new
+  `downloads` field in `targets.json`, written by `tools/generate_manifests.py`.
+
 ## 2026-11-09 — Answer messages addressed to the tracker over KISS
 
 With the tracker as the radio for an external iGate (e.g. aprx on serial KISS), a

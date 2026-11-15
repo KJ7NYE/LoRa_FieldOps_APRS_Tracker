@@ -101,9 +101,16 @@ NRF_TARGET = {
     "id":          "heltec_t114",
     "label":       "Heltec T114",
     "chip":        "nRF52840",
-    "description": "Heltec T114 — nRF52840, SX1262, Quectel L76K GPS, ST7789 TFT. Use UF2 drag-and-drop — Web Serial is not supported on nRF52.",
+    "description": "Heltec T114 — nRF52840, SX1262, Quectel L76K GPS, ST7789 TFT. Installs over USB (Web Serial DFU) or UF2 drag-and-drop; configuration is preserved.",
     "manufacturer": "Heltec",
     "uf2_url":     f"{base}/heltec_t114_firmware.uf2",
+    "downloads": [
+        {
+            "label": "Firmware (.uf2)",
+            "url":   f"{base}/heltec_t114_firmware.uf2",
+            "note":  "Drag onto the T114BOOT drive after double-tapping RESET.",
+        },
+    ],
 }
 
 # Display order for <optgroup> labels in the board dropdown. Any manufacturer
@@ -122,6 +129,22 @@ os.makedirs("flasher/manifests", exist_ok=True)
 # up front, then sort the combined list by manufacturer so the dropdown can
 # group targets into <optgroup>s just by walking the array in order and
 # watching "manufacturer" change, with no client-side sorting needed.
+def _esp_downloads(t):
+    """Raw release files offered as direct downloads in the flasher, for users
+    flashing with esptool or updating through the device's own web UI."""
+    return [
+        {
+            "label": "Factory image (.bin)",
+            "url":   f"{base}/{t['id']}_web_factory.bin",
+            "note":  "Complete flash image for esptool at offset 0x0. Resets configuration.",
+        },
+        {
+            "label": "App update (.bin)",
+            "url":   f"{base}/{t['id']}_firmware.bin",
+            "note":  "Application only, for Device -> Update Firmware in the device web UI. Keeps configuration.",
+        },
+    ]
+
 esp_entries = [
     {
         "id":              t["id"],
@@ -131,6 +154,7 @@ esp_entries = [
         "manufacturer":    t["manufacturer"],
         "manifest":        f"{t['id']}.json",
         "update_manifest": f"{t['id']}_update.json",
+        "downloads":       _esp_downloads(t),
     }
     for t in ESP_TARGETS
 ]
