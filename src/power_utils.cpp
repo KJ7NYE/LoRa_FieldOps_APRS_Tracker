@@ -549,7 +549,15 @@ namespace POWER_Utils {
             nrf_wdt_reload_request_enable(NRF_WDT, NRF_WDT_RR0);
             nrf_wdt_task_trigger(NRF_WDT, NRF_WDT_TASK_START);
         #else
-            esp_task_wdt_init(WATCHDOG_TIMEOUT_SEC, true);
+            // ESP-IDF 5.x reshaped esp_task_wdt_init to take a config struct
+            // (was: esp_task_wdt_init(timeout_seconds, panic_on_timeout)).
+            // Request a panic (reboot) on timeout and don't attach idle tasks.
+            const esp_task_wdt_config_t wdtConfig = {
+                .timeout_ms     = WATCHDOG_TIMEOUT_SEC * 1000U,
+                .idle_core_mask = 0,          // leave the idle tasks alone
+                .trigger_panic  = true,
+            };
+            esp_task_wdt_init(&wdtConfig);
             esp_task_wdt_add(NULL);
         #endif
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Watchdog", "Armed, %lu s timeout", (unsigned long)WATCHDOG_TIMEOUT_SEC);
