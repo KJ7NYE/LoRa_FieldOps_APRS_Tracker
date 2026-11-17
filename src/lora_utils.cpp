@@ -317,7 +317,7 @@ namespace LoRa_Utils {
         }
     }
 
-    void sendNewPacket(const String& newPacket) {
+    bool sendNewPacket(const String& newPacket) {
         // FCC TX-gate: refuse to key the carrier if the source callsign field
         // looks like a placeholder (NOCALL / N0CALL). Catches misconfigured
         // local beacons and any externally-injected packets via BLE/BT-Classic
@@ -330,7 +330,7 @@ namespace LoRa_Utils {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "LoRa Tx",
                        "TX BLOCKED: source callsign \"%s\" is a placeholder; configure a valid callsign before transmitting",
                        fromCall.c_str());
-            return;
+            return false;
         }
 
         // Listen before talk (after the FCC gate, so a blocked packet doesn't
@@ -366,9 +366,8 @@ namespace LoRa_Utils {
             THERMAL_Utils::onTxEnd();
         #endif
         transmitFlag = true;
-        if (state == RADIOLIB_ERR_NONE) {
-            //Serial.println(F("success!"));
-        } else {
+        const bool transmitted = (state == RADIOLIB_ERR_NONE);
+        if (!transmitted) {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "LoRa Tx", "Tx failed, code %d", state);
         }
 
@@ -376,6 +375,7 @@ namespace LoRa_Utils {
             delay(Config.ptt.postDelay);
             digitalWrite(Config.ptt.io_pin, Config.ptt.reverse ? HIGH : LOW);
         }
+        return transmitted;
     }
 
     void wakeRadio() {
@@ -425,12 +425,22 @@ namespace LoRa_Utils {
                 int state = radio.readData(packet);
                 if (state == RADIOLIB_ERR_NONE) {
                     if(packet.length() != 0) {
-                        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa Rx","---> %s", packet.substring(3).c_str());
-                        LogBuffer::pushf(LogBuffer::TYPE_RX, "%s  [RSSI:%d SNR:%.0f]",
-                            packet.substring(3).c_str(), (int)radio.getRSSI(), (double)radio.getSNR());
+                        // Read the signal values once: the serial log, the web UI
+                        // log and the KISS signal report must all agree.
+                        const int   rssi       = (int)radio.getRSSI();
+                        const float snr        = radio.getSNR();
+                        // Whole-dB SNR in the log lines, rounded here so the text
+                        // doesn't depend on float printf support in each
+                        // platform's C library.
+                        const int   snrRounded = (int)lroundf(snr);
+                        const String tnc2      = packet.substring(3);   // strip 3-byte LoRa APRS header
+                        logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "LoRa Rx", "---> %s  [RSSI:%d SNR:%d]",
+                                   tnc2.c_str(), rssi, snrRounded);
+                        LogBuffer::pushf(LogBuffer::TYPE_RX, "%s  [RSSI:%d SNR:%d]",
+                                         tnc2.c_str(), rssi, snrRounded);
                         receivedLoraPacket.text       = packet;
-                        receivedLoraPacket.rssi       = radio.getRSSI();
-                        receivedLoraPacket.snr        = radio.getSNR();
+                        receivedLoraPacket.rssi       = rssi;
+                        receivedLoraPacket.snr        = snr;
                         receivedLoraPacket.freqError  = radio.getFrequencyError();
                     }
                 } else {

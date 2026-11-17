@@ -9,6 +9,31 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-16 — Signal strength for coverage logging (`kiss.rssi`)
+
+Two opt-in changes so a phone app can log a tracker's signal reports for the APRS
+Coverage website. With the defaults, every existing KISS client (APRSDroid, APRS.fi,
+Xastir, aprx, Direwolf) sees exactly what it did before.
+
+- **Serial log:** the received-packet line now carries the signal values, matching
+  the web UI's live log: `---> <packet>  [RSSI:-97 SNR:6]`. RSSI and SNR are read
+  from the radio once and shared by the serial log, the web UI log and the KISS
+  signal report.
+- **New setting `kiss.rssi`** (default off; `kiss rssi on|off`, web UI and serial
+  config page in the Bluetooth section). In the tracker role, each received packet
+  forwarded to KISS is followed on the same link by a SetHardware frame (command
+  `0x06`, port 0) holding `RSSI:<int>,SNR:<one decimal>`, e.g. `RSSI:-97,SNR:6.5`.
+  Each transport writes the data frame and its report in one call (two in-order
+  notifications on nRF52 BLE), so nothing can come between them. Never sent after the
+  tracker's own transmissions. iGates and digipeaters send nothing new. Not added to
+  remote configuration, whose field list covers remote station management rather than
+  the local phone link.
+- **Own beacons reach KISS only once transmitted.** Listen-before-talk already held
+  the beacon until it went out (it delays, never drops), but a beacon blocked by the
+  NOCALL TX gate, or one RadioLib failed to send, was still copied to KISS.
+  `LoRa_Utils::sendNewPacket()` now returns whether the packet went on air, and the
+  position, status and PHG beacons are copied to KISS only when it did.
+
 ## 2026-11-15 — Web flasher installs the Heltec T114 over USB
 
 The web flasher can now flash the T114 directly instead of only offering a UF2

@@ -71,6 +71,14 @@ Used when the SmartBeacon profile is **4 — Custom**. Ranges and details are in
 | Require PIN | on | `bt pin on\|off` | Also required for [setup over Bluetooth](../guide/bluetooth.md#setup-over-bluetooth). |
 | PIN | `123456` | `bt pin <4-6 digits>` | Change it from the default. See [Bluetooth & pairing PIN](../guide/bluetooth.md). |
 
+## KISS
+
+Applies to every KISS link: USB serial, Bluetooth and TCP. The web UI and serial config page show it in the Bluetooth section.
+
+| Setting | Default | CLI | Description |
+|---|---|---|---|
+| Send signal strength (`kiss.rssi`) | off | `kiss rssi on\|off` | Tracker role only. After each received packet, also send its RSSI and SNR as a KISS SetHardware frame, for apps that log coverage. Off by default because some KISS clients (APRSDroid, APRS.fi, Xastir, Direwolf, aprx) may log the extra frames. See [Signal reports](../guide/kiss-tnc.md#signal-reports-kissrssi). |
+
 ## Battery & Altitude
 
 | Setting | Default | CLI | Description |

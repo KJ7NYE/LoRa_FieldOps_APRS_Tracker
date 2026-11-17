@@ -175,4 +175,11 @@ namespace KISS_Utils {
         return kissFrame;
     }
 
+    String encodeSignalReport(int rssi, float snr) {
+        // String(float, 1) rather than "%.1f": float printf support differs
+        // between the ESP32 and nRF52 C libraries, String's dtostrf doesn't.
+        const String report = "RSSI:" + String(rssi) + ",SNR:" + String(snr, 1);
+        return encapsulateKISS(report, KissCmd::SetHardware);
+    }
+
 }

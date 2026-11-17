@@ -30,7 +30,8 @@ enum KissChar {
 };
 
 enum KissCmd {
-    Data                = 0x00
+    Data                = 0x00,
+    SetHardware         = 0x06     // vendor-defined payload; carries the RX signal report
 };
 
 enum AX25Char {
@@ -50,6 +51,11 @@ namespace KISS_Utils {
     // TNC2 text -> KISS data frame. Returns "" if `frame` is not valid TNC2.
     String encodeKISS(const String& frame);
     String decodeKISS(const String& inputFrame, bool& dataFrame);
+
+    // RX signal report as a KISS SetHardware frame (command 0x06, port 0)
+    // holding ASCII "RSSI:<int>,SNR:<one decimal>", e.g. "RSSI:-97,SNR:6.5".
+    // Sent straight after a received packet's data frame when kiss.rssi is on.
+    String encodeSignalReport(int rssi, float snr);
 
 }
 

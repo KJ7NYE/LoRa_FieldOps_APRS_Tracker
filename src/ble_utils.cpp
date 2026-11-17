@@ -659,11 +659,18 @@ namespace BLE_Utils {
         shouldSendToLoRa    = false;
     }
 
-    void sendToPhone(const String& packet) {
+    void sendToPhone(const String& packet, const String& trailingKissFrame) {
         if (packet.length() == 0 || !bluetoothConnected) return;
-        const String kissFrame = KISS_Utils::encodeKISS(packet);
-        if (kissFrame.length() == 0) return;   // not valid TNC2: nothing to send
-        txChar.notify((const uint8_t*)kissFrame.c_str(), kissFrame.length());
+        const String dataFrame = KISS_Utils::encodeKISS(packet);
+        if (dataFrame.length() == 0) return;   // not valid TNC2: nothing to send
+        txChar.notify((const uint8_t*)dataFrame.c_str(), dataFrame.length());
+        // Queued straight behind the data frame from this same call; the
+        // SoftDevice sends notifications in order, so nothing can come
+        // between them. Kept as a separate notify() because Bluefruit
+        // truncates one notify() at the characteristic's max length (512).
+        if (trailingKissFrame.length() > 0) {
+            txChar.notify((const uint8_t*)trailingKissFrame.c_str(), trailingKissFrame.length());
+        }
     }
 
 }   // namespace BLE_Utils
@@ -1152,12 +1159,16 @@ namespace BLE_Utils {
         shouldSendBLEtoLoRa     = false;
     }
 
-    void sendToPhone(const String& packet) {
+    void sendToPhone(const String& packet, const String& trailingKissFrame) {
         if (packet.length() == 0 || !bluetoothConnected) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BLE RX", "%s", packet.c_str());
-        const String kissFrame = KISS_Utils::encodeKISS(packet);
-        const char* bytes = kissFrame.c_str();
-        const int   length = kissFrame.length();
+        const String dataFrame = KISS_Utils::encodeKISS(packet);
+        if (dataFrame.length() == 0) return;   // not valid TNC2: nothing to send
+        // Both frames go out as one chunked byte stream, so the signal report
+        // always follows its own packet with nothing in between.
+        const String kissBytes = dataFrame + trailingKissFrame;
+        const char* bytes = kissBytes.c_str();
+        const int   length = kissBytes.length();
         // NimBLE 2.x exposes notify(data, length) directly; the 1.x two-step
         // of setValue + notify() is no longer required. Sending straight from
         // the frame buffer also eliminates the per-chunk heap allocation.

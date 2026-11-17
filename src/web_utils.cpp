@@ -339,6 +339,9 @@ namespace WEB_Utils {
         //  TCP KISS server
         Config.tcpKISS.port           = getParamIntSafe("tcpKISS.port",            Config.tcpKISS.port);
 
+        //  KISS signal reports (all KISS links; shown in the Bluetooth section)
+        Config.kiss.rssi              = request->hasParam("kiss.rssi", true);
+
         //  Remote configuration (CourseSentry) -- compact read/write protocol
         //  over APRS directed messages. Off by default; see remote_cfg_utils.h.
         Config.remoteCfg.enabled          = request->hasParam("remoteCfg.enabled", true);

@@ -210,7 +210,7 @@ namespace SERIAL_Setup {
         replyOut->println(F("\n-- core --"));
         replyOut->println(F("  help                       show this list"));
         replyOut->println(F("  show [section]             dump config (sections: beacons|lora|"));
-        replyOut->println(F("                              smartcustom|display|bt|bat|ptt|wifi|other)"));
+        replyOut->println(F("                              smartcustom|display|bt|kiss|bat|ptt|wifi|other)"));
         replyOut->println(F("  show secrets               toggle masked password display"));
         replyOut->println(F("  save                       persist to tracker_conf.json"));
         replyOut->println(F("  export                     dump current saved tracker_conf.json"));
@@ -250,6 +250,9 @@ namespace SERIAL_Setup {
         replyOut->println(F("  bat sleepv <volts>          bat read"));
         replyOut->println(F("  ptt on|off                 pin <n>              reverse on|off"));
         replyOut->println(F("  ptt predelay <ms>          postdelay <ms>"));
+        replyOut->println(F("\n-- kiss (USB serial, Bluetooth, TCP) --"));
+        replyOut->println(F("  kiss rssi on|off           follow each RX packet with an RSSI/SNR frame"));
+        replyOut->println(F("                              (tracker role; for logging apps, default off)"));
         replyOut->println(F("\n-- multi-role --"));
         replyOut->println(F("  role show                  show current role and GPS source"));
         replyOut->println(F("  role set <tracker|igate|digipeater>"));
@@ -373,6 +376,11 @@ namespace SERIAL_Setup {
             kv("pin   ", BlePin::isValid(Config.bluetooth.pin)
                             ? Config.bluetooth.pin + "  (phone passkey " + BlePin::passkeyDigits(Config.bluetooth.pin) + ")"
                             : Config.bluetooth.pin + "  (INVALID - BLE stays off until fixed)");
+        }
+        if (section == "" || section == "kiss") {
+            hdr("kiss");
+            kv("rssi   ", Config.kiss.rssi);
+            kv("tcpPort", (int)Config.tcpKISS.port);
         }
         if (section == "" || section == "bat") {
             const Battery& b = Config.battery;
@@ -1155,6 +1163,17 @@ namespace SERIAL_Setup {
         }
     }
 
+    static void cmdKiss(String* tk, int n) {
+        if (n < 2) { err("kiss rssi on|off"); return; }
+        String sub = tk[1]; sub.toLowerCase();
+        if (sub == "rssi") {
+            if (n < 3) { err("kiss rssi on|off"); return; }
+            applyBool(tk[2], Config.kiss.rssi, "kiss.rssi");
+        } else {
+            err("unknown kiss subcommand: " + sub);
+        }
+    }
+
     static void cmdTcpKiss(String* tk, int n) {
         if (n < 2) { err("tcpkiss port <n>"); return; }
         const String& sub = tk[1];
@@ -1290,6 +1309,7 @@ namespace SERIAL_Setup {
         else if (cmd == "wifista")  cmdWifiSta(tk, n, line);
         else if (cmd == "aprsiss")  cmdAprsIS(tk, n, line);
         else if (cmd == "tcpkiss")  cmdTcpKiss(tk, n);
+        else if (cmd == "kiss")     cmdKiss(tk, n);
         else if (cmd == "remotecfg") cmdRemoteCfg(tk, n, line);
         else if (cmd == "version") {
             replyOut->println("version.date=" FIRMWARE_VERSION_DATE);

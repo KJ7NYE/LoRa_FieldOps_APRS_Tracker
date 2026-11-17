@@ -91,13 +91,15 @@ namespace TCP_KISS_Utils {
         }
     }
 
-    void sendToClients(const String& packet) {
+    void sendToClients(const String& packet, const String& trailingKissFrame) {
         if (!tncServer) return;
-        String kissFrame = KISS_Utils::encodeKISS(packet);
-        if (kissFrame.length() == 0) return;   // not valid TNC2: nothing to send
+        const String dataFrame = KISS_Utils::encodeKISS(packet);
+        if (dataFrame.length() == 0) return;   // not valid TNC2: nothing to send
+        // One write per client keeps the signal report next to its packet.
+        const String kissBytes = dataFrame + trailingKissFrame;
         for (int i = 0; i < MAX_KISS_CLIENTS; i++) {
             if (clients[i].connected()) {
-                clients[i].print(kissFrame);
+                clients[i].print(kissBytes);
             }
         }
     }

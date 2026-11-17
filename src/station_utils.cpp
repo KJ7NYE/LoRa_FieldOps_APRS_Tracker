@@ -93,25 +93,40 @@ namespace STATION_Utils {
     // KISS transport. Shared by the RX path (main.cpp) and the self-beacon
     // send functions below, so a KISS host sees the device's own TX the same
     // way it sees packets heard over RF.
-    void forwardToKissClients(const String& packet) {
+    // `trailingKissFrame` is an already-encoded KISS frame (or "") that each
+    // transport writes in the same call as the packet's data frame, so the
+    // pair always arrives in order with nothing between them.
+    static void sendToKissTransports(const String& packet, const String& trailingKissFrame) {
         #ifdef HAS_WIFI
         if (WIFI_Utils::isSTAConnected()) {
-            TCP_KISS_Utils::sendToClients(packet);
+            TCP_KISS_Utils::sendToClients(packet, trailingKissFrame);
         }
         #endif
         if (SERIAL_Setup::isKISSMode()) {
-            String kissFrame = KISS_Utils::encodeKISS(packet);
-            if (kissFrame.length() > 0) {
-                Serial.write((const uint8_t*)kissFrame.c_str(), kissFrame.length());
+            const String dataFrame = KISS_Utils::encodeKISS(packet);
+            if (dataFrame.length() > 0) {
+                const String kissBytes = dataFrame + trailingKissFrame;
+                Serial.write((const uint8_t*)kissBytes.c_str(), kissBytes.length());
             }
         }
         if (Config.bluetooth.active && bluetoothConnected) {
             #if defined(ARDUINO_ARCH_NRF52) || defined(HAS_NIMBLE)
-                BLE_Utils::sendToPhone(packet);
+                BLE_Utils::sendToPhone(packet, trailingKissFrame);
             #elif defined(HAS_BT_CLASSIC)
-                BLUETOOTH_Utils::sendToPhone(packet);
+                BLUETOOTH_Utils::sendToPhone(packet, trailingKissFrame);
             #endif
         }
+    }
+
+    void forwardToKissClients(const String& packet) {
+        sendToKissTransports(packet, "");
+    }
+
+    void forwardToKissClients(const String& packet, int rssi, float snr) {
+        // Signal reports are a tracker feature for coverage logging; iGates
+        // and digipeaters keep their KISS output exactly as before.
+        const bool sendSignalReport = Config.kiss.rssi && Config.deviceRole == ROLE_TRACKER;
+        sendToKissTransports(packet, sendSignalReport ? KISS_Utils::encodeSignalReport(rssi, snr) : String(""));
     }
 
     void addToOutputPacketBuffer(const String& packet) {
@@ -310,12 +325,14 @@ namespace STATION_Utils {
             String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;
             isInHashBuffer(b.callsign, selfPayload);
         }
-        LoRa_Utils::sendNewPacket(packet);   // displayTx() fires inside sendNewPacket
+        // displayTx() fires inside sendNewPacket
+        const bool transmitted = LoRa_Utils::sendNewPacket(packet);
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Beacon", "Status TX: %s", packet.c_str());
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
         #endif
-        forwardToKissClients(packet);
+        // Only copy to KISS what actually went on air (see sendBeacon()).
+        if (transmitted) forwardToKissClients(packet);
         lastTxTime = millis();
         sendUpdate = false;   // prevent a pending auto-beacon from firing immediately after
     }
@@ -439,13 +456,19 @@ namespace STATION_Utils {
             String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;
             isInHashBuffer(b.callsign, selfPayload);   // side-effect: inserts, return ignored
         }
-        LoRa_Utils::sendNewPacket(packet);  // displayTx() is called inside sendNewPacket
+        // displayTx() is called inside sendNewPacket. It blocks through
+        // listen-before-talk (CAD only delays, it never drops), so by the time
+        // it returns the packet is either on air or was refused.
+        const bool transmitted = LoRa_Utils::sendNewPacket(packet);
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Beacon", "TX: %s", packet.c_str());
         // iGate: upload own beacon directly to APRS-IS (also registers in upload dedup).
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
         #endif
-        forwardToKissClients(packet);
+        // Copy to KISS only if it actually went on air (not blocked by the
+        // NOCALL TX gate, no radio error), so a logging app never counts a
+        // beacon that wasn't sent.
+        if (transmitted) forwardToKissClients(packet);
 
         if (smartBeaconActive) {
             previousHeading = currentHeading;
@@ -519,12 +542,13 @@ namespace STATION_Utils {
             String selfPayload = (selfColon >= 0) ? packet.substring(selfColon + 1) : packet;
             isInHashBuffer(b.callsign, selfPayload);
         }
-        LoRa_Utils::sendNewPacket(packet);
+        const bool transmitted = LoRa_Utils::sendNewPacket(packet);
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "PHG", "TX: %s", packet.c_str());
         #ifdef HAS_WIFI
         if (Config.deviceRole == ROLE_IGATE) APRS_IS_Utils::uploadSelfBeacon(packet);
         #endif
-        forwardToKissClients(packet);
+        // Only copy to KISS what actually went on air (see sendBeacon()).
+        if (transmitted) forwardToKissClients(packet);
         // Update shared lastTxTime so the regular beacon timer is pushed out;
         // prevents a regular beacon from firing seconds after a PHG beacon.
         lastTxTime = millis();

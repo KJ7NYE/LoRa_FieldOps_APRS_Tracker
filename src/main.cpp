@@ -304,8 +304,9 @@ void loop() {
         }
         #endif
 
-        // Mirror to every attached KISS transport (TCP/serial/BLE/BT)
-        STATION_Utils::forwardToKissClients(packet);
+        // Mirror to every attached KISS transport (TCP/serial/BLE/BT), with
+        // the packet's signal report right behind it when kiss.rssi is on.
+        STATION_Utils::forwardToKissClients(packet, rx.rssi, rx.snr);
 
         // Respond to directed and undirected APRS capability queries.
         QUERY_Utils::processLoRaPacket(packet);

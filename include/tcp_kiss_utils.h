@@ -24,9 +24,12 @@ namespace TCP_KISS_Utils {
     // Call every loop iteration when iGate role is active.
     void loop();
 
-    // Send a received LoRa packet (TNC2, no 3-byte prefix) to all
-    // connected TCP KISS clients as a KISS DATA frame.
-    void sendToClients(const String& packet);
+    // Send a packet (TNC2, no 3-byte prefix) to all connected TCP KISS
+    // clients as a KISS DATA frame. `trailingKissFrame`, if given, is an
+    // already-encoded KISS frame (the RX signal report) written in the same
+    // call right after it, so nothing can land between the two. Nothing is
+    // sent if `packet` isn't valid TNC2.
+    void sendToClients(const String& packet, const String& trailingKissFrame = "");
 
 }
 
