@@ -131,11 +131,12 @@ namespace BLUETOOTH_Utils {
         LoRa_Utils::sendNewPacket(serialReceived);
     }
 
-    void sendToPhone(const String& packet) {
+    void sendToPhone(const String& packet, const String& trailingKissFrame) {
         if (packet.isEmpty()) return;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_DEBUG, "BT RX KISS", "%s", packet.c_str());
-        const String kissFrame = KISS_Utils::encodeKISS(packet);
-        if (kissFrame.length() > 0) SerialBT.print(kissFrame);
+        const String dataFrame = KISS_Utils::encodeKISS(packet);
+        if (dataFrame.length() == 0) return;   // not valid TNC2: nothing to send
+        SerialBT.print(dataFrame + trailingKissFrame);   // one write keeps the pair together
     }
 
 }

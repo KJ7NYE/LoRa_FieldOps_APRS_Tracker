@@ -19,6 +19,26 @@ Where the site has no WiFi for the built-in iGate, the tracker can act as the ra
 - **Messages to the `APRS` or `IGATE` broadcast aliases** are answered and also transmitted, so other stations in range can answer too.
 - **Everything else** is transmitted on LoRa as usual.
 
+## Signal reports (`kiss.rssi`)
+
+For apps that log coverage, such as the FieldOps app feeding the APRS Coverage website, the tracker can report the signal strength of each packet it hears. Turn it on with `kiss rssi on` (or the **Send signal strength with received packets** switch in the web UI or serial config page). It is off by default.
+
+When on, every packet the tracker receives over LoRa is followed straight away, on the same link, by a KISS SetHardware frame (command byte `0x06`, port 0) whose payload is ASCII text:
+
+```text
+RSSI:-97,SNR:6.5
+```
+
+RSSI is in whole dBm, SNR in dB with one decimal. The frame uses normal FEND/FESC framing and always comes right after the data frame it describes, with nothing in between. It applies to USB serial, Bluetooth and TCP links alike.
+
+- Only received packets get a signal report, never the tracker's own transmissions.
+- Tracker role only. iGates and digipeaters send nothing extra, even with the setting on.
+- Leave it off for APRSDroid, APRS.fi, Xastir, Direwolf, aprx and similar programs. Most ignore SetHardware frames, but some may log them as unknown or bad frames, which is why it is off by default.
+
+The tracker's own beacons are copied to the KISS link only once they have actually been transmitted. Listen-before-talk can delay a beacon but never drops it; a beacon blocked by the unconfigured-callsign (NOCALL) check, or one the radio fails to send, is not copied.
+
+The USB **log mode** shows the same values on every received packet: `---> <packet>  [RSSI:-97 SNR:6]`.
+
 ## USB serial modes
 
 The USB serial port has three modes. You can switch between them at any time without reconnecting:

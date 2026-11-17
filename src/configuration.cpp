@@ -144,6 +144,8 @@ bool Configuration::writeFile() {
 
         data["tcpKISS"]["port"]                     = tcpKISS.port;
 
+        data["kiss"]["rssi"]                        = kiss.rssi;
+
         data["phg"]["enabled"]                      = phg.enabled;
         data["phg"]["power"]                        = phg.power;
         data["phg"]["height"]                       = phg.height;
@@ -391,6 +393,9 @@ bool Configuration::readFile() {
         if (data["tcpKISS"]["port"].isNull()) needsRewrite = true;
         tcpKISS.port                    = data["tcpKISS"]["port"] | 8001;
 
+        if (data["kiss"]["rssi"].isNull()) needsRewrite = true;
+        kiss.rssi                       = data["kiss"]["rssi"] | false;
+
         if (data["phg"]["enabled"].isNull()     ||
             data["phg"]["power"].isNull()        ||
             data["phg"]["height"].isNull()       ||
@@ -512,6 +517,8 @@ void Configuration::setDefaultValues() {
     aprsIS.downlinkEnabled          = true;
 
     tcpKISS.port                    = 8001;
+
+    kiss.rssi                       = false;
 
     phg.enabled     = false;
     phg.power       = 7;

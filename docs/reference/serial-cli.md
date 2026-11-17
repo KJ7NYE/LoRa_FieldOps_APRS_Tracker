@@ -75,7 +75,7 @@ requirements, the differences from USB, and the GATT layout.
 |--------------------------------------------|---------------------------------------------------------|
 | `help`                                    | List all commands.                                     |
 | `show`                                    | Dump entire config.                                    |
-| `show <section>`                          | Dump one section (`beacons`, `lora`, `smartcustom`, `display`, `bt`, `bat`, `ptt`, `phg`, `wifi`, `other`). |
+| `show <section>`                          | Dump one section (`beacons`, `lora`, `smartcustom`, `display`, `bt`, `kiss`, `bat`, `ptt`, `phg`, `wifi`, `other`). |
 | `show secrets`                            | Toggle masked password display (`***` ↔ plaintext).    |
 | `save`                                    | Persist to `tracker_conf.json`.                        |
 | `export`                                  | Dump the current saved `tracker_conf.json` to the terminal. |
@@ -189,6 +189,14 @@ T-Beam 1W drives an external 30 dBm (1 W) PA. Only `power 20` on the T-Beam
 | `bt pin <4-6 digits>`         | Set the pairing PIN (default `123456`). A shorter PIN is zero-padded on the phone, e.g. `1234` → `001234`. |
 
 PIN changes apply after `save` + `reboot`. Changing the PIN or turning it on/off makes the tracker forget every paired phone, so remove the old pairing on the phone and pair again. See [Bluetooth & pairing PIN](../guide/bluetooth.md).
+
+### KISS
+
+| Command                       | Description                                           |
+|-------------------------------|-------------------------------------------------------|
+| `kiss rssi on\|off`           | Default off. Tracker role only: follow each received packet on every KISS link (USB, Bluetooth, TCP) with a SetHardware frame holding `RSSI:<dBm>,SNR:<dB>`. Meant for logging apps; some KISS clients may log the extra frames, so leave it off for general use. Applies immediately. See [Signal reports](../guide/kiss-tnc.md#signal-reports-kissrssi). |
+
+`show kiss` prints `rssi` and the TCP KISS port.
 
 ### Battery
 
@@ -470,6 +478,7 @@ section → JSON path in `tracker_conf.json`:
 | `wifista`      | `wifiSTA`              |
 | `aprsiss`      | `aprsIS`               |
 | `tcpkiss`      | `tcpKISS`              |
+| `kiss`         | `kiss` (`rssi`)        |
 | `remotecfg`    | `remoteCfg`            |
 | `other`        | `other` (`beaconPath`, `nonSmartBeaconRateSec`, `sendSpeedCourse`, `sendAltitude`, `cadActive`, `digiMode`, `sendCommentAfterXBeacons`) |
 

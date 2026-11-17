@@ -11,6 +11,11 @@ namespace STATION_Utils {
     // and for the device's own self-generated beacons.
     void forwardToKissClients(const String& packet);
 
+    // RX-path variant: same as above, but when kiss.rssi is on (tracker role
+    // only) each transport also gets a KISS SetHardware signal report
+    // ("RSSI:-97,SNR:6.5") straight after the packet's data frame.
+    void forwardToKissClients(const String& packet, int rssi, float snr);
+
     // Send the device's own APRS position beacon via LoRa.
     // forceComment=true bypasses the every-N counter and always includes the comment.
     // Called by device_role.cpp on the beacon interval timer.

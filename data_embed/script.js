@@ -213,6 +213,9 @@ function loadSettings(s) {
     setVal('bluetooth.pin',        bt.pin        ?? '123456');
     updateBlePinHint();
 
+    const kiss = s.kiss ?? {};
+    setVal('kiss.rssi',            kiss.rssi     ?? false);
+
     const bat = s.battery ?? {};
     setVal('battery.sendVoltage',       bat.sendVoltage       ?? false);
     setVal('battery.sendVoltageAlways', bat.sendVoltageAlways ?? false);

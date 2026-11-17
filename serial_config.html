@@ -1323,6 +1323,7 @@ function renderConfig() {
   const sc      = config.customSmartBeacon || {};
   const disp    = config.display           || {};
   const bt      = config.bluetooth         || {};
+  const kiss    = config.kiss              || {};
   const bat     = config.battery           || {};
   const ptt     = config.pttTrigger        || {};
   const phgCfg  = config.phg              || {};
@@ -1707,6 +1708,11 @@ function renderConfig() {
     body.appendChild(pinHint);
     body.appendChild(mkInfo("Save + reboot to apply. After changing the PIN or turning it on/off, forget the tracker in your phone's Bluetooth settings and pair again."));
     refreshPinHint();
+
+    // ── KISS signal reports (applies to every KISS link, not just Bluetooth) ──
+    body.appendChild(mkBool('Send signal strength with received packets', kiss.rssi ?? false,
+      v => sendCmd(`kiss rssi ${boolStr(v)}`)));
+    body.appendChild(mkInfo('Tracker role. Follows each received packet on every KISS link (Bluetooth, USB, TCP) with an RSSI/SNR frame for coverage-logging apps. Leave off for APRSDroid, APRS.fi and other KISS clients, which may log the extra frames.'));
   });
 
   // ── Battery & Altitude ───────────────────

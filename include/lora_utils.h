@@ -35,7 +35,10 @@ namespace LoRa_Utils {
     int  validPower(int requested);
     void changeFreq();
     void setup();
-    void sendNewPacket(const String& newPacket);
+    // Transmits a TNC2 packet. Returns true only when it actually went on air:
+    // false if the NOCALL TX gate blocked it or RadioLib reported a failure.
+    // Blocks through listen-before-talk (CAD), which delays but never drops.
+    bool sendNewPacket(const String& newPacket);
     void wakeRadio();
     ReceivedLoRaPacket receiveFromSleep();
     ReceivedLoRaPacket receivePacket();

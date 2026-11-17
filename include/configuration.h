@@ -146,6 +146,16 @@ public:
     // Type 'setup' or 'log' over serial to switch modes.
 };
 
+// Options for the KISS output shared by every KISS link (USB serial, BLE,
+// BT Classic, TCP).
+class KISSOptions {
+public:
+    // Follow each received packet with a KISS SetHardware frame carrying its
+    // RSSI/SNR, for logging apps. Tracker role only; off by default because
+    // some KISS clients log the extra frames.
+    bool    rssi;
+};
+
 class FixedPosition {
 public:
     float   latitude;
@@ -185,6 +195,7 @@ public:
     SmartBeaconValues       customSmartBeacon;
     APRSISS                 aprsIS;
     TCPKISS                 tcpKISS;
+    KISSOptions             kiss;
     FixedPosition           fixedPosition;
     PHGConfig               phg;
     RemoteCfg               remoteCfg;

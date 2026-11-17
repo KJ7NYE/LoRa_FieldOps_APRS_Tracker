@@ -28,7 +28,11 @@ namespace BLUETOOTH_Utils {
     void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param);
     void getData(const uint8_t *buffer, size_t size);
     void sendToLoRa();
-    void sendToPhone(const String& packet);
+    // Sends `packet` (TNC2) as a KISS data frame. `trailingKissFrame`, if
+    // given, is an already-encoded KISS frame (the RX signal report) written
+    // in the same call right after it, so nothing can land between the two.
+    // Nothing is sent if `packet` isn't valid TNC2.
+    void sendToPhone(const String& packet, const String& trailingKissFrame = "");
 
 }
 

@@ -34,6 +34,7 @@
   "wifiSTA": { "enabled": false, "networks": [] },
   "aprsIS": { "server": "rotate.aprs.net", "port": 14580, "passcode": "", "filter": "m/20", "downlinkEnabled": true },
   "tcpKISS": { "port": 8001 },
+  "kiss": { "rssi": false },
   "fixedPosition": { "latitude": 0.0, "longitude": 0.0, "elevation": 0.0 },
   "deviceRole": 0,
   "gpsSource": 0,
