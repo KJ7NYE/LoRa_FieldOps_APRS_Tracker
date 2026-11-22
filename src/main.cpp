@@ -37,6 +37,7 @@
 #endif
 #if defined(HAS_NIMBLE) || defined(ARDUINO_ARCH_NRF52)
 #include "ble_utils.h"
+#include "ble_ota.h"     // empty unless HAS_BLE_OTA (ESP32 + NimBLE)
 #endif
 #ifdef HAS_BT_CLASSIC
 #include "bluetooth_utils.h"
@@ -247,6 +248,17 @@ void loop() {
 
     // ── LED heartbeat / TX / RX indicator ──────────────────────────────
     LED_Utils::tick();
+
+    // ── Firmware update over BLE ────────────────────────────────────────
+    // While an update runs, nothing else in the loop executes: no beacons,
+    // LoRa RX/TX, digipeating, iGate, KISS (BLE/serial/TCP), button or
+    // battery shutdown. The radio stays quiet and flash writes get the CPU.
+    // Normal operation resumes on the next pass if the update fails or is
+    // cancelled; on success the tracker reboots into the new firmware.
+    #ifdef HAS_BLE_OTA
+        BLE_OTA::service();
+        if (BLE_OTA::inProgress()) return;
+    #endif
 
     // ── Serial CLI + serial KISS ────────────────────────────────────────
     SERIAL_Setup::loop();

@@ -21,11 +21,16 @@
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <mbedtls/sha256.h>
+#include <atomic>
 #include "ota_utils.h"
 
 namespace OTA_Utils {
 
     static constexpr uint8_t ESP_APP_IMAGE_MAGIC = 0xE9;    // first byte of every ESP app image
+
+    // Claim state. Written from whichever task the transport runs in, hence atomic.
+    static std::atomic<uint8_t>  claimHolder{static_cast<uint8_t>(Client::None)};
+    static std::atomic<uint32_t> lastProgressMs{0};          // millis() of the holder's last begin/write
 
     static esp_ota_handle_t        otaHandle      = 0;
     static const esp_partition_t*  targetSlot     = nullptr;
@@ -61,7 +66,57 @@ namespace OTA_Utils {
         return false;
     }
 
+    // ── Claim ───────────────────────────────────────────────────────────────
+
+    bool claim(Client client, Client* holderOut) {
+        uint8_t current = claimHolder.load();
+        while (true) {
+            if (current == static_cast<uint8_t>(client)) {
+                lastProgressMs.store(millis());
+                return true;
+            }
+            const bool free  = current == static_cast<uint8_t>(Client::None);
+            const bool stale = !free && millis() - lastProgressMs.load() >= STALE_CLAIM_TIMEOUT_MS;
+            if (!free && !stale) {
+                if (holderOut != nullptr) *holderOut = static_cast<Client>(current);
+                return false;
+            }
+            if (claimHolder.compare_exchange_weak(current, static_cast<uint8_t>(client))) break;
+            // Lost a race (or spurious failure): `current` was reloaded, re-evaluate.
+        }
+        lastProgressMs.store(millis());
+        // Taking over from an idle holder: its task has stopped calling us,
+        // so its open session (if any) can be closed from here.
+        closeSession();
+        return true;
+    }
+
+    void release(Client client) {
+        if (claimHolder.load() != static_cast<uint8_t>(client)) return;
+        closeSession();
+        claimHolder.store(static_cast<uint8_t>(Client::None));
+    }
+
+    Client holder() { return static_cast<Client>(claimHolder.load()); }
+
+    const char* clientName(Client client) {
+        switch (client) {
+            case Client::WebUpload: return "web upload";
+            case Client::Bluetooth: return "Bluetooth";
+            default:                return "none";
+        }
+    }
+
+    size_t updateSlotSize() {
+        const esp_partition_t* running = esp_ota_get_running_partition();
+        const esp_partition_t* next    = esp_ota_get_next_update_partition(nullptr);
+        return (next == nullptr || next == running) ? 0 : next->size;
+    }
+
+    // ── Session ─────────────────────────────────────────────────────────────
+
     bool begin(const uint8_t* firstChunk, size_t firstChunkLength, size_t imageSize) {
+        lastProgressMs.store(millis());
         closeSession();                 // a previous session was cut off mid-stream
         errorMessage  = "";
         writtenBytes  = 0;
@@ -114,6 +169,7 @@ namespace OTA_Utils {
         }
         mbedtls_sha256_update(&imageHash, data, length);
         writtenBytes += length;
+        lastProgressMs.store(millis());
         return true;
     }
 

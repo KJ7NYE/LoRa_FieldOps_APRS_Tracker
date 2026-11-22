@@ -15,7 +15,15 @@
  * changes after a fully validated image, so any failure, disconnect or power
  * loss mid-update leaves the device booting the firmware it is running now.
  *
- * Not thread-safe: drive a session from one task at a time.
+ * Ownership: transports run in different tasks (the web upload in the
+ * AsyncTCP task, the BLE updater in the main loop), and the session state
+ * below is not thread-safe. A transport must therefore hold the claim
+ * (claim()/release()) for as long as it calls begin/write/finish/abort, and
+ * the claim admits one transport at a time. A transport that stops making
+ * progress (e.g. a browser upload cut off mid-stream, which never reaches its
+ * failure path) loses the claim to another transport after
+ * STALE_CLAIM_TIMEOUT_MS, so a dead session cannot block updates until reboot.
+ *
  * ESP32 only. The nRF52 (Heltec T114) updates through the Adafruit
  * bootloader's DFU instead (see the `otadfu` CLI command).
  */
@@ -30,6 +38,37 @@
 namespace OTA_Utils {
 
     static constexpr size_t SHA256_BYTES = 32;
+
+    // A claim held without any begin()/write() for this long may be taken
+    // over by another transport (see "Ownership" above).
+    static constexpr uint32_t STALE_CLAIM_TIMEOUT_MS = 30000;
+
+    // Transports that can deliver a firmware image.
+    enum class Client : uint8_t { None = 0, WebUpload, Bluetooth };
+
+    // Takes the update claim for `client`. Succeeds when the claim is free,
+    // already held by `client`, or held by another client that has been idle
+    // for STALE_CLAIM_TIMEOUT_MS (its open session, if any, is aborted).
+    // Returns false while another transport is actively updating; `holderOut`
+    // (optional) then names it so the caller can say who is busy.
+    bool claim(Client client, Client* holderOut = nullptr);
+
+    // Gives the claim back if `client` holds it; aborts any session it left
+    // open. Safe to call when `client` does not hold the claim.
+    void release(Client client);
+
+    // Current claim holder (Client::None when free).
+    Client holder();
+
+    // Human-readable transport name for error messages ("web upload", "Bluetooth").
+    const char* clientName(Client client);
+
+    // Size of the app slot an update would be written to, or 0 when the
+    // partition table has a single app slot (huge_app.csv boards), i.e. the
+    // board cannot update itself. Read-only; no claim needed.
+    size_t updateSlotSize();
+
+    // ── Session API: call only while holding the claim ──────────────────────
 
     // Starts an update session. `firstChunk` must hold at least the first byte
     // of the image (checked for the ESP app-image magic). `imageSize`:

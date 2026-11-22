@@ -9,10 +9,24 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
-## 2026-11-22 — Groundwork for app firmware updates over Bluetooth
+## 2026-11-22 — Firmware updates over Bluetooth (firmware side)
 
-First two steps toward updating firmware from the FieldOps app over BLE. Nothing
-changes for the web UI update, the USB web flasher, UF2 or `otadfu`.
+Firmware side of updating a tracker from the FieldOps app over BLE; the app
+support follows separately. Nothing changes for the USB web flasher, UF2 or
+`otadfu`.
+
+- **ESP32 boards: Bluetooth firmware update service.** PIN-protected trackers
+  with two firmware slots (every ESP32 board except `tbeam_433_aprs` and
+  `lilygo_t3_433_aprs`) now offer a Bluetooth update service. A PIN-paired phone
+  streams `<board>_firmware.bin` into the inactive slot. The tracker checks the
+  board name, size and SHA-256 before switching to the new firmware, so a wrong
+  file, a dropped connection or a power cut leaves it running the current
+  version. While an update runs, the tracker stops beaconing and relaying
+  (radio silent) and shows "Updating nn%" on its display. The protocol is
+  documented in `include/ble_ota.h`.
+- **Web UI and Bluetooth updates can't overlap.** Starting a web UI firmware or
+  filesystem upload during a Bluetooth update (or the other way round) is refused
+  with "A … firmware update is in progress".
 
 - **Shared ESP32 update writer (`src/ota_utils.cpp`).** The web UI's firmware
   upload now goes through `OTA_Utils`, a transport-neutral writer the BLE updater

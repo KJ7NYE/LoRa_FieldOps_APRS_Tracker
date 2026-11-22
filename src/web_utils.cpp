@@ -460,6 +460,9 @@ namespace WEB_Utils {
     // target slot is erased on the first chunk, exactly as before.
     //
     // spiffs.bin (filesystem image) still goes through Update.h's U_SPIFFS path.
+    //
+    // Both paths first take the OTA_Utils claim, so a web upload can neither
+    // start during nor interfere with a Bluetooth update (and vice versa).
 
     static bool                   otaError        = false;
     static String                 otaErrorMessage;          // returned to the browser
@@ -472,7 +475,11 @@ namespace WEB_Utils {
         otaErrorMessage = message;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "OTA", "%s", message.c_str());
         LogBuffer::pushf(LogBuffer::TYPE_INFO, "OTA: %s", message.c_str());
-        OTA_Utils::abort();   // the target slot is left unbootable, never selected
+        // Aborts our session (the target slot is left unbootable, never
+        // selected) and frees the claim. A no-op when another transport holds
+        // the claim, so a rejected upload can't disturb that transport's update.
+        if (Update.isRunning()) Update.abort();
+        OTA_Utils::release(OTA_Utils::Client::WebUpload);
     }
 
     // Start writing firmware.bin: reject USB flasher images, then let OTA_Utils
@@ -518,6 +525,12 @@ namespace WEB_Utils {
         if (index == 0) {
             otaError        = false;
             otaErrorMessage = "";
+            OTA_Utils::Client busyWith = OTA_Utils::Client::None;
+            if (!OTA_Utils::claim(OTA_Utils::Client::WebUpload, &busyWith)) {
+                otaFail(String("A ") + OTA_Utils::clientName(busyWith) +
+                        " firmware update is in progress. Try again when it has finished.");
+                return;
+            }
             OTA_Utils::abort();                   // a previous upload was cut off mid-stream
             if (isSpiffs) {
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS)) {
@@ -538,6 +551,10 @@ namespace WEB_Utils {
             return;
         }
 
+        // After a failure (including "another transport is busy") the rest of
+        // the upload is drained and ignored; the session API is only touched
+        // while this transport holds the claim.
+        if (otaError || OTA_Utils::holder() != OTA_Utils::Client::WebUpload) return;
         if (OTA_Utils::isActive() && len > 0 && !OTA_Utils::write(data, len)) {
             otaFail(OTA_Utils::lastError());
         }

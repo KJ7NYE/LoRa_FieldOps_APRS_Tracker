@@ -44,6 +44,11 @@
     #include <atomic>
     #include "byte_ring.h"
 #endif
+#ifdef HAS_BLE_OTA
+    #include <atomic>
+    #include "ble_ota.h"
+    #include "ota_utils.h"
+#endif
 
 // APRS.fi GATT service — KISS TNC profile
 #define BLE_SERVICE_UUID    "00000001-ba2a-46c9-ae49-01b0961f68bb"
@@ -883,6 +888,49 @@ static void openConfigLinkIfSubscribed() {
 }
 #endif  // HAS_BLE_CONFIG
 
+#ifdef HAS_BLE_OTA
+// ── Firmware update service — protocol and session logic in ble_ota.cpp ────
+static NimBLECharacteristic* pOtaControl = nullptr;
+static NimBLECharacteristic* pOtaData    = nullptr;
+// Bumped on every accepted connection so an update session can tell a
+// reconnect apart from the link it started on (see BLE_Utils::otaLinkId()).
+static std::atomic<uint32_t> connectionSerial{0};
+
+class OtaCharacteristicCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+        // Same gate as KISS and config writes: only the active, PIN-authenticated phone.
+        if (connInfo.getConnHandle() != activeConnHandle) return;
+        if (!bluetoothConnected || !isPinAuthenticated(connInfo)) return;
+        const NimBLEAttValue value = characteristic->getValue();
+        if (characteristic == pOtaData) {
+            BLE_OTA::onDataWrite(value.data(), value.size());
+        } else {
+            BLE_OTA::onControlWrite(value.data(), value.size());
+        }
+    }
+};
+
+// Registers the update service. Called after the KISS and config services so
+// their attribute handles stay where bonded phones have them cached, and only
+// when the PIN is required and the board has a second app slot.
+static void beginOtaService() {
+    NimBLEService* service = pServer->createService(BLE_OTA_SERVICE_UUID);
+    pOtaControl = service->createCharacteristic(
+        BLE_OTA_CONTROL_UUID,
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY |
+        NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
+    pOtaData = service->createCharacteristic(
+        BLE_OTA_DATA_UUID,
+        NIMBLE_PROPERTY::WRITE_NR |
+        NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
+    // One shared instance: NimBLE 2.5.x characteristics never delete their
+    // callbacks, so sharing cannot double-free (it lives for the whole boot).
+    OtaCharacteristicCallbacks* callbacks = new OtaCharacteristicCallbacks();
+    pOtaControl->setCallbacks(callbacks);
+    pOtaData->setCallbacks(callbacks);
+}
+#endif  // HAS_BLE_OTA
+
 // Human-readable text for an SMP pairing-failure reason (Core Spec Vol 3 Part H 3.5.5).
 static const char* smpReasonText(int reason) {
     switch (reason) {
@@ -944,6 +992,9 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
         kissSerialBuffer    = "";
         shouldSendBLEtoLoRa = false;
         loggedUnpairedWrite = false;
+        #ifdef HAS_BLE_OTA
+            connectionSerial.fetch_add(1);
+        #endif
         #ifdef HAS_BLE_CONFIG
             configCccdSubscribed.store(false);   // fresh connection: wait for a fresh CCCD write (or bonded restore)
         #endif
@@ -1163,6 +1214,13 @@ namespace BLE_Utils {
             if (pinRequired) beginConfigService();
         #endif
 
+        #ifdef HAS_BLE_OTA
+            // PIN-protected trackers only, and only where an update can be
+            // installed (single-slot boards would accept nothing). Registered
+            // last so the KISS and config handles keep their cached positions.
+            if (pinRequired && OTA_Utils::updateSlotSize() > 0) beginOtaService();
+        #endif
+
         NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
         // NimBLE 2.x renames/consolidates the preferred-connection-params
@@ -1185,6 +1243,25 @@ namespace BLE_Utils {
         BLEToLoRaPacket         = "";
         shouldSendBLEtoLoRa     = false;
     }
+
+    #ifdef HAS_BLE_OTA
+    uint32_t otaLinkId() {
+        if (!pinRequired || !bluetoothConnected || activeConnHandle == BLE_HS_CONN_HANDLE_NONE) return 0;
+        return connectionSerial.load();
+    }
+
+    // Direct host call for the same reason as platformSendConfigChunk(): a
+    // failed send is reported to the caller instead of silently dropped.
+    bool otaSendStatus(const uint8_t* data, size_t length) {
+        const uint16_t connHandle = activeConnHandle;
+        if (pOtaControl == nullptr || pServer == nullptr || connHandle == BLE_HS_CONN_HANDLE_NONE) return false;
+        const uint16_t mtu = pServer->getPeerMTU(connHandle);
+        if (mtu > 3 && length > (size_t)(mtu - 3)) length = mtu - 3;
+        os_mbuf* packet = ble_hs_mbuf_from_flat(data, (uint16_t)length);
+        if (packet == nullptr) return false;
+        return ble_gattc_notify_custom(connHandle, pOtaControl->getHandle(), packet) == 0;
+    }
+    #endif
 
     void sendToPhone(const String& packet, const String& trailingKissFrame) {
         if (packet.length() == 0 || !bluetoothConnected) return;

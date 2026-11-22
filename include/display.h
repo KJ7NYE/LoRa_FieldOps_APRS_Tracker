@@ -26,6 +26,13 @@ void displayStatus(
 // Replaces the normal status screen while the device is in AP mode.
 void displayAPMode(const String& ssid, const String& password);
 
+// Show the firmware-update screen ("Updating" header + one status line such as
+// "42%  672 KB" or "Verifying..."). Replaces the status screen while an
+// over-the-air update runs; the main loop stops calling displayStatus() then,
+// and the normal screen returns on its next 1 s refresh if the update fails.
+// Wakes the display if eco mode blanked it.
+void displayFirmwareUpdate(const String& status);
+
 // Show TX overlay for 2 s: "<< TX >>" header + the packet being sent.
 // Called automatically by LoRa_Utils::sendNewPacket().
 void displayTx(const String& packet);
