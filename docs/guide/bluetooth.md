@@ -108,3 +108,4 @@ Bluetooth events print on USB serial in `log` mode (the serial logger is muted i
 - Anyone who knows the PIN can also **reconfigure** the tracker over Bluetooth (callsign, frequency, TX power, everything the CLI can change). This is a second reason not to leave it at the default `123456`. To keep the KISS link but rule out over-the-air setup, build with `-D DISABLE_BLE_CONFIG`.
 - Only one phone can be connected at a time.
 - Bluetooth Classic SPP is not covered by the PIN.
+- **Heltec T114 firmware updates over Bluetooth** are also behind the PIN. The tracker only offers the Nordic DFU service (which reboots it into its Bluetooth update bootloader) while *Require PIN* is on, and only a PIN-paired phone can use it. Anyone who knows the PIN can therefore install firmware over the air, a third reason to change it from the default. With the PIN off, a Bluetooth update can only be started with `otadfu` over USB.

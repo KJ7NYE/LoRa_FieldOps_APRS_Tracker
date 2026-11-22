@@ -34,6 +34,8 @@
 #  define BOARD_ENV_ID "heltec_wireless_tracker_433_aprs"
 #elif defined(LORANGER_V1)
 #  define BOARD_ENV_ID "LoRanger_V1"
+#elif defined(LORANGER_V2)
+#  define BOARD_ENV_ID "LoRanger_V2"
 #else
 #  define BOARD_ENV_ID "unknown"
 #endif

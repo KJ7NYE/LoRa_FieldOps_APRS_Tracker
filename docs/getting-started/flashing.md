@@ -38,7 +38,7 @@ Two files are published for each ESP32 board:
 |---|---|---|
 | **Web flasher (recommended)** | Connect over USB, open the [web flasher](https://kj7nye.github.io/LoRa_FieldOps_APRS_Tracker/flasher/) in Chrome or Edge, choose **Heltec T114** and click **Install**. The flasher reboots the board into its bootloader itself, with no RESET double-tap needed. The bootloader reconnects as a new USB device, so the first time the browser asks you to pick a port twice. Your configuration is kept. | Fetched automatically |
 | **USB drag-and-drop** | Double-tap **RESET**, then drag the `.uf2` file onto the USB drive that appears. | `heltec_t114_firmware.uf2` |
-| **Bluetooth update** | Type `otadfu` in the [serial CLI](../reference/serial-cli.md). In [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile) (iOS/Android), scan, connect to the DFU target, open the **DFU** tab and select the zip. | `heltec_t114_dfu.zip` |
+| **Bluetooth update** | Requires [*Require PIN*](../guide/bluetooth.md) to be on. In [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile) (iOS/Android), connect to the tracker, pair with the PIN, open the **DFU** tab and select the zip; the app switches the tracker into update mode itself. Alternatively type `otadfu` in the [serial CLI](../reference/serial-cli.md) (USB, or the setup CLI over Bluetooth), then connect nRF Connect to the DFU target. With the PIN off, only `otadfu` over USB can start a Bluetooth update. | `heltec_t114_dfu.zip` |
 
 Both files are on the [latest release](https://github.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/releases/latest).
 

@@ -415,6 +415,32 @@ static void beginConfigService() {
 }
 #endif  // HAS_BLE_CONFIG
 
+// ── Buttonless DFU entry (Nordic legacy DFU service, Adafruit BLEDfu) ───────
+// A write of START_DFU to the DFU control point reboots the tracker into the
+// Adafruit bootloader's BLE DFU mode, where nRF Connect or the Nordic DFU
+// library uploads <board>_dfu.zip. That bootloader accepts unsigned images, so
+// whoever can reach the control point can replace the firmware.
+//
+// The service permission is raised to authenticated encryption (MITM): BLEDfu
+// does not set permissions on its characteristics, and Bluefruit raises every
+// characteristic of a service to the service's level, which covers the control
+// point, its CCCD (BLEDfu refuses START_DFU until notifications are enabled)
+// and the packet/revision characteristics. Only a phone paired with the PIN can
+// therefore start DFU; because that link is bonded, BLEDfu also hands the bond
+// keys to the bootloader so the phone can reconnect to it encrypted.
+//
+// Must run after Bluefruit.begin(): the service is added to the SoftDevice's
+// GATT table, which does not exist until the SoftDevice is enabled. Called only
+// when the PIN is required, so a PIN-less tracker exposes no DFU entry over BLE
+// (the `otadfu` command over USB serial still works).
+static void beginDfuService() {
+    bleDfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+    const err_t status = bleDfu.begin();
+    if (status != ERROR_NONE) {
+        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Could not register the BLE DFU service (error 0x%04X)", (unsigned)status);
+    }
+}
+
 // ── Pairing-policy storage: a small file on InternalFS (LittleFS) ──────────
 // Bluefruit keeps its own bond keys on the same filesystem; clearBonds()
 // erases them.
@@ -585,10 +611,6 @@ namespace BLE_Utils {
         bluetoothConnected = false;
         if (!loadPinPolicy()) return;
 
-        // BLEDfu must be registered before Bluefruit.begin() so the SoftDevice
-        // allocates an ATT handle for the Nordic DFU service at startup.
-        bleDfu.begin();
-
         Bluefruit.begin();
         // Bond storage only exists once Bluefruit (and its InternalFS) is up.
         // On failure, leave the stack idle: never advertise with stale bonds.
@@ -636,6 +658,11 @@ namespace BLE_Utils {
             // PIN-protected trackers only: never expose the CLI on an open link.
             if (pinRequired) beginConfigService();
         #endif
+
+        // PIN-protected trackers only: never let an unauthenticated phone reboot
+        // the tracker into the bootloader. Registered last so the KISS and
+        // config attribute handles stay where bonded phones have them cached.
+        if (pinRequired) beginDfuService();
 
         Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
         Bluefruit.Advertising.addTxPower();
@@ -1135,6 +1162,11 @@ namespace BLE_Utils {
             // PIN-protected trackers only: never expose the CLI on an open link.
             if (pinRequired) beginConfigService();
         #endif
+
+        // PIN-protected trackers only: never let an unauthenticated phone reboot
+        // the tracker into the bootloader. Registered last so the KISS and
+        // config attribute handles stay where bonded phones have them cached.
+        if (pinRequired) beginDfuService();
 
         NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(BLE_SERVICE_UUID);

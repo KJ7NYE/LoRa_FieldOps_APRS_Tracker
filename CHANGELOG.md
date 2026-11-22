@@ -9,6 +9,36 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-22 — Groundwork for app firmware updates over Bluetooth
+
+First two steps toward updating firmware from the FieldOps app over BLE. Nothing
+changes for the web UI update, the USB web flasher, UF2 or `otadfu`.
+
+- **Shared ESP32 update writer (`src/ota_utils.cpp`).** The web UI's firmware
+  upload now goes through `OTA_Utils`, a transport-neutral writer the BLE updater
+  will reuse: same inactive-slot selection, image validation, boot-slot switch and
+  error messages as before. New for future transports: a known-size mode that
+  erases flash 4 KB at a time as data arrives (so a BLE link is never stalled by a
+  multi-second erase) and an optional end-to-end SHA-256 check. The web upload
+  keeps the size-unknown, erase-up-front mode it always used. `spiffs.bin` uploads
+  are unchanged.
+- **Heltec T114: Bluetooth DFU entry requires the PIN.** The Nordic buttonless DFU
+  service (which reboots the tracker into the bootloader's Bluetooth update mode,
+  and that bootloader accepts unsigned images) is now registered only when
+  *Require PIN* is on, with authenticated-encryption permissions, so only a
+  PIN-paired phone can start an update. It is registered after `Bluefruit.begin()`
+  and after the KISS and config services; it was previously registered before the
+  SoftDevice was enabled, where Bluefruit cannot add services, so it most likely
+  never appeared. nRF Connect's DFU tab (and the Nordic DFU library the FieldOps
+  app will use) can now switch a PIN-paired tracker into update mode without
+  `otadfu`. `otadfu` over USB or the BLE setup CLI is unchanged.
+- **LoRanger V2 reports its board name.** `version` now returns
+  `version.board=LoRanger_V2` (and the web UI `/version.json` `env`) instead of
+  `unknown`, so the serial configuration tool's
+  flasher (and the upcoming app updater) can pick the right image.
+
+---
+
 ## 2026-11-16 — Signal strength for coverage logging (`kiss.rssi`)
 
 Two opt-in changes so a phone app can log a tracker's signal reports for the APRS
