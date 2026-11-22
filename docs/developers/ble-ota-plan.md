@@ -7,9 +7,9 @@ Last updated 2026-11-22.
 
 | Phase | What | Status |
 |---|---|---|
-| 1 | Shared ESP32 OTA writer (`OTA_Utils`), web upload moved onto it | **Done in code, NOT compiled yet** |
+| 1 | Shared ESP32 OTA writer (`OTA_Utils`), web upload moved onto it | Compiles; hardware test pending |
 | 2 | BLE OTA GATT service on ESP32 (NimBLE) | Not started |
-| 3 | T114: Nordic buttonless DFU behind the PIN | **Done in code, NOT compiled yet** |
+| 3 | T114: Nordic buttonless DFU behind the PIN | Compiles; hardware test pending |
 | 4 | Release manifest with per-board SHA-256 | Not started |
 | 5 | FieldOps Android app updater (separate repo) | Not started |
 | 6 | Docs / `serial_config.html` parity | Docs for 1 + 3 done |
@@ -20,22 +20,10 @@ T114 is the most common board and users asked for a BLE updater.
 
 ## Next steps (pick up here)
 
-1. **Compile-verify.** The cloud session could not reach the PlatformIO registry
-   (`api.registry.platformio.org`, `dl.registry.platformio.org` blocked), so
-   nothing on this branch has been built yet. Run at least:
-   ```sh
-   pio run -e heltec_t114
-   pio run -e heltec_v3_433_aprs
-   pio run -e tbeam_433_aprs        # classic ESP32, single app slot
-   pio run -e LoRanger_V2
-   ```
-   Things most likely to need a touch-up:
-   - `src/ota_utils.cpp`: `mbedtls_sha256_starts/update/finish` return `int` on
-     mbedTLS 3 (IDF 5.x); return values are ignored, should compile, may warn.
-   - `OTA_WITH_SEQUENTIAL_WRITES` must exist in the pioarduino IDF (it does since
-     IDF 4.2).
-   - `src/ble_utils.cpp` `beginDfuService()`: `err_t` / `ERROR_NONE` come from
-     Bluefruit's headers; `BLEService::setPermission()` exists in BSP 1.6.1.
+1. ~~Compile-verify.~~ Done 2026-11-22: `heltec_t114`, `heltec_v3_433_aprs`,
+   `tbeam_433_aprs` and `LoRanger_V2` build with no new warnings. Fixed on the
+   way: the WIP commit also called the nRF52-only `beginDfuService()` from the
+   ESP32 (NimBLE) setup path; removed.
 2. **Hardware regression check of the existing update paths** (should all be
    unchanged):
    - Web UI → Update Firmware with `<board>_firmware.bin` on an 8 MB board

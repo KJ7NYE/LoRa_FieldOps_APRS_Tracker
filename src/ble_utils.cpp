@@ -1163,11 +1163,6 @@ namespace BLE_Utils {
             if (pinRequired) beginConfigService();
         #endif
 
-        // PIN-protected trackers only: never let an unauthenticated phone reboot
-        // the tracker into the bootloader. Registered last so the KISS and
-        // config attribute handles stay where bonded phones have them cached.
-        if (pinRequired) beginDfuService();
-
         NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
         // NimBLE 2.x renames/consolidates the preferred-connection-params
