@@ -107,4 +107,5 @@ nav:
   - Developers:
       - Building from source: developers/building.md
       - nRF52 port notes: developers/nrf52-port-notes.md
+      - Bluetooth firmware updates: developers/ble-ota-plan.md
   - About: about.md
