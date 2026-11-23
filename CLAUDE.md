@@ -76,6 +76,8 @@ Runtime config is stored as `tracker_conf.json` on the filesystem. Three interfa
 - `compress.py` — Pre-build: gzip web UI assets for embedding in firmware
 - `embed_config.py` — Pre-build: converts `data/tracker_conf.json` to C header (nRF52 first-boot defaults)
 - `build_uf2.py` — Post-build: generates UF2 for nRF52 (USB mass-storage flashing)
+- `generate_manifests.py` — Release job: web flasher manifests and `firmware_manifest.json` (app BLE updater; schema in `docs/developers/firmware-manifest.md`)
+- `ble_ota_client.py` — Bench/reference client for the ESP32 BLE update protocol (`include/ble_ota.h`)
 
 ### Key Source File Map
 

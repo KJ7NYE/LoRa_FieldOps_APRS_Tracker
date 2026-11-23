@@ -10,8 +10,8 @@ Last updated 2026-11-22.
 | 1 | Shared ESP32 OTA writer (`OTA_Utils`), web upload moved onto it | **Hardware-tested** (Heltec V3) |
 | 2 | BLE OTA GATT service on ESP32 (NimBLE) | **Hardware-tested** (Heltec V3, Windows bleak client) |
 | 3 | T114: Nordic buttonless DFU behind the PIN | **Hardware-tested** (T114 + Android nRF Connect); app must follow the DFU rules below |
-| 4 | Release manifest with per-board SHA-256 | Not started |
-| 5 | FieldOps Android app updater (separate repo) | Not started |
+| 4 | Release manifest with per-board SHA-256 | Done (`firmware_manifest.json`, schema in `docs/developers/firmware-manifest.md`); first real output on the next release |
+| 5 | FieldOps Android app updater (separate repo) | In progress (app repo; handoff in `docs/firmware-update-handoff.md` there) |
 | 6 | Docs / `serial_config.html` parity | Docs for 1–3 done; Web Bluetooth updater undecided |
 
 Decisions made: BLE updates require *Require PIN* = on (same rule as the BLE
@@ -98,8 +98,9 @@ The T114 uses the Adafruit bootloader's legacy Nordic DFU with a bonded
 
 ## Next steps (pick up here)
 
-1. Phase 4: release manifest (per board: version, file, size, SHA-256,
-   `ble_update`), so the app can pick and verify images.
+1. ~~Phase 4~~: done on branch `feat/firmware-manifest`. Verify the first
+   release after merge: `firmware_manifest.json` on main and as a release
+   asset, `heltec_t114_dfu.zip` in `flasher/firmware/`.
 2. Phase 5: FieldOps app updater. ESP32: `include/ble_ota.h` protocol
    (`tools/ble_ota_client.py` is the reference client). T114: Nordic DFU library
    with the rules above.
@@ -205,8 +206,12 @@ reference for the app (Phase 5). Summary and the decisions behind it:
 
 ## Phases 4–6
 
-- **4:** extend `tools/generate_manifests.py` to publish `firmware_manifest.json`
-  (per board: version, file, size, SHA-256, `ble_update` supported).
+- **4 (done):** `tools/generate_manifests.py` writes
+  `flasher/manifests/firmware_manifest.json` from the published files (sizes and
+  SHA-256 computed, keyed by `version.board`, `ble_update` method per board incl.
+  the T114 DFU parameters). The release job also hosts `heltec_t114_dfu.zip` in
+  `flasher/firmware/` and attaches the manifest to the release. Schema:
+  `docs/developers/firmware-manifest.md`.
 - **5 (app repo `jeepnjonny/lora-fieldops-config-android`):** read
   `version.board` over the BLE CLI, fetch manifest, download + verify, then
   ESP32 → Phase 2 protocol; nRF52 → Nordic DFU library with the zip. Local file

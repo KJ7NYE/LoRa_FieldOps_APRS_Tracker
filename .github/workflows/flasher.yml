@@ -277,14 +277,27 @@ jobs:
                     --pattern "*_firmware.bin" \
                     --pattern "*_ota_update.bin" \
                     --pattern "heltec_t114_firmware.uf2" \
+                    --pattern "heltec_t114_dfu.zip" \
                     --dir flasher/firmware \
                     --clobber
+                  # heltec_t114_dfu.zip is hosted for the FieldOps app's BLE
+                  # updater (firmware_manifest.json); the web flasher uses the .uf2.
 
             - name: Generate flasher manifests
               env:
                   TAG: ${{ github.event.inputs.tag || github.ref_name }}
               run: |
                   python3 tools/generate_manifests.py "${TAG}" "$(date -u +%Y-%m-%d)"
+
+            # The app reads the copy on main (stable URL, always the latest
+            # release); the release asset pins the manifest to its own tag.
+            - name: Attach firmware manifest to the release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+              run: |
+                  gh release upload "${TAG}" flasher/manifests/firmware_manifest.json \
+                    --repo KJ7NYE/LoRa_FieldOps_APRS_Tracker --clobber
 
             - name: Commit and push manifests
               env:
