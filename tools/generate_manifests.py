@@ -1,10 +1,16 @@
 """
-Generate flasher/manifests/ for the GitHub Pages web flasher.
+Generate flasher/manifests/ for the web flasher and the FieldOps app.
 Usage: python tools/generate_manifests.py <tag> <published_date>
   tag            - release tag, e.g. v1.0.2
   published_date - ISO date string, e.g. 2026-06-17
+
+Reads the release binaries from flasher/firmware/ (downloaded there by the
+publish-manifests job in .github/workflows/flasher.yml) to compute the sizes
+and SHA-256 digests in firmware_manifest.json; see
+docs/developers/firmware-manifest.md for that file's schema.
 """
 
+import hashlib
 import json
 import os
 import sys
@@ -22,7 +28,9 @@ published = sys.argv[2]
 # from kj7nye.github.io. raw.githubusercontent.com serves the committed files
 # with `Access-Control-Allow-Origin: *` and a 5-minute edge cache, so new
 # binaries propagate quickly after each release's publish-manifests commit.
-base = "https://raw.githubusercontent.com/KJ7NYE/LoRa_FieldOps_APRS_Tracker/main/flasher/firmware"
+REPO = "KJ7NYE/LoRa_FieldOps_APRS_Tracker"
+base = f"https://raw.githubusercontent.com/{REPO}/main/flasher/firmware"
+FIRMWARE_DIR = "flasher/firmware"   # local copy of the release binaries
 
 # "manufacturer" drives the <optgroup> grouping in the flasher's board dropdown
 # (flasher/index.html, serial_config.html) — purely a UI concern, kept here so
@@ -245,3 +253,100 @@ for t in ESP_TARGETS:
     with open(update_path, "w") as f:
         json.dump(update_manifest, f, indent=2)
     print(f"Wrote {update_path}")
+
+
+# ── Firmware update manifest (FieldOps app, BLE updater) ──────────────────────
+#
+# One file per release describing, for every board, the image an in-device
+# update needs and how to deliver it over Bluetooth. Keyed by the board id the
+# tracker reports in `version.board` (= the PlatformIO env name), so the app
+# looks its board up directly. Sizes and SHA-256 digests are computed from the
+# files actually published, never from build metadata, so the app can verify a
+# download before sending it and (ESP32) pass the digest in the BLE START
+# command. Schema: docs/developers/firmware-manifest.md. Bump
+# FIRMWARE_MANIFEST_SCHEMA on any incompatible change.
+
+FIRMWARE_MANIFEST_SCHEMA = 1
+
+# Packet Receipt Notification the T114's Adafruit bootloader (0.9.0, 2024) can
+# handle: it has 8 RX buffers and fails with OPERATION FAILED above that.
+NORDIC_DFU_MAX_PRN = 8
+NORDIC_DFU_RECOMMENDED_PRN = 6
+
+
+def _file_facts(filename):
+    """Size and SHA-256 of a published release file, or None if it is missing
+    (e.g. that board's build failed; the matrix runs with fail-fast off)."""
+    path = os.path.join(FIRMWARE_DIR, filename)
+    if not os.path.isfile(path):
+        print(f"WARNING: {path} missing; board left out of firmware_manifest.json", file=sys.stderr)
+        return None
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 16), b""):
+            digest.update(block)
+    return {"size": os.path.getsize(path), "sha256": digest.hexdigest()}
+
+
+def _image_entry(filename):
+    facts = _file_facts(filename)
+    if facts is None:
+        return None
+    return {
+        "file":              filename,
+        "url":               f"{base}/{filename}",
+        "release_asset_url": f"https://github.com/{REPO}/releases/download/{tag}/{filename}",
+        **facts,
+    }
+
+
+def build_firmware_manifest():
+    boards = {}
+
+    for t in ESP_TARGETS:
+        image = _image_entry(f"{t['id']}_firmware.bin")
+        if image is None:
+            continue
+        entry = {"label": t["label"], "chip": t["chip"], "image": image}
+        if t.get("ota_partitions"):
+            # Dual-slot boards: the BLE update service in include/ble_ota.h.
+            entry["ble_update"] = {"method": "esp32_ble_ota", "protocol": 1}
+        else:
+            # huge_app.csv boards have one app slot and expose no update service.
+            entry["ble_update"] = None
+            entry["ble_update_unavailable_reason"] = (
+                "This board has a single firmware slot and can't update itself. "
+                "Use the USB web flasher (Firmware Update).")
+        boards[t["id"]] = entry
+
+    image = _image_entry(f"{NRF_TARGET['id']}_dfu.zip")
+    if image is not None:
+        boards[NRF_TARGET["id"]] = {
+            "label": NRF_TARGET["label"],
+            "chip":  NRF_TARGET["chip"],
+            "image": image,
+            # Adafruit bootloader legacy DFU; rules in docs/developers/ble-ota-plan.md.
+            "ble_update": {
+                "method": "nordic_legacy_dfu",
+                "packet_receipt_notification": NORDIC_DFU_RECOMMENDED_PRN,
+                "max_packet_receipt_notification": NORDIC_DFU_MAX_PRN,
+                "keep_bond": True,
+                "refresh_gatt_cache_after_jump": True,
+            },
+        }
+
+    return {
+        "schema":      FIRMWARE_MANIFEST_SCHEMA,
+        "version":     tag,
+        "published":   published,
+        "repo":        REPO,
+        "release_url": f"https://github.com/{REPO}/releases/tag/{tag}",
+        "boards":      boards,
+    }
+
+
+firmware_manifest_path = "flasher/manifests/firmware_manifest.json"
+with open(firmware_manifest_path, "w") as f:
+    json.dump(build_firmware_manifest(), f, indent=2)
+    f.write("\n")
+print(f"Wrote {firmware_manifest_path}")

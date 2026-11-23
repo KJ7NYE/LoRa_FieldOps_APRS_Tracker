@@ -9,6 +9,19 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-22 — Firmware manifest for app updates
+
+- **`firmware_manifest.json` published with every release.** Lists each board's
+  update image with its download URL, size and SHA-256, and how it updates over
+  Bluetooth (ESP32 update service, T114 Nordic DFU with the settings its
+  bootloader needs, or not available on single-slot boards). The FieldOps app
+  uses it to find and verify updates. Hosted at
+  `flasher/manifests/firmware_manifest.json` on `main` and attached to the
+  release; schema in `docs/developers/firmware-manifest.md`. The T114's
+  `heltec_t114_dfu.zip` is now also hosted next to the other firmware files.
+
+---
+
 ## 2026-11-22 — Firmware updates over Bluetooth (firmware side)
 
 Firmware side of updating a tracker from the FieldOps app over BLE; the app
