@@ -7,62 +7,106 @@ Last updated 2026-11-22.
 
 | Phase | What | Status |
 |---|---|---|
-| 1 | Shared ESP32 OTA writer (`OTA_Utils`), web upload moved onto it | Compiles; hardware test pending |
-| 2 | BLE OTA GATT service on ESP32 (NimBLE) | Done in code; compile check below; hardware test pending |
-| 3 | T114: Nordic buttonless DFU behind the PIN | Compiles; hardware test pending |
+| 1 | Shared ESP32 OTA writer (`OTA_Utils`), web upload moved onto it | **Hardware-tested** (Heltec V3) |
+| 2 | BLE OTA GATT service on ESP32 (NimBLE) | **Hardware-tested** (Heltec V3, Windows bleak client) |
+| 3 | T114: Nordic buttonless DFU behind the PIN | **Hardware-tested** (T114 + Android nRF Connect); app must follow the DFU rules below |
 | 4 | Release manifest with per-board SHA-256 | Not started |
 | 5 | FieldOps Android app updater (separate repo) | Not started |
-| 6 | Docs / `serial_config.html` parity | Docs for 1 + 3 done |
+| 6 | Docs / `serial_config.html` parity | Docs for 1–3 done; Web Bluetooth updater undecided |
 
 Decisions made: BLE updates require *Require PIN* = on (same rule as the BLE
 setup CLI). The T114 DFU service stays (put behind the PIN, not removed): the
-T114 is the most common board and users asked for a BLE updater.
+T114 is the most common board and users asked for a BLE updater. The T114
+bootloader is **not** updated (no published T114 build with the fix below, and
+a failed bootloader flash needs SWD to recover); the app works with the
+bootloader already in the field.
+
+## Hardware test results (2026-11-22)
+
+**Heltec V3 (`heltec_v3_433_aprs`), Phase 1 + 2, all passed:**
+
+- GATT: update service registered last; KISS and config handles unchanged.
+  PIN on → KISS + config + update; PIN off → KISS only (checked with an
+  uncached discovery). Unpaired write → Insufficient Authentication.
+- Full update → DONE → reboot into the other slot, 4 times (including
+  installing this branch's own fixes over BLE).
+- Bad SHA-256 → ERROR 8; wrong board → ERROR 3; oversized → ERROR 4;
+  ABORT → ABORTED; stall → ERROR 9 after 10 s; link loss → clean abort. Old
+  firmware kept every time; the main loop and the iGate resume afterwards.
+- Web upload during a BLE update → refused, BLE update still completes. BLE
+  START during a web upload → ERROR 5, web upload completes. Web: non-firmware
+  file and USB-flasher image names rejected without a reboot; claim released
+  after each failure.
+- **Bug found and fixed:** a BLE START refused before any session had
+  allocated the receive ring (ERROR 5 right after boot) panicked the tracker
+  (`ByteRing::drop()` divide by zero). Fixed in `byte_ring.h`.
+- **Throughput:** 6.3 KB/s with the central's default link → 18.7 KB/s after
+  the tracker requests a 7.5–15 ms interval, 251-byte LL packets and 2M PHY
+  during the session (`BLE_Utils::otaSetFastLink`). Full 1.6 MB image: 80–89 s
+  from Windows (which sends ~1 packet per connection event; Android should be
+  faster). One link drop (supervision timeout) at 90 % in 6 full runs, not
+  reproduced.
+- **Windows quirk for the client:** `mtu_size` reads 23 immediately after
+  connect and 256 a moment later; the client must wait for the MTU exchange
+  or it sends 16-byte packets.
+
+**Heltec T114, Phase 3, passed with conditions:**
+
+- DFU service present (last) with the PIN on: the pre-branch firmware never
+  registered it, as suspected. Unpaired CCCD subscribe and START_DFU write →
+  Insufficient Authentication.
+- nRF Connect (Android) update succeeded at **~1.1 KB/s** (~5 min for the
+  312 KB image) once two conditions were met; see "T114 DFU rules" below.
+- T114 bootloader: `UF2 Bootloader 0.9.0-2-g836c8dc-dirty`, Jul 9 2024,
+  S140 6.1.1. It predates Adafruit PR #375 (Jan 2026: RX buffer queue 8 → 16,
+  MTU above 23), hence the low speed and the PRN limit.
+- Failure modes seen while finding the rules (useful for app error handling):
+  a failed transfer leaves the app erased and the T114 in the bootloader
+  (USB drive / COM port, no Bluetooth after a few minutes). Recovery: UF2
+  drag-and-drop or `pio run -e heltec_t114 -t upload`. RST alone does not
+  leave the bootloader once the app is erased.
+
+## T114 DFU rules (requirements for the FieldOps app, Phase 5)
+
+The T114 uses the Adafruit bootloader's legacy Nordic DFU with a bonded
+(PIN) link. Two things the Nordic DFU library does not handle by default:
+
+1. **Packet Receipt Notification must be 8 or less** (we tested 6). The 2024
+   bootloader has 8 RX buffers; PRN 10 (nRF Connect's default) overruns them
+   during flash writes and the bootloader answers Receive Firmware Image with
+   status 6 (OPERATION FAILED) ~0.6 s into the transfer. Adafruit README:
+   "PRN must be 8 or less". In the Nordic Android library:
+   `setPacketsReceiptNotificationsValue(6)`.
+2. **Refresh the GATT cache after the jump to the bootloader.** The bootloader
+   reconnects at the same address with the shared bond, so Android reuses the
+   application's cached GATT table; the library (bonded + Service Changed
+   indications enabled) waits for a Service Changed indication instead of
+   rediscovering, none takes effect, and the first read fails with
+   `GATT INVALID HANDLE` (0x01). Working sequence: start DFU (buttonless jump),
+   let it fail or disconnect, reconnect to the bootloader, call the hidden
+   `BluetoothGatt.refresh()` (nRF Connect: "Refresh device cache"), then start
+   the DFU library again; it reads DFU version 0.8, sees the bootloader and
+   uploads. In the app: do the jump itself (write `01 04` to the DFU control
+   point, or `otadfu` over the setup CLI), reconnect, `refresh()`, discover,
+   then hand the address to the DFU library. Turning Service Changed
+   indications off beforehand did not help (Android re-enables them).
+   Reference: Meshtastic firmware PR #12220 ("Reset into BLE OTA DFU instead of
+   jumping from the DFU callback") touches the same entry path; not reviewed.
+3. Keep bond information on (the bootloader needs the bond to accept the
+   encrypted reconnect). Expect ~5 min per update; show progress and warn the
+   user not to walk away.
 
 ## Next steps (pick up here)
 
-1. ~~Compile-verify.~~ Done 2026-11-22: `heltec_t114`, `heltec_v3_433_aprs`,
-   `tbeam_433_aprs` and `LoRanger_V2` build with no new warnings. Fixed on the
-   way: the WIP commit also called the nRF52-only `beginDfuService()` from the
-   ESP32 (NimBLE) setup path; removed.
-2. **Hardware regression check of the existing update paths** (should all be
-   unchanged):
-   - Web UI → Update Firmware with `<board>_firmware.bin` on an 8 MB board
-     (alternates app0/app1, reboots, runs new version).
-   - Web UI upload of a `_web_factory.bin` / `_ota_update.bin` → rejected with
-     the "USB flasher image" message.
-   - Web UI upload of a non-firmware file → "The file is not an ESP32 firmware
-     image." (message text changed slightly: no longer prefixed with the filename).
-   - Web UI on `tbeam_433_aprs` / `lilygo_t3_433_aprs` → "only one firmware slot".
-   - `spiffs.bin` upload (untouched code path).
-   - USB web flasher factory and OTA images (firmware side not involved).
-   - T114: web flasher (Web Serial DFU), UF2 drag-and-drop, `otadfu` over USB.
-3. **T114 hardware test of Phase 3:**
-   - PIN on: nRF Connect → connect → pair with PIN → DFU tab → `heltec_t114_dfu.zip`
-     should switch to the bootloader and flash without `otadfu`.
-   - PIN on, unpaired phone: writing the DFU control point must be refused
-     (insufficient authentication).
-   - PIN off: no DFU service in the GATT table.
-   - Bonded APRSDroid / FieldOps app still work after the update (KISS and
-     config handles must not move; DFU service is registered last).
-   - Boot log should not show `Could not register the BLE DFU service`.
-4. **ESP32 hardware test of Phase 2** with `tools/ble_ota_client.py` (bleak;
-   pair the tracker in the OS Bluetooth settings first; `--corrupt-sha`,
-   `--stall-at N` and `--abort-at N` cover the failure cases). On an 8 MB
-   board with *Require PIN* on:
-   - Full update: START → READY, stream, END → DONE, reboot into the new
-     version; `/version.json` and `version` report it.
-   - Wrong board id → ERROR 3; oversized image → ERROR 4; wrong SHA-256 →
-     ERROR 8 and the old firmware keeps running.
-   - Disconnect mid-transfer → old firmware keeps running, beacons resume.
-   - 10 s pause mid-transfer → ERROR 9.
-   - Web UI upload during a BLE update → "A Bluetooth firmware update is in
-     progress"; BLE START during a web upload → ERROR 5.
-   - PIN off → no update service in the GATT table. Single-slot board
-     (`tbeam_433_aprs`) → no update service.
-   - Display shows "Updating nn%" (OLED, Wireless Tracker TFT; LoRanger V2
-     with and without the OLED fitted).
-   - Measure the transfer time at MTU 247 (see "Open items").
-5. Commit/PR once 1–4 pass.
+1. Phase 4: release manifest (per board: version, file, size, SHA-256,
+   `ble_update`), so the app can pick and verify images.
+2. Phase 5: FieldOps app updater. ESP32: `include/ble_ota.h` protocol
+   (`tools/ble_ota_client.py` is the reference client). T114: Nordic DFU library
+   with the rules above.
+3. Not yet tested on hardware: display "Updating nn%" on OLED / Wireless Tracker
+   TFT / LoRanger V2 without OLED; single-slot board (`tbeam_433_aprs`) has no
+   update service; bonded APRSDroid still works after a T114 update.
+4. Open a PR to `main` for this branch.
 
 ## What changed on this branch
 
@@ -77,8 +121,8 @@ T114 is the most common board and users asked for a BLE updater.
   `spiffs.bin` path untouched.
 - `src/ble_utils.cpp` (nRF52): `bleDfu.begin()` was called **before**
   `Bluefruit.begin()`, where the SoftDevice is not enabled and service
-  registration fails, so the buttonless DFU service most likely never existed
-  (not confirmed on hardware). It is now registered in `beginDfuService()`,
+  registration fails, so the buttonless DFU service never existed (confirmed on
+  hardware 2026-11-22). It is now registered in `beginDfuService()`,
   after `Bluefruit.begin()` and after the KISS and config services, only when
   the PIN is required, with service permission `SECMODE_ENC_WITH_MITM`
   (Bluefruit raises every characteristic and the CCCD to the service level;
@@ -154,8 +198,8 @@ reference for the app (Phase 5). Summary and the decisions behind it:
   data packet). Raising it to 517 (`NimBLEDevice::setMTU`) would roughly
   double throughput but also changes how large KISS notifications are split
   for every BLE client, so it needs its own test pass. Decide after measuring.
-- **Connection interval:** the app should request high connection priority
-  (Android `requestConnectionPriority(HIGH)`) and 2M PHY during the transfer.
+- **Connection interval:** done on the tracker side (`otaSetFastLink`); the app
+  should still request high connection priority during the transfer.
 - **`serial_config.html` parity (Phase 6):** a Web Bluetooth client for this
   protocol is feasible (Chrome desktop/Android) but not started.
 

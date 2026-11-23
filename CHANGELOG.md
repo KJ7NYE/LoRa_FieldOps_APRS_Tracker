@@ -24,6 +24,11 @@ support follows separately. Nothing changes for the USB web flasher, UF2 or
   version. While an update runs, the tracker stops beaconing and relaying
   (radio silent) and shows "Updating nn%" on its display. The protocol is
   documented in `include/ble_ota.h`.
+- **Heltec T114: Bluetooth update tested end to end.** Works from nRF Connect on
+  Android with two settings the T114's bootloader needs: packet receipt
+  notification at 8 or less, and a device-cache refresh after the tracker
+  switches to update mode. See the updated Bluetooth row in
+  `docs/getting-started/flashing.md`. About 5 minutes per update.
 - **Web UI and Bluetooth updates can't overlap.** Starting a web UI firmware or
   filesystem upload during a Bluetooth update (or the other way round) is refused
   with "A … firmware update is in progress".
