@@ -90,6 +90,12 @@ namespace BLE_Utils {
     // Payloads longer than the link allows are truncated. Returns false when
     // the stack is out of buffers (retry later) or the link is down.
     bool otaSendStatus(const uint8_t* data, size_t length);
+
+    // Asks the phone for a link tuned for bulk transfer (short connection
+    // interval, 251-byte link-layer packets, 2M PHY) while an update runs, or
+    // for a relaxed interval again afterwards. Requests only: the phone
+    // decides, and a refusal just means a slower transfer.
+    void otaSetFastLink(bool fast);
     #endif
 
 }

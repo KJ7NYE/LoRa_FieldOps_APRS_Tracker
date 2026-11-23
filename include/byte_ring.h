@@ -92,6 +92,10 @@ public:
 
     // Consumes `count` bytes previously returned by peek().
     void drop(size_t count) {
+        // Unallocated ring: size is 0 and the modulo below would divide by
+        // zero (crashed BLE_OTA when an update was refused before the ring
+        // was ever allocated). Nothing is queued anyway.
+        if (!isAllocated()) return;
         const size_t pending = available();
         if (count > pending) count = pending;
         const size_t currentTail = tail.load(std::memory_order_relaxed);

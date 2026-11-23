@@ -60,7 +60,8 @@ namespace OTA_Utils {
     // Current claim holder (Client::None when free).
     Client holder();
 
-    // Human-readable transport name for error messages ("web upload", "Bluetooth").
+    // Human-readable transport name for error messages ("web UI", "Bluetooth"),
+    // used as "A <name> firmware update is in progress".
     const char* clientName(Client client);
 
     // Size of the app slot an update would be written to, or 0 when the

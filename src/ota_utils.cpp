@@ -101,7 +101,7 @@ namespace OTA_Utils {
 
     const char* clientName(Client client) {
         switch (client) {
-            case Client::WebUpload: return "web upload";
+            case Client::WebUpload: return "web UI";
             case Client::Bluetooth: return "Bluetooth";
             default:                return "none";
         }

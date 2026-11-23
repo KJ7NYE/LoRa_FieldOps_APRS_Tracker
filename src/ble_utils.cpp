@@ -1057,6 +1057,19 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
         #endif
     }
 
+    // Link diagnostics: the connection interval bounds throughput (KISS
+    // latency, firmware update speed), and it is the phone that picks it.
+    void onConnParamsUpdate(NimBLEConnInfo& connInfo) override {
+        if (connInfo.getConnHandle() != activeConnHandle) return;
+        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Link interval %.2f ms, latency %u, timeout %u ms",
+                 connInfo.getConnInterval() * 1.25f, connInfo.getConnLatency(), connInfo.getConnTimeout() * 10);
+    }
+
+    void onPhyUpdate(NimBLEConnInfo& connInfo, uint8_t txPhy, uint8_t rxPhy) override {
+        if (connInfo.getConnHandle() != activeConnHandle) return;
+        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Link PHY tx %u rx %u (1 = 1M, 2 = 2M, 3 = coded)", txPhy, rxPhy);
+    }
+
     void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
         if (connInfo.getConnHandle() != activeConnHandle) return;   // a refused second phone
         stopPinPairingTimer();
@@ -1260,6 +1273,29 @@ namespace BLE_Utils {
         os_mbuf* packet = ble_hs_mbuf_from_flat(data, (uint16_t)length);
         if (packet == nullptr) return false;
         return ble_gattc_notify_custom(connHandle, pOtaControl->getHandle(), packet) == 0;
+    }
+
+    // Measured on a Windows central with its default link (~30-45 ms interval,
+    // 27-byte LL packets, 1M PHY): ~6 KB/s, i.e. ~4.5 min for a 1.6 MB image,
+    // limited by the radio link rather than flash writes.
+    void otaSetFastLink(bool fast) {
+        const uint16_t connHandle = activeConnHandle;
+        if (pServer == nullptr || connHandle == BLE_HS_CONN_HANDLE_NONE) return;
+        // Connection parameters in BLE units: interval 1.25 ms, timeout 10 ms.
+        static constexpr uint16_t FAST_INTERVAL_MIN    = 6;    // 7.5 ms
+        static constexpr uint16_t FAST_INTERVAL_MAX    = 12;   // 15 ms
+        static constexpr uint16_t RELAXED_INTERVAL_MIN = 24;   // 30 ms
+        static constexpr uint16_t RELAXED_INTERVAL_MAX = 40;   // 50 ms
+        static constexpr uint16_t SUPERVISION_TIMEOUT  = 400;  // 4 s
+        static constexpr uint16_t MAX_LL_PAYLOAD_BYTES = 251;  // Data Length Extension maximum
+        if (fast) {
+            pServer->setDataLen(connHandle, MAX_LL_PAYLOAD_BYTES);
+            // Fails harmlessly on controllers or phones without 2M support.
+            pServer->updatePhy(connHandle, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_CODED_ANY);
+            pServer->updateConnParams(connHandle, FAST_INTERVAL_MIN, FAST_INTERVAL_MAX, 0, SUPERVISION_TIMEOUT);
+        } else {
+            pServer->updateConnParams(connHandle, RELAXED_INTERVAL_MIN, RELAXED_INTERVAL_MAX, 0, SUPERVISION_TIMEOUT);
+        }
     }
     #endif
 

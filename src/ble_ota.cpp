@@ -88,6 +88,7 @@ namespace BLE_OTA {
     static uint32_t  rebootAtMs         = 0;
     static uint32_t  lastDisplayMs      = 0;
     static uint32_t  sessionStartMs     = 0;
+    static bool      fastLinkRequested  = false;    // otaSetFastLink(true) sent for this session
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -144,6 +145,11 @@ namespace BLE_OTA {
     static void resetSession() {
         receiveOpen.store(false, std::memory_order_release);
         dataRing.clear();
+        if (fastLinkRequested) {
+            // Back to a power-friendly interval for the KISS / config session.
+            BLE_Utils::otaSetFastLink(false);
+            fastLinkRequested = false;
+        }
         phase         = Phase::Idle;
         sessionLinkId = 0;
         flashStarted  = false;
@@ -250,6 +256,8 @@ namespace BLE_OTA {
         otaEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO,
                  "Receiving firmware " + version + " (" + describeImage(imageSize) + ") for " + board);
         displayFirmwareUpdate("Starting...");
+        BLE_Utils::otaSetFastLink(true);
+        fastLinkRequested = true;
 
         uint8_t ready[10] = {NOTIFY_READY, PROTOCOL_VERSION};
         writeU32(ready + 2, WINDOW_BYTES);

@@ -108,6 +108,8 @@ async def find_device(args):
 async def run(args):
     image = open(args.firmware, "rb").read()
     sha256 = hashlib.sha256(image).digest()
+    if args.limit:
+        image = image[:args.limit]  # bench only: the tracker will reject the truncated image
     if args.corrupt_sha:
         sha256 = bytes([sha256[0] ^ 0xFF]) + sha256[1:]
     board = args.board or os.path.basename(args.firmware).split("_firmware")[0]
@@ -116,6 +118,13 @@ async def run(args):
     async with BleakClient(await find_device(args), timeout=20) as client:
         if client.services.get_service(SERVICE_UUID) is None:
             sys.exit("No update service: is Require PIN on, and does this board have two firmware slots?")
+        # The MTU exchange can finish after connect() returns (seen on Windows:
+        # mtu_size reads 23 at first, 256 a moment later). 16-byte packets
+        # would make the transfer ~15x slower, so wait briefly for it.
+        for _ in range(30):
+            if client.mtu_size > 23:
+                break
+            await asyncio.sleep(0.1)
         payload_size = client.mtu_size - 3 - DATA_HEADER_BYTES
         print(f"Connected, MTU {client.mtu_size}, {payload_size} bytes per packet")
 
@@ -128,6 +137,7 @@ async def run(args):
         print(f"READY: window {session.window} B, ACK every {session.ack_interval} B")
 
         started = time.monotonic()
+        window_wait = 0.0  # time blocked on flow control (tracker-side limit)
         offset = 0
         while offset < len(image):
             if isinstance(session.outcome, UpdateFailed):
@@ -147,7 +157,9 @@ async def run(args):
             # Credit-based flow control: never more than `window` bytes un-ACKed.
             if offset - session.acked + payload_size > session.window:
                 session.progress.clear()
+                blocked = time.monotonic()
                 await asyncio.wait_for(session.progress.wait(), 15)
+                window_wait += time.monotonic() - blocked
                 continue
             chunk = image[offset:offset + payload_size]
             await client.write_gatt_char(DATA_UUID, struct.pack("<I", offset) + chunk, response=False)
@@ -161,6 +173,8 @@ async def run(args):
                 raise session.outcome
             session.progress.clear()
             await asyncio.wait_for(session.progress.wait(), 15)
+        print(f"\nTransfer: {time.monotonic() - started:.1f} s, of which {window_wait:.1f} s "
+              f"waiting for the tracker's ACKs")
 
         await client.write_gatt_char(CONTROL_UUID, bytes([CMD_END]), response=True)
         await asyncio.wait_for(session.finished.wait(), 30)
@@ -180,6 +194,7 @@ def main():
     parser.add_argument("--corrupt-sha", action="store_true")
     parser.add_argument("--stall-at", type=int)
     parser.add_argument("--abort-at", type=int)
+    parser.add_argument("--limit", type=int, help="send only the first N bytes (throughput bench)")
     args = parser.parse_args()
     try:
         asyncio.run(run(args))
