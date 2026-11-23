@@ -31,6 +31,7 @@ void displayStatus(const String&, const String&,
                    const String&, const String&, const String&,
                    const String&, const String&) {}
 void displayAPMode(const String&, const String&) {}
+void displayFirmwareUpdate(const String&) {}
 
 void bootStatus(const char* step) {
     if (!step) return;
@@ -243,6 +244,10 @@ void displayStatus(const String& callsign, const String& tactical,
     }
     _cacheValid = true;
 }
+
+// The T114 updates over BLE through the bootloader's DFU mode, which draws
+// nothing; the application never runs during an update.
+void displayFirmwareUpdate(const String&) {}
 
 void displayAPMode(const String& ssid, const String& password) {
     if (!_tftReady) return;
@@ -768,6 +773,43 @@ void displayAPMode(const String& ssid, const String& password) {
         display.print("PW: " + password);
         display.setCursor(0, 52);
         display.print("192.168.4.1");
+        display.display();
+    #endif
+}
+
+void displayFirmwareUpdate(const String& status) {
+    if (!displayPresent) return;
+    displayActivity();   // keep the display awake for the whole update
+    #ifdef HAS_TFT
+        #ifdef HELTEC_WIRELESS_TRACKER
+            sprite.fillSprite(TFT_BLACK);
+            sprite.fillRect(0, 0, 160, 19, TFT_CYAN);
+            sprite.setTextFont(0);
+            sprite.setTextSize(bigSizeFont);
+            sprite.setTextColor(TFT_BLACK, TFT_CYAN);
+            sprite.drawString("Updating", 3, 3);
+            sprite.setTextSize(smallSizeFont);
+            sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+            sprite.drawString(status.substring(0, maxLineLength), 3, 22);
+            sprite.drawString("Do not power off", 3, 46);
+            sprite.pushSprite(0, 0);
+        #endif
+    #else
+        display.clearDisplay();
+        #ifdef ssd1306
+            display.setTextColor(WHITE);
+        #else
+            display.setTextColor(SH110X_WHITE);
+        #endif
+        display.setTextSize(2);    // "Updating" = 8 chars x 12px = 96px
+        display.setCursor(0, 0);
+        display.print("Updating");
+        display.drawLine(0, 17, 128, 17, 1);
+        display.setTextSize(1);    // 21 chars per line
+        display.setCursor(0, 24);
+        display.print(status.substring(0, 21));
+        display.setCursor(0, 50);
+        display.print("Do not power off");
         display.display();
     #endif
 }

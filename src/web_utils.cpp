@@ -35,6 +35,7 @@
 #include "version.h"
 #include "station_utils.h"
 #include "logger.h"
+#include "ota_utils.h"
 
 extern Configuration               Config;
 extern logging::Logger             logger;
@@ -451,32 +452,20 @@ namespace WEB_Utils {
 
     // ── In-device firmware update (Device → Update Firmware) ─────────────────
     //
-    // firmware.bin is written to the OTA slot that is NOT running
-    // (esp_ota_get_next_update_partition), then made the boot slot, so the
-    // device alternates app0 <-> app1 on each update. A running slot can never
-    // be rewritten in place: esp_ota_begin() refuses it with
-    // ESP_ERR_OTA_PARTITION_CONFLICT. (Pinning every update to app0, as this
-    // handler used to, therefore failed whenever the device ran from app0,
-    // which is the normal state after any USB flash.)
-    //
-    // The USB web flasher's "Firmware Update" image (<board>_ota_update.bin)
-    // includes boot_app0.bin at the otadata offset, which resets the boot
-    // selection to app0 before writing app0, so the two update paths stay
-    // consistent whichever slot this updater last selected.
-    //
-    // Boards on huge_app.csv (tbeam_433_aprs, lilygo_t3_433_aprs) have a single
-    // app slot and cannot update themselves; they get a clear error instead.
+    // firmware.bin is handed to OTA_Utils (src/ota_utils.cpp), the flash writer
+    // shared with the other in-device update transports; see that file for the
+    // slot handling. This handler only adds the web-specific checks (USB
+    // flasher images are recognised by filename) and the browser responses.
+    // The size is not known up front (OTA_Utils::begin(..., 0)), so the whole
+    // target slot is erased on the first chunk, exactly as before.
     //
     // spiffs.bin (filesystem image) still goes through Update.h's U_SPIFFS path.
+    //
+    // Both paths first take the OTA_Utils claim, so a web upload can neither
+    // start during nor interfere with a Bluetooth update (and vice versa).
 
-    static esp_ota_handle_t       otaHandle       = 0;
-    static const esp_partition_t* otaAppPartition = nullptr;
-    static bool                   otaFlashActive  = false;
     static bool                   otaError        = false;
-    static size_t                 otaBytesWritten = 0;
     static String                 otaErrorMessage;          // returned to the browser
-
-    static constexpr uint8_t ESP_APP_IMAGE_MAGIC = 0xE9;    // first byte of every ESP app image
 
     // Record the first failure (later ones are usually consequences of it),
     // log it to serial and the web live log, and stop writing.
@@ -486,13 +475,15 @@ namespace WEB_Utils {
         otaErrorMessage = message;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "OTA", "%s", message.c_str());
         LogBuffer::pushf(LogBuffer::TYPE_INFO, "OTA: %s", message.c_str());
-        if (otaFlashActive) {
-            esp_ota_abort(otaHandle);   // frees the handle; the target slot is left unbootable, never selected
-            otaFlashActive = false;
-        }
+        // Aborts our session (the target slot is left unbootable, never
+        // selected) and frees the claim. A no-op when another transport holds
+        // the claim, so a rejected upload can't disturb that transport's update.
+        if (Update.isRunning()) Update.abort();
+        OTA_Utils::release(OTA_Utils::Client::WebUpload);
     }
 
-    // Start writing firmware.bin: validate the file, pick the inactive slot.
+    // Start writing firmware.bin: reject USB flasher images, then let OTA_Utils
+    // validate the image header and open the inactive slot.
     static void beginFirmwareUpdate(const String& filename, const uint8_t* data, size_t len) {
         // The USB-flasher images start with the bootloader at offset 0 and
         // would overwrite the slot with a non-app layout.
@@ -500,49 +491,27 @@ namespace WEB_Utils {
             otaFail("\"" + filename + "\" is a USB flasher image. Upload <board>_firmware.bin here instead.");
             return;
         }
-        if (len == 0 || data[0] != ESP_APP_IMAGE_MAGIC) {
-            otaFail("\"" + filename + "\" is not an ESP32 firmware image.");
+        if (!OTA_Utils::begin(data, len)) {
+            otaFail(OTA_Utils::lastError());
             return;
         }
-
         const esp_partition_t* running = esp_ota_get_running_partition();
-        otaAppPartition = esp_ota_get_next_update_partition(nullptr);
-        if (otaAppPartition == nullptr || otaAppPartition == running) {
-            otaFail("This board has only one firmware slot, so it can't update itself. "
-                    "Use the USB web flasher (Firmware Update) instead.");
-            return;
-        }
-
-        const esp_err_t err = esp_ota_begin(otaAppPartition, OTA_SIZE_UNKNOWN, &otaHandle);
-        if (err != ESP_OK) {
-            otaFail(String("Could not start the update (") + esp_err_to_name(err) + ").");
-            return;
-        }
-        otaFlashActive = true;
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "OTA",
                    "Writing %s to %s (running from %s)", filename.c_str(),
-                   otaAppPartition->label, running ? running->label : "?");
-        LogBuffer::pushf(LogBuffer::TYPE_INFO, "OTA: writing %s to %s", filename.c_str(), otaAppPartition->label);
+                   OTA_Utils::targetSlotLabel(), running ? running->label : "?");
+        LogBuffer::pushf(LogBuffer::TYPE_INFO, "OTA: writing %s to %s", filename.c_str(), OTA_Utils::targetSlotLabel());
     }
 
-    // Finish firmware.bin: verify the written image and make it the boot slot.
+    // Finish firmware.bin: OTA_Utils verifies the written image and makes it the boot slot.
     static void finishFirmwareUpdate() {
-        otaFlashActive = false;
-        esp_err_t err = esp_ota_end(otaHandle);   // validates the image (header, segments, checksum, chip)
-        if (err != ESP_OK) {
-            otaFail(err == ESP_ERR_OTA_VALIDATE_FAILED
-                        ? String("The uploaded file failed image validation (wrong board/chip or corrupted download).")
-                        : String("Could not finish the update (") + esp_err_to_name(err) + ").");
-            return;
-        }
-        err = esp_ota_set_boot_partition(otaAppPartition);
-        if (err != ESP_OK) {
-            otaFail(String("Could not select the new firmware for boot (") + esp_err_to_name(err) + ").");
+        if (!OTA_Utils::finish()) {
+            otaFail(OTA_Utils::lastError());
             return;
         }
         logger.log(logging::LoggerLevel::LOGGER_LEVEL_INFO, "OTA",
-                   "Update OK: %u bytes written to %s, rebooting", (unsigned)otaBytesWritten, otaAppPartition->label);
-        LogBuffer::pushf(LogBuffer::TYPE_INFO, "OTA: update OK (%u bytes), rebooting", (unsigned)otaBytesWritten);
+                   "Update OK: %u bytes written to %s, rebooting",
+                   (unsigned)OTA_Utils::bytesWritten(), OTA_Utils::targetSlotLabel());
+        LogBuffer::pushf(LogBuffer::TYPE_INFO, "OTA: update OK (%u bytes), rebooting", (unsigned)OTA_Utils::bytesWritten());
     }
 
     // Streams the uploaded file. "spiffs.bin" updates the filesystem image;
@@ -556,11 +525,13 @@ namespace WEB_Utils {
         if (index == 0) {
             otaError        = false;
             otaErrorMessage = "";
-            otaBytesWritten = 0;
-            if (otaFlashActive) {                 // a previous upload was cut off mid-stream
-                esp_ota_abort(otaHandle);
-                otaFlashActive = false;
+            OTA_Utils::Client busyWith = OTA_Utils::Client::None;
+            if (!OTA_Utils::claim(OTA_Utils::Client::WebUpload, &busyWith)) {
+                otaFail(String("A ") + OTA_Utils::clientName(busyWith) +
+                        " firmware update is in progress. Try again when it has finished.");
+                return;
             }
+            OTA_Utils::abort();                   // a previous upload was cut off mid-stream
             if (isSpiffs) {
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS)) {
                     otaFail(String("Could not start the filesystem update (") + Update.errorString() + ").");
@@ -580,17 +551,14 @@ namespace WEB_Utils {
             return;
         }
 
-        if (otaFlashActive && len > 0) {
-            const esp_err_t err = esp_ota_write(otaHandle, data, len);
-            if (err != ESP_OK) {
-                otaFail(err == ESP_ERR_INVALID_SIZE
-                            ? String("The file is larger than the firmware slot.")
-                            : String("Write failed (") + esp_err_to_name(err) + ").");
-            } else {
-                otaBytesWritten += len;
-            }
+        // After a failure (including "another transport is busy") the rest of
+        // the upload is drained and ignored; the session API is only touched
+        // while this transport holds the claim.
+        if (otaError || OTA_Utils::holder() != OTA_Utils::Client::WebUpload) return;
+        if (OTA_Utils::isActive() && len > 0 && !OTA_Utils::write(data, len)) {
+            otaFail(OTA_Utils::lastError());
         }
-        if (final && otaFlashActive) finishFirmwareUpdate();
+        if (final && OTA_Utils::isActive()) finishFirmwareUpdate();
     }
 
     void handleOtaUploadResponse(AsyncWebServerRequest *request) {

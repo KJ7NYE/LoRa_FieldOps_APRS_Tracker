@@ -44,6 +44,11 @@
     #include <atomic>
     #include "byte_ring.h"
 #endif
+#ifdef HAS_BLE_OTA
+    #include <atomic>
+    #include "ble_ota.h"
+    #include "ota_utils.h"
+#endif
 
 // APRS.fi GATT service — KISS TNC profile
 #define BLE_SERVICE_UUID    "00000001-ba2a-46c9-ae49-01b0961f68bb"
@@ -415,6 +420,32 @@ static void beginConfigService() {
 }
 #endif  // HAS_BLE_CONFIG
 
+// ── Buttonless DFU entry (Nordic legacy DFU service, Adafruit BLEDfu) ───────
+// A write of START_DFU to the DFU control point reboots the tracker into the
+// Adafruit bootloader's BLE DFU mode, where nRF Connect or the Nordic DFU
+// library uploads <board>_dfu.zip. That bootloader accepts unsigned images, so
+// whoever can reach the control point can replace the firmware.
+//
+// The service permission is raised to authenticated encryption (MITM): BLEDfu
+// does not set permissions on its characteristics, and Bluefruit raises every
+// characteristic of a service to the service's level, which covers the control
+// point, its CCCD (BLEDfu refuses START_DFU until notifications are enabled)
+// and the packet/revision characteristics. Only a phone paired with the PIN can
+// therefore start DFU; because that link is bonded, BLEDfu also hands the bond
+// keys to the bootloader so the phone can reconnect to it encrypted.
+//
+// Must run after Bluefruit.begin(): the service is added to the SoftDevice's
+// GATT table, which does not exist until the SoftDevice is enabled. Called only
+// when the PIN is required, so a PIN-less tracker exposes no DFU entry over BLE
+// (the `otadfu` command over USB serial still works).
+static void beginDfuService() {
+    bleDfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+    const err_t status = bleDfu.begin();
+    if (status != ERROR_NONE) {
+        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_ERROR, "Could not register the BLE DFU service (error 0x%04X)", (unsigned)status);
+    }
+}
+
 // ── Pairing-policy storage: a small file on InternalFS (LittleFS) ──────────
 // Bluefruit keeps its own bond keys on the same filesystem; clearBonds()
 // erases them.
@@ -585,10 +616,6 @@ namespace BLE_Utils {
         bluetoothConnected = false;
         if (!loadPinPolicy()) return;
 
-        // BLEDfu must be registered before Bluefruit.begin() so the SoftDevice
-        // allocates an ATT handle for the Nordic DFU service at startup.
-        bleDfu.begin();
-
         Bluefruit.begin();
         // Bond storage only exists once Bluefruit (and its InternalFS) is up.
         // On failure, leave the stack idle: never advertise with stale bonds.
@@ -636,6 +663,11 @@ namespace BLE_Utils {
             // PIN-protected trackers only: never expose the CLI on an open link.
             if (pinRequired) beginConfigService();
         #endif
+
+        // PIN-protected trackers only: never let an unauthenticated phone reboot
+        // the tracker into the bootloader. Registered last so the KISS and
+        // config attribute handles stay where bonded phones have them cached.
+        if (pinRequired) beginDfuService();
 
         Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
         Bluefruit.Advertising.addTxPower();
@@ -856,6 +888,49 @@ static void openConfigLinkIfSubscribed() {
 }
 #endif  // HAS_BLE_CONFIG
 
+#ifdef HAS_BLE_OTA
+// ── Firmware update service — protocol and session logic in ble_ota.cpp ────
+static NimBLECharacteristic* pOtaControl = nullptr;
+static NimBLECharacteristic* pOtaData    = nullptr;
+// Bumped on every accepted connection so an update session can tell a
+// reconnect apart from the link it started on (see BLE_Utils::otaLinkId()).
+static std::atomic<uint32_t> connectionSerial{0};
+
+class OtaCharacteristicCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo& connInfo) override {
+        // Same gate as KISS and config writes: only the active, PIN-authenticated phone.
+        if (connInfo.getConnHandle() != activeConnHandle) return;
+        if (!bluetoothConnected || !isPinAuthenticated(connInfo)) return;
+        const NimBLEAttValue value = characteristic->getValue();
+        if (characteristic == pOtaData) {
+            BLE_OTA::onDataWrite(value.data(), value.size());
+        } else {
+            BLE_OTA::onControlWrite(value.data(), value.size());
+        }
+    }
+};
+
+// Registers the update service. Called after the KISS and config services so
+// their attribute handles stay where bonded phones have them cached, and only
+// when the PIN is required and the board has a second app slot.
+static void beginOtaService() {
+    NimBLEService* service = pServer->createService(BLE_OTA_SERVICE_UUID);
+    pOtaControl = service->createCharacteristic(
+        BLE_OTA_CONTROL_UUID,
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY |
+        NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
+    pOtaData = service->createCharacteristic(
+        BLE_OTA_DATA_UUID,
+        NIMBLE_PROPERTY::WRITE_NR |
+        NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
+    // One shared instance: NimBLE 2.5.x characteristics never delete their
+    // callbacks, so sharing cannot double-free (it lives for the whole boot).
+    OtaCharacteristicCallbacks* callbacks = new OtaCharacteristicCallbacks();
+    pOtaControl->setCallbacks(callbacks);
+    pOtaData->setCallbacks(callbacks);
+}
+#endif  // HAS_BLE_OTA
+
 // Human-readable text for an SMP pairing-failure reason (Core Spec Vol 3 Part H 3.5.5).
 static const char* smpReasonText(int reason) {
     switch (reason) {
@@ -917,6 +992,9 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
         kissSerialBuffer    = "";
         shouldSendBLEtoLoRa = false;
         loggedUnpairedWrite = false;
+        #ifdef HAS_BLE_OTA
+            connectionSerial.fetch_add(1);
+        #endif
         #ifdef HAS_BLE_CONFIG
             configCccdSubscribed.store(false);   // fresh connection: wait for a fresh CCCD write (or bonded restore)
         #endif
@@ -977,6 +1055,19 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
         #ifdef HAS_BLE_CONFIG
             openConfigLinkIfSubscribed();
         #endif
+    }
+
+    // Link diagnostics: the connection interval bounds throughput (KISS
+    // latency, firmware update speed), and it is the phone that picks it.
+    void onConnParamsUpdate(NimBLEConnInfo& connInfo) override {
+        if (connInfo.getConnHandle() != activeConnHandle) return;
+        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Link interval %.2f ms, latency %u, timeout %u ms",
+                 connInfo.getConnInterval() * 1.25f, connInfo.getConnLatency(), connInfo.getConnTimeout() * 10);
+    }
+
+    void onPhyUpdate(NimBLEConnInfo& connInfo, uint8_t txPhy, uint8_t rxPhy) override {
+        if (connInfo.getConnHandle() != activeConnHandle) return;
+        bleEvent(logging::LoggerLevel::LOGGER_LEVEL_INFO, "Link PHY tx %u rx %u (1 = 1M, 2 = 2M, 3 = coded)", txPhy, rxPhy);
     }
 
     void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
@@ -1136,6 +1227,13 @@ namespace BLE_Utils {
             if (pinRequired) beginConfigService();
         #endif
 
+        #ifdef HAS_BLE_OTA
+            // PIN-protected trackers only, and only where an update can be
+            // installed (single-slot boards would accept nothing). Registered
+            // last so the KISS and config handles keep their cached positions.
+            if (pinRequired && OTA_Utils::updateSlotSize() > 0) beginOtaService();
+        #endif
+
         NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
         // NimBLE 2.x renames/consolidates the preferred-connection-params
@@ -1158,6 +1256,48 @@ namespace BLE_Utils {
         BLEToLoRaPacket         = "";
         shouldSendBLEtoLoRa     = false;
     }
+
+    #ifdef HAS_BLE_OTA
+    uint32_t otaLinkId() {
+        if (!pinRequired || !bluetoothConnected || activeConnHandle == BLE_HS_CONN_HANDLE_NONE) return 0;
+        return connectionSerial.load();
+    }
+
+    // Direct host call for the same reason as platformSendConfigChunk(): a
+    // failed send is reported to the caller instead of silently dropped.
+    bool otaSendStatus(const uint8_t* data, size_t length) {
+        const uint16_t connHandle = activeConnHandle;
+        if (pOtaControl == nullptr || pServer == nullptr || connHandle == BLE_HS_CONN_HANDLE_NONE) return false;
+        const uint16_t mtu = pServer->getPeerMTU(connHandle);
+        if (mtu > 3 && length > (size_t)(mtu - 3)) length = mtu - 3;
+        os_mbuf* packet = ble_hs_mbuf_from_flat(data, (uint16_t)length);
+        if (packet == nullptr) return false;
+        return ble_gattc_notify_custom(connHandle, pOtaControl->getHandle(), packet) == 0;
+    }
+
+    // Measured on a Windows central with its default link (~30-45 ms interval,
+    // 27-byte LL packets, 1M PHY): ~6 KB/s, i.e. ~4.5 min for a 1.6 MB image,
+    // limited by the radio link rather than flash writes.
+    void otaSetFastLink(bool fast) {
+        const uint16_t connHandle = activeConnHandle;
+        if (pServer == nullptr || connHandle == BLE_HS_CONN_HANDLE_NONE) return;
+        // Connection parameters in BLE units: interval 1.25 ms, timeout 10 ms.
+        static constexpr uint16_t FAST_INTERVAL_MIN    = 6;    // 7.5 ms
+        static constexpr uint16_t FAST_INTERVAL_MAX    = 12;   // 15 ms
+        static constexpr uint16_t RELAXED_INTERVAL_MIN = 24;   // 30 ms
+        static constexpr uint16_t RELAXED_INTERVAL_MAX = 40;   // 50 ms
+        static constexpr uint16_t SUPERVISION_TIMEOUT  = 400;  // 4 s
+        static constexpr uint16_t MAX_LL_PAYLOAD_BYTES = 251;  // Data Length Extension maximum
+        if (fast) {
+            pServer->setDataLen(connHandle, MAX_LL_PAYLOAD_BYTES);
+            // Fails harmlessly on controllers or phones without 2M support.
+            pServer->updatePhy(connHandle, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_2M_MASK, BLE_GAP_LE_PHY_CODED_ANY);
+            pServer->updateConnParams(connHandle, FAST_INTERVAL_MIN, FAST_INTERVAL_MAX, 0, SUPERVISION_TIMEOUT);
+        } else {
+            pServer->updateConnParams(connHandle, RELAXED_INTERVAL_MIN, RELAXED_INTERVAL_MAX, 0, SUPERVISION_TIMEOUT);
+        }
+    }
+    #endif
 
     void sendToPhone(const String& packet, const String& trailingKissFrame) {
         if (packet.length() == 0 || !bluetoothConnected) return;

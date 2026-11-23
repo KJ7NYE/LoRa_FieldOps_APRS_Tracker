@@ -9,6 +9,55 @@ Newest entries first. Format: `YYYY-MM-DD — short title (commit)` followed by 
 
 ---
 
+## 2026-11-22 — Firmware updates over Bluetooth (firmware side)
+
+Firmware side of updating a tracker from the FieldOps app over BLE; the app
+support follows separately. Nothing changes for the USB web flasher, UF2 or
+`otadfu`.
+
+- **ESP32 boards: Bluetooth firmware update service.** PIN-protected trackers
+  with two firmware slots (every ESP32 board except `tbeam_433_aprs` and
+  `lilygo_t3_433_aprs`) now offer a Bluetooth update service. A PIN-paired phone
+  streams `<board>_firmware.bin` into the inactive slot. The tracker checks the
+  board name, size and SHA-256 before switching to the new firmware, so a wrong
+  file, a dropped connection or a power cut leaves it running the current
+  version. While an update runs, the tracker stops beaconing and relaying
+  (radio silent) and shows "Updating nn%" on its display. The protocol is
+  documented in `include/ble_ota.h`.
+- **Heltec T114: Bluetooth update tested end to end.** Works from nRF Connect on
+  Android with two settings the T114's bootloader needs: packet receipt
+  notification at 8 or less, and a device-cache refresh after the tracker
+  switches to update mode. See the updated Bluetooth row in
+  `docs/getting-started/flashing.md`. About 5 minutes per update.
+- **Web UI and Bluetooth updates can't overlap.** Starting a web UI firmware or
+  filesystem upload during a Bluetooth update (or the other way round) is refused
+  with "A … firmware update is in progress".
+
+- **Shared ESP32 update writer (`src/ota_utils.cpp`).** The web UI's firmware
+  upload now goes through `OTA_Utils`, a transport-neutral writer the BLE updater
+  will reuse: same inactive-slot selection, image validation, boot-slot switch and
+  error messages as before. New for future transports: a known-size mode that
+  erases flash 4 KB at a time as data arrives (so a BLE link is never stalled by a
+  multi-second erase) and an optional end-to-end SHA-256 check. The web upload
+  keeps the size-unknown, erase-up-front mode it always used. `spiffs.bin` uploads
+  are unchanged.
+- **Heltec T114: Bluetooth DFU entry requires the PIN.** The Nordic buttonless DFU
+  service (which reboots the tracker into the bootloader's Bluetooth update mode,
+  and that bootloader accepts unsigned images) is now registered only when
+  *Require PIN* is on, with authenticated-encryption permissions, so only a
+  PIN-paired phone can start an update. It is registered after `Bluefruit.begin()`
+  and after the KISS and config services; it was previously registered before the
+  SoftDevice was enabled, where Bluefruit cannot add services, so it most likely
+  never appeared. nRF Connect's DFU tab (and the Nordic DFU library the FieldOps
+  app will use) can now switch a PIN-paired tracker into update mode without
+  `otadfu`. `otadfu` over USB or the BLE setup CLI is unchanged.
+- **LoRanger V2 reports its board name.** `version` now returns
+  `version.board=LoRanger_V2` (and the web UI `/version.json` `env`) instead of
+  `unknown`, so the serial configuration tool's
+  flasher (and the upcoming app updater) can pick the right image.
+
+---
+
 ## 2026-11-16 — Signal strength for coverage logging (`kiss.rssi`)
 
 Two opt-in changes so a phone app can log a tracker's signal reports for the APRS

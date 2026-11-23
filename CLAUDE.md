@@ -96,6 +96,8 @@ Runtime config is stored as `tracker_conf.json` on the filesystem. Three interfa
 | `src/kiss_utils.cpp` | USB serial KISS TNC mode |
 | `src/tcp_kiss_utils.cpp` | TCP KISS TNC server (WiFi STA, port 8001) |
 | `src/ble_utils.cpp` | BLE KISS TNC (NimBLE on ESP32, native on nRF52; APRS.fi GATT UUID) and the BLE config link (setup CLI over NUS, registered only when the PIN is required) |
+| `src/ble_ota.cpp` | ESP32 firmware update over BLE (protocol spec in `include/ble_ota.h`); GATT glue in `ble_utils.cpp`, PIN-only, pauses the main loop while active |
+| `src/ota_utils.cpp` | ESP32 in-device firmware writer shared by the web upload and BLE updater; inactive-slot selection, validation, SHA-256, transport claim |
 | `src/bluetooth_utils.cpp` | BT Classic SPP (ESP32 non-S3 only) |
 | `src/power_utils.cpp` | Sleep modes; GPS disable for power saving |
 | `src/battery_utils.cpp` | ADC voltage reads; percentage; sleep threshold |

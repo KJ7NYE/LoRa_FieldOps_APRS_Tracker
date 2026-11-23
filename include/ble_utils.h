@@ -31,6 +31,15 @@
     #define HAS_BLE_CONFIG
 #endif
 
+// BLE firmware update for ESP32 boards (protocol in include/ble_ota.h). Same
+// containment as the config link: the GATT service is registered only when
+// BLE PIN pairing is required, and only on boards whose partition table has a
+// second app slot. A variant can opt out with -D DISABLE_BLE_OTA. The nRF52
+// (T114) instead exposes the Nordic DFU service; see ble_utils.cpp.
+#if defined(HAS_NIMBLE) && !defined(ARDUINO_ARCH_NRF52) && !defined(DISABLE_BLE_OTA)
+    #define HAS_BLE_OTA
+#endif
+
 
 namespace BLE_Utils {
 
@@ -67,6 +76,26 @@ namespace BLE_Utils {
     // link drops, or `timeoutMs` elapses. Used before a reboot so the phone
     // sees the final "Rebooting..." line.
     void flushConfigOutput(uint32_t timeoutMs);
+    #endif
+
+    #ifdef HAS_BLE_OTA
+    // Transport hooks for BLE_OTA (src/ble_ota.cpp).
+
+    // Identifies the current PIN-authenticated phone connection: a non-zero
+    // value that changes on every new connection, or 0 when no authenticated
+    // phone is connected. An update session is bound to the value it started on.
+    uint32_t otaLinkId();
+
+    // Sends one status notification on the update control characteristic.
+    // Payloads longer than the link allows are truncated. Returns false when
+    // the stack is out of buffers (retry later) or the link is down.
+    bool otaSendStatus(const uint8_t* data, size_t length);
+
+    // Asks the phone for a link tuned for bulk transfer (short connection
+    // interval, 251-byte link-layer packets, 2M PHY) while an update runs, or
+    // for a relaxed interval again afterwards. Requests only: the phone
+    // decides, and a refusal just means a slower transfer.
+    void otaSetFastLink(bool fast);
     #endif
 
 }
